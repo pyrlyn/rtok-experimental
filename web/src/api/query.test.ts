@@ -389,3 +389,42 @@ describe("drill requests", () => {
     await lost;
   });
 });
+
+describe("call stream", () => {
+  const batch = (head: number) =>
+    ({
+      type: "calls",
+      batch: {
+        events: [],
+        head,
+        omitted: 0,
+        summary: { starts: 0, ends: 0, failed: 0, est_before: 0, est_after: 0 },
+      },
+    }) as Frame;
+
+  test("the first listener subscribes, the last one unsubscribes, a second shares the stream", () => {
+    const s = scripted();
+    const api = createApi(queryClient, s.connect);
+    api.open();
+    const seen: number[] = [];
+    const stopA = api.calls((b) => seen.push(b.head));
+    const stopB = api.calls((b) => seen.push(b.head * 10));
+    expect(s.sent).toEqual([{ calls: { subscribe: true } }]);
+    s.server().onFrame(batch(3));
+    expect(seen).toEqual([3, 30]);
+    stopA();
+    expect(s.sent).toHaveLength(1);
+    stopB();
+    expect(s.sent).toEqual([{ calls: { subscribe: true } }, { calls: { subscribe: false } }]);
+  });
+
+  test("a new socket subscribes again while a listener is still registered", () => {
+    const s = scripted();
+    const api = createApi(queryClient, s.connect);
+    api.open();
+    api.calls(() => {});
+    s.server().onState("closed");
+    s.server().onState("open");
+    expect(s.sent).toEqual([{ calls: { subscribe: true } }, { calls: { subscribe: true } }]);
+  });
+});

@@ -13,6 +13,7 @@ import { fmt } from "./format";
 import { OtherLines, responsive, TextPage, useMinWidth, WithSnapshot } from "./parts";
 import { Projects } from "./Projects";
 import { drillSearch, type DrillState, openProject, parseDrill } from "./graph3d/drillState";
+import { Split } from "./graph3d/live/Split";
 import { parseGraph, type DeadSymbol, type GraphView } from "./text";
 
 // The overview, its force layout and Three.js load only when the graph page opens.
@@ -20,6 +21,9 @@ const ProjectsOverview = lazy(() =>
     import("./graph3d/ProjectsOverview").then((m) => ({ default: m.ProjectsOverview })),
 );
 const DrillView = lazy(() => import("./graph3d/DrillView").then((m) => ({ default: m.DrillView })));
+const LiveSection = lazy(() =>
+    import("./graph3d/live/LiveSection").then((m) => ({ default: m.LiveSection })),
+);
 
 export function Graph() {
     // The drill-down lives in the URL (T329.22): each step is a history entry, so Back climbs out.
@@ -34,20 +38,25 @@ export function Graph() {
                     {snap.projects && <Projects rows={snap.projects} />}
                     {snap.projects && snap.projects.length > 0 && (
                         <Suspense fallback={null}>
-                            {drill ? (
-                                // Another project is a new picture: the layout and zoom start over.
-                                <DrillView
-                                    key={drill.project}
-                                    state={drill}
-                                    rows={snap.projects}
-                                    go={go}
-                                />
-                            ) : (
-                                <ProjectsOverview
-                                    rows={snap.projects}
-                                    onOpen={(id) => go(openProject(id))}
-                                />
-                            )}
+                            <Split
+                                explorer={
+                                    drill ? (
+                                        // Another project is a new picture: the layout and zoom start over.
+                                        <DrillView
+                                            key={drill.project}
+                                            state={drill}
+                                            rows={snap.projects}
+                                            go={go}
+                                        />
+                                    ) : (
+                                        <ProjectsOverview
+                                            rows={snap.projects}
+                                            onOpen={(id) => go(openProject(id))}
+                                        />
+                                    )
+                                }
+                                live={<LiveSection rows={snap.projects} drill={drill} />}
+                            />
                         </Suspense>
                     )}
                     <TextPage

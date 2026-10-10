@@ -18,6 +18,8 @@ import {
     breadcrumb,
     DEPTH_MAX,
     type DrillState,
+    drillRequest,
+    drillVersion,
     focusOn,
     openSymbol,
     toggleFile,
@@ -91,19 +93,7 @@ export function DrillView({
     const api = probe ?? own;
     const idOf = (id: string) => ids.get(id) ?? (ids.set(id, ids.size + 1), ids.size);
 
-    // The index numbers are the version: when watch re-indexes, the page asks again.
-    const ix = row?.index;
-    const q = useDrill(
-        {
-            project: state.project,
-            expand: state.expand,
-            focus: state.focus,
-            depth: state.focus ? state.depth : null,
-            limit,
-            query: "",
-        },
-        [ix?.rows, ix?.files, ix?.pending, ix?.indexed_at],
-    );
+    const q = useDrill(drillRequest(state, limit), drillVersion(row));
     const graph = q.data;
     const roots = new Map(rows.map((r) => [r.id, r.root]));
     const scene = useStableScene(

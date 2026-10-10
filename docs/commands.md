@@ -53,6 +53,22 @@ scene, or a plain list (the choice is remembered; without WebGL the page shows 2
   (`rtok graph index --project <id>`) and fills in once it is; a project whose directory is gone
   is drawn hollow and cannot be opened. While `watch` re-indexes, the page asks again and
   updates in place without moving the scene.
+- **Live graph.** Beside the explorer (stacked below it under 900 px) the same level is drawn
+  read-only and lit by the graph calls arriving on `/ws`: a ring in one of eight accents per
+  running call (more than eight merge into a "busy" count), a heat halo on the nodes queried in
+  the last 5 minutes, a red ring for a failed call. The overview lights the call's project; the
+  drill-down lights the node named like its target. The canvas takes no pointer or keyboard input.
+  Drag the bar between the parts (arrow keys also work, double-click resets to 50/50) or press
+  "Hide live graph"; the choice is remembered, and a hidden live graph does not subscribe.
+  Until the first call it shows "Waiting for graph calls".
+- **Live numbers.** Running calls, calls and failures, tokens sent, tokens without rtok and saved,
+  per-tool bars and backend shares, over the last 1, 5 or 15 minutes or since the page opened.
+  Totals come from each frame's `summary` and the `graph` measurement rows, so a window equals
+  `rtok stats` over the same calls (the per-tool bars and backend shares cover the calls a frame
+  lists). "Freeze" holds the picture and counts what arrives meanwhile; "Unfreeze" catches up
+  with every call. The feed keeps the newest 200 finished calls, can be filtered by caller (the
+  session id), tool and project, shows failed calls in red and marks a call that never ended
+  after two minutes as interrupted.
 
 ## Every flag is a config key
 

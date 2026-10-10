@@ -10,6 +10,7 @@ import {
     useRef,
     useState,
 } from "react";
+import { accentOf, type Lit, type LiveState } from "./live/lit";
 import { edgeHow, type Scene, type SceneNode } from "./scene";
 import type { Positions, Vec3 } from "./useLayout";
 import type { ViewApi, ViewEvents } from "./webgl";
@@ -18,6 +19,8 @@ export interface View2DProps extends ViewEvents {
     scene: Scene;
     positions: Positions;
     api: RefObject<ViewApi | null>;
+    /** The read-only live picture (T329.26): no input of any kind, and the nodes carry the call state. */
+    live?: LiveState;
 }
 
 interface Box {
@@ -59,8 +62,57 @@ function Mark({ n }: { n: SceneNode }) {
     return <circle r={r} {...paint} />;
 }
 
+/** Heat is a soft halo, each running call a pulsing ring in its own accent, a failure a red ring. */
+function Glow({ n, lit }: { n: SceneNode; lit: Lit }) {
+    const pulse = "motion-safe:animate-pulse";
+    return (
+        <>
+            {lit.heat > 0 && (
+                <circle
+                    r={n.radius * (1.4 + lit.heat)}
+                    opacity={0.15 + 0.45 * lit.heat}
+                    style={{ fill: n.color }}
+                    data-testid="heat"
+                />
+            )}
+            {lit.accents.map((slot, i) => (
+                <circle
+                    key={slot}
+                    r={n.radius * (1.5 + 0.3 * i)}
+                    fill="none"
+                    strokeWidth={1.5}
+                    strokeDasharray={accentOf(slot).dash}
+                    style={{ stroke: accentOf(slot).color }}
+                    className={pulse}
+                    data-testid="accent"
+                />
+            ))}
+            {lit.failed && (
+                <circle
+                    r={n.radius * 1.8}
+                    fill="none"
+                    strokeWidth={1.5}
+                    style={{ stroke: "var(--pyr-danger-fg)" }}
+                    className={pulse}
+                    data-testid="failed"
+                />
+            )}
+        </>
+    );
+}
+
 /** The same scene flat: SVG over the layout's x and y. Pan by dragging, zoom with the wheel. */
-export default function Scene2D({ scene, positions, api, select, menu, hover, open }: View2DProps) {
+export default function Scene2D({
+    scene,
+    positions,
+    api,
+    select,
+    menu,
+    hover,
+    open,
+    live,
+}: View2DProps) {
+    const readOnly = live !== undefined;
     const [, redraw] = useReducer((n: number) => n + 1, 0);
     // `null` follows the layout: the box fits whatever is drawn.
     const [manual, setManual] = useState<Box | null>(null);
@@ -117,22 +169,30 @@ export default function Scene2D({ scene, positions, api, select, menu, hover, op
         if (d.moved) setManual({ ...d.box, x: d.box.x - dx, y: d.box.y - dy });
     };
 
+    // The live picture takes no input at all, so no handler is attached and the browser keeps
+    // the default cursor; `pointer-events-none` also covers every child.
+    const camera = readOnly
+        ? {}
+        : {
+              onWheel,
+              onPointerDown,
+              onPointerMove,
+              onPointerUp: () => (drag.current = null),
+              onPointerLeave: () => {
+                  drag.current = null;
+                  hover(null);
+              },
+          };
+
     return (
         <svg
             ref={svg}
-            data-testid="graph-2d"
-            role="group"
-            aria-label={`2D graph of the ${scene.label}`}
+            data-testid={readOnly ? "graph-live" : "graph-2d"}
+            role={readOnly ? "img" : "group"}
+            aria-label={`${readOnly ? "Live " : ""}2D graph of the ${scene.label}`}
             viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}
-            className="size-full min-h-72 touch-none text-fg"
-            onWheel={onWheel}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={() => (drag.current = null)}
-            onPointerLeave={() => {
-                drag.current = null;
-                hover(null);
-            }}
+            className={`size-full min-h-72 touch-none text-fg ${readOnly ? "pointer-events-none" : ""}`}
+            {...camera}
         >
             <defs>
                 <marker
@@ -167,7 +227,7 @@ export default function Scene2D({ scene, positions, api, select, menu, hover, op
                         strokeDasharray={e.dashed ? "4 3" : undefined}
                         opacity={e.inScope ? 0.8 : 0.3}
                         markerEnd="url(#arrow-2d)"
-                        data-testid="edge-2d"
+                        data-testid={readOnly ? "edge-live" : "edge-2d"}
                         onPointerEnter={(ev) =>
                             hover({
                                 text: `${byId.get(e.from)?.label} → ${to.label} (${how})`,
@@ -184,33 +244,45 @@ export default function Scene2D({ scene, positions, api, select, menu, hover, op
             {scene.nodes.map((n) => {
                 const p = at(n.id);
                 if (!p) return null;
+                const input = readOnly
+                    ? { "aria-hidden": true }
+                    : {
+                          role: "button",
+                          tabIndex: 0,
+                          "aria-label": `${n.label}, ${n.state}${n.selected ? ", selected" : ""}`,
+                          "aria-pressed": n.selected,
+                          className:
+                              "cursor-pointer outline-none focus-visible:[&>:first-child]:stroke-accent",
+                          onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
+                          onClick: () => select(n.id),
+                          onDoubleClick: () => (open ? open(n.id) : api.current?.focus(n.id)),
+                          onKeyDown: (e: React.KeyboardEvent) =>
+                              (e.key === "Enter" || e.key === " ") &&
+                              (e.preventDefault(), select(n.id)),
+                          onContextMenu: (e: React.MouseEvent) => (
+                              e.preventDefault(),
+                              menu(n.id, e.clientX, e.clientY)
+                          ),
+                          onPointerEnter: (e: React.PointerEvent) =>
+                              hover({
+                                  text: `${n.label} · ${n.state}`,
+                                  x: e.clientX,
+                                  y: e.clientY,
+                              }),
+                          onPointerLeave: () => hover(null),
+                      };
+                const l = live?.lit.get(n.id);
                 return (
                     <g
                         key={n.id}
                         transform={`translate(${p[0]} ${p[1]})`}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`${n.label}, ${n.state}${n.selected ? ", selected" : ""}`}
-                        aria-pressed={n.selected}
                         opacity={n.dim ? 0.35 : 1}
-                        className="cursor-pointer outline-none focus-visible:[&>:first-child]:stroke-accent"
-                        data-testid="node-2d"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={() => select(n.id)}
-                        onDoubleClick={() => (open ? open(n.id) : api.current?.focus(n.id))}
-                        onKeyDown={(e) =>
-                            (e.key === "Enter" || e.key === " ") &&
-                            (e.preventDefault(), select(n.id))
-                        }
-                        onContextMenu={(e) => (
-                            e.preventDefault(),
-                            menu(n.id, e.clientX, e.clientY)
-                        )}
-                        onPointerEnter={(e) =>
-                            hover({ text: `${n.label} · ${n.state}`, x: e.clientX, y: e.clientY })
-                        }
-                        onPointerLeave={() => hover(null)}
+                        data-testid={readOnly ? "node-live" : "node-2d"}
+                        data-hot={l && l.heat > 0 ? "" : undefined}
+                        data-running={l?.accents.length ? "" : undefined}
+                        {...input}
                     >
+                        {l && <Glow n={n} lit={l} />}
                         <Mark n={n} />
                         {n.selected && (
                             <circle

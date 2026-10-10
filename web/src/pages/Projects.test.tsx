@@ -122,8 +122,10 @@ describe("graph page projects", () => {
         fireEvent.click(links.getByLabelText("both ways"));
         fireEvent.click(links.getByRole("button", { name: "link" }));
         fireEvent.click(links.getByRole("button", { name: "unlink c" }));
-        await waitFor(() => expect(w.sent).toHaveLength(2));
-        expect(w.sent).toEqual([
+        // The live graph subscribes to the call stream on its own; this test is about the link requests.
+        const writes = () => w.sent.filter((m) => !("calls" in m));
+        await waitFor(() => expect(writes()).toHaveLength(2));
+        expect(writes()).toEqual([
             { project: { action: "link", from: "1", to: "2", both: true } },
             { project: { action: "unlink", from: "1", to: "3", both: false } },
         ]);

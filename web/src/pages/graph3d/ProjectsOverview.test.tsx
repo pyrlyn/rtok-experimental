@@ -33,14 +33,14 @@ const view = (name: string) => screen.getByRole("button", { name });
 describe("graph overview", () => {
     test("without WebGL the 3D choice falls back to 2D with a notice", async () => {
         page();
-        expect((await screen.findByRole("status")).textContent).toMatch(/3D view unavailable/);
+        expect(await screen.findByText(/3D view unavailable/)).toBeTruthy();
         expect(await screen.findAllByTestId("node-2d")).toHaveLength(3);
         expect(screen.queryByTestId("graph-3d")).toBeNull();
     });
 
     test("the view choice survives a remount", async () => {
         const first = page();
-        await screen.findByRole("status");
+        await screen.findByText(/3D view unavailable/);
         fireEvent.click(view("List"));
         expect(localStorage.getItem(VIEW_KEY)).toBe("list");
         first.unmount();
@@ -53,7 +53,7 @@ describe("graph overview", () => {
     test("an unknown stored view falls back to the default", async () => {
         localStorage.setItem(VIEW_KEY, "nonsense");
         page();
-        expect(await screen.findByRole("status")).toBeTruthy();
+        expect(await screen.findByText(/3D view unavailable/)).toBeTruthy();
     });
 
     test("the list names every link and its kind", async () => {

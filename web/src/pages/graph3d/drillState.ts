@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-import type { DrillFocus } from "../../api/snapshot.gen";
+import type { DrillFocus, DrillRequest, ProjectRow } from "../../api/snapshot.gen";
 import { asString } from "../../tableSearch";
 
 /** Where the drill-down is, carried in the route's search params so back/forward step through it (T329.22). */
@@ -88,3 +88,21 @@ export const openSymbol = (project: number, focus: DrillFocus): DrillState => ({
   ...openProject(project),
   focus,
 });
+
+/** What the server is asked for a drill state; part 1 and the live picture ask the same, so one reply serves both. */
+export const drillRequest = (state: DrillState, limit: number): DrillRequest => ({
+  project: state.project,
+  expand: state.expand,
+  focus: state.focus,
+  depth: state.focus ? state.depth : null,
+  limit,
+  query: "",
+});
+
+/** The index numbers are the version: when watch re-indexes, the page asks again. */
+export const drillVersion = (row: ProjectRow | undefined) => [
+  row?.index?.rows,
+  row?.index?.files,
+  row?.index?.pending,
+  row?.index?.indexed_at,
+];
