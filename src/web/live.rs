@@ -12,11 +12,13 @@
 //! [`Reader`] is that one reader without the async: `rtok tui` drives it from a thread, so both
 //! surfaces fold the same rows through the same cursor and [`coalesce`].
 //!
-//! No replay: the totals cover the events written after the first socket subscribed, and a
-//! socket that subscribes later starts from the totals so far. A page that wants the past
-//! reads the store through the snapshot, not this stream.
+//! The totals cover the events written since `rtok web` started (T329.34): a poller that starts
+//! (the first socket, or the first one after a page reload) replays the store's events above the
+//! id the server noted at its start, so a reload shows the same figures as the page it replaced.
+//! The table keeps the newest 5000 rows, so an older call is gone from the store and from the
+//! totals. A socket that subscribes while a poller runs starts from the totals so far.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -29,15 +31,23 @@ use super::calls_store::{CallsStore, clock_ms};
 use super::calls_view::CallsView;
 use super::protocol::ServerFrame;
 use crate::config::Config;
-use crate::store::{EventPhase, GraphEvent, Store};
+use crate::config::Graph;
+use crate::store::{AgentDetail, EventPhase, GraphEvent, Store};
 
 /// How often the store is asked for new events; with the write and the render this keeps a
 /// call in another process well inside the second the page promises.
 pub const POLL: Duration = Duration::from_millis(250);
 /// Events read per poll. A burst larger than this drains over the next polls.
 const FETCH: i64 = 2000;
-/// Events one frame lists; the rest of a burst is counted in `omitted` and in `summary`.
-pub const MAX_EVENTS: usize = 100;
+
+/// `[plugins.graph] live_max_events_per_s` as the events one poll lists; the rest of a burst is
+/// counted in `omitted` and in `summary`.
+pub fn events_per_poll(cfg: &Graph) -> usize {
+    let per_poll = u64::from(cfg.live_max_events_per_s) * POLL.as_millis() as u64;
+    usize::try_from(per_poll.div_ceil(1000))
+        .unwrap_or(usize::MAX)
+        .max(1)
+}
 
 /// What one poll found, as one frame. `summary` counts every event of the poll (including
 /// the ones left out of `events`), so a page that adds summaries up never undercounts a burst.
@@ -46,11 +56,24 @@ pub struct CallBatch {
     /// Newest last. A call's start and progress events are left out when its end is in the
     /// batch, since the end carries the same call and tool.
     pub events: Vec<GraphEvent>,
-    /// Events cut because the batch held more than [`MAX_EVENTS`] (the oldest go first).
+    /// Events cut because the batch held more than the poll's cap (the oldest go first).
     pub omitted: u32,
     pub summary: CallSummary,
     /// The newest event id the batch covers.
     pub head: i64,
+    /// What the store calls the sessions of `events` (T329.34); a session it knows nothing about
+    /// is absent.
+    pub callers: BTreeMap<String, String>,
+}
+
+impl CallBatch {
+    /// The caller column of `session`: the store's name, else the session id.
+    pub fn caller(&self, session: &str) -> String {
+        self.callers
+            .get(session)
+            .cloned()
+            .unwrap_or_else(|| super::calls_store::bare_caller(session))
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, JsonSchema)]
@@ -77,8 +100,9 @@ pub struct CallSummary {
     pub projects_hit: u32,
 }
 
-/// Folds `events` (oldest first) into a frame, or `None` when there are none.
-pub fn coalesce(events: Vec<GraphEvent>) -> Option<CallBatch> {
+/// Folds `events` (oldest first) into a frame listing at most `cap` of them, or `None` when
+/// there are none.
+pub fn coalesce(events: Vec<GraphEvent>, cap: usize) -> Option<CallBatch> {
     let head = events.last()?.id;
     let mut summary = CallSummary::default();
     let ended: HashSet<String> = events
@@ -111,13 +135,14 @@ pub fn coalesce(events: Vec<GraphEvent>) -> Option<CallBatch> {
         .into_iter()
         .filter(|e| e.phase == EventPhase::End || !ended.contains(&e.call))
         .collect();
-    let omitted = kept.len().saturating_sub(MAX_EVENTS);
+    let omitted = kept.len().saturating_sub(cap);
     kept.drain(..omitted);
     Some(CallBatch {
         events: kept,
         omitted: u32::try_from(omitted).unwrap_or(u32::MAX),
         summary,
         head,
+        callers: BTreeMap::new(),
     })
 }
 
@@ -127,6 +152,9 @@ pub struct LiveCalls {
     /// state first and then each change, and one that is slow skips frames instead of lagging.
     tx: watch::Sender<Arc<str>>,
     running: AtomicBool,
+    /// The newest event id when `rtok web` started: "since started" counts the events above it.
+    /// `None` when the store would not open, which leaves the totals starting at the poller.
+    started: Option<i64>,
 }
 
 fn frame_of(view: CallsView) -> Arc<str> {
@@ -134,17 +162,21 @@ fn frame_of(view: CallsView) -> Arc<str> {
 }
 
 impl LiveCalls {
-    pub(super) fn new() -> Self {
-        let idle = frame_of(CallsView::of(&CallsStore::default(), clock_ms()));
+    pub(super) fn new(cfg: &Config) -> Self {
+        let idle = frame_of(CallsView::of(
+            &CallsStore::with(&cfg.plugins.graph),
+            clock_ms(),
+        ));
         Self {
             tx: watch::channel(idle).0,
             running: AtomicBool::new(false),
+            started: head_of(&cfg.core.db_path),
         }
     }
 
-    /// The receiver and the frame to send first: the totals so far, or empty ones when this
-    /// subscriber starts the poller. The first subscriber starts the poller; it stops when the
-    /// last receiver is dropped. Must run inside the tokio runtime.
+    /// The receiver and the frame to send first: the totals so far. The first subscriber starts
+    /// the poller, which first folds what the store holds since `rtok web` started; it stops
+    /// when the last receiver is dropped. Must run inside the tokio runtime.
     pub async fn subscribe(
         self: &Arc<Self>,
         cfg: &Config,
@@ -152,52 +184,164 @@ impl LiveCalls {
         // Receiver first: a frame the poller sends while the store opens is not lost.
         let mut rx = self.tx.subscribe();
         let db_path = cfg.core.db_path.clone();
-        let reader = open_reader(db_path.clone()).await;
+        let graph = cfg.plugins.graph.clone();
         if !self.running.swap(true, Ordering::AcqRel) {
-            // A fresh poller counts from now: the totals of an earlier one do not carry over.
+            let (reader, store) = replayed(&db_path, &graph, self.started).await;
             self.tx
-                .send_replace(frame_of(CallsView::of(&CallsStore::default(), clock_ms())));
-            tokio::spawn(poll(self.clone(), db_path, reader));
+                .send_replace(frame_of(CallsView::of(&store, clock_ms())));
+            tokio::spawn(poll(self.clone(), db_path, graph, reader, store));
         }
         let first = rx.borrow_and_update().clone();
         (rx, first)
     }
 }
 
+/// The newest event id in the store at `path`, or `None` when it will not open: where "since
+/// this surface started" begins.
+pub fn head_of(path: &std::path::Path) -> Option<i64> {
+    Store::open(path).ok()?.graph_event_head().ok()
+}
+
 /// A store handle and a cursor: where a reader that wants only new events starts.
 pub struct Reader {
     store: Store,
     cursor: i64,
+    /// Events one poll lists.
+    cap: usize,
+    /// Sessions the store gave an agent: that name does not change, so it is asked once.
+    named: HashMap<String, String>,
+}
+
+/// T329.34: `claude 3f9a1c2e` for a session an agent row belongs to (`rtok agents list`'s id and
+/// host), `claude mcp-4242` for one the store only knows by its host (an `rtok mcp` process
+/// has a `sessions` row but no agent row of its own). `None`, with `fixed` false, when it
+/// knows neither: the column then shows the session id. A name with no agent can still gain one
+/// when a hook registers later, so only `fixed` names are remembered.
+fn caller_name(store: &Store, session: &str, agents: &[AgentDetail]) -> Option<(String, bool)> {
+    if let Some(a) = agents
+        .iter()
+        .find(|a| a.host_session_id == session && a.parent_id.is_none())
+    {
+        return Some((format!("{} {}", a.host, a.short), true));
+    }
+    let (host, ..) = store.session_row(session).ok().flatten()?;
+    let tail: String = session.chars().take(12).collect();
+    Some((format!("{} {tail}", host?), false))
 }
 
 impl Reader {
     /// `None` when the file will not open; callers try again on their next pass, so a missing
     /// or locked store costs a retry and never a failed socket.
-    pub fn open(path: &std::path::Path) -> Option<Self> {
+    pub fn open(path: &std::path::Path, cfg: &Graph) -> Option<Self> {
         let store = Store::open(path).ok()?;
         let cursor = store.graph_event_head().ok()?;
-        Some(Self { store, cursor })
+        Some(Self {
+            store,
+            cursor,
+            cap: events_per_poll(cfg),
+            named: HashMap::new(),
+        })
     }
 
     /// What was written since the last call, folded; `None` when nothing was, or the read
     /// failed (the cursor stays, so the events come on the next try).
     pub fn poll(&mut self) -> Option<CallBatch> {
         let events = self.store.graph_events_after(self.cursor, FETCH).ok()?;
-        let batch = coalesce(events)?;
+        let batch = self.batch_of(events)?;
         self.cursor = batch.head;
         Some(batch)
     }
+
+    /// The events above `since` up to where this reader opened, as batches of at most one
+    /// poll's cap with the time of their newest event, so a surface that starts later folds the
+    /// calls made since `since` into the same totals and windows a live one has. Chunks are as
+    /// big as the cap, so each lists all its calls and the per-tool bars stay exact.
+    pub fn replay(&mut self, since: i64) -> Vec<(CallBatch, i64)> {
+        let (mut at, end) = (since, self.cursor);
+        let mut out = Vec::new();
+        while at < end {
+            let Ok(mut events) = self.store.graph_events_after(at, self.cap as i64) else {
+                break;
+            };
+            events.retain(|e| e.id <= end);
+            let Some(ts) = events.last().map(|e| e.ts_ms) else {
+                break;
+            };
+            let Some(batch) = self.batch_of(events) else {
+                break;
+            };
+            at = batch.head;
+            out.push((batch, ts));
+        }
+        out
+    }
+
+    fn batch_of(&mut self, events: Vec<GraphEvent>) -> Option<CallBatch> {
+        let mut batch = coalesce(events, self.cap)?;
+        batch.callers = self.names_of(&batch.events);
+        Some(batch)
+    }
+
+    fn names_of(&mut self, events: &[GraphEvent]) -> BTreeMap<String, String> {
+        let sessions: BTreeSet<&str> = events.iter().map(|e| e.session.as_str()).collect();
+        let asked: Vec<String> = sessions
+            .iter()
+            .filter(|s| !self.named.contains_key(**s))
+            .map(|s| (*s).to_owned())
+            .collect();
+        let agents = self.store.agents_of_sessions(&asked).unwrap_or_default();
+        let mut names = BTreeMap::new();
+        for s in sessions {
+            if let Some(n) = self.named.get(s) {
+                names.insert(s.to_owned(), n.clone());
+            } else if let Some((n, fixed)) = caller_name(&self.store, s, &agents) {
+                if fixed {
+                    self.named.insert(s.to_owned(), n.clone());
+                }
+                names.insert(s.to_owned(), n);
+            }
+        }
+        names
+    }
 }
 
-async fn open_reader(path: std::path::PathBuf) -> Option<Reader> {
-    tokio::task::spawn_blocking(move || Reader::open(&path))
+/// The reader, opened at the newest event, and a store holding what the events since `started`
+/// add up to (empty without a `started` or a reader).
+async fn replayed(
+    path: &std::path::Path,
+    graph: &Graph,
+    started: Option<i64>,
+) -> (Option<Reader>, CallsStore) {
+    let (path, graph) = (path.to_owned(), graph.clone());
+    tokio::task::spawn_blocking(move || {
+        let mut store = CallsStore::with(&graph);
+        let mut reader = Reader::open(&path, &graph);
+        if let (Some(r), Some(since)) = (reader.as_mut(), started) {
+            for (batch, at) in r.replay(since) {
+                store.fold(&batch, at);
+            }
+            store.sweep(clock_ms());
+        }
+        (reader, store)
+    })
+    .await
+    .unwrap_or_else(|_| (None, CallsStore::with(&Graph::default())))
+}
+
+async fn open_reader(path: std::path::PathBuf, graph: Graph) -> Option<Reader> {
+    tokio::task::spawn_blocking(move || Reader::open(&path, &graph))
         .await
         .ok()
         .flatten()
 }
 
-async fn poll(live: Arc<LiveCalls>, db_path: std::path::PathBuf, mut reader: Option<Reader>) {
-    let mut store = CallsStore::default();
+async fn poll(
+    live: Arc<LiveCalls>,
+    db_path: std::path::PathBuf,
+    graph: Graph,
+    mut reader: Option<Reader>,
+    mut store: CallsStore,
+) {
     let mut sent = CallsView::of(&store, clock_ms());
     loop {
         tokio::time::sleep(POLL).await;
@@ -211,7 +355,7 @@ async fn poll(live: Arc<LiveCalls>, db_path: std::path::PathBuf, mut reader: Opt
         }
         let mut r = match reader.take() {
             Some(r) => r,
-            None => match open_reader(db_path.clone()).await {
+            None => match open_reader(db_path.clone(), graph.clone()).await {
                 Some(r) => r,
                 None => continue,
             },
@@ -246,6 +390,8 @@ mod tests {
     use super::*;
     use crate::store::MeasurementSample;
 
+    const CAP: usize = 100;
+
     fn ev(id: i64, call: &str, phase: EventPhase) -> GraphEvent {
         let mut e = GraphEvent::new(call, phase, "mcp-1", "callers");
         e.id = id;
@@ -254,7 +400,7 @@ mod tests {
 
     #[test]
     fn nothing_found_sends_nothing() {
-        assert!(coalesce(Vec::new()).is_none());
+        assert!(coalesce(Vec::new(), CAP).is_none());
     }
 
     #[test]
@@ -278,12 +424,15 @@ mod tests {
         end.files_touched = Some(4);
         end.projects_hit = Some(2);
         end.total = Some(2);
-        let b = coalesce(vec![
-            ev(1, "a", EventPhase::Start),
-            ev(2, "a", EventPhase::Progress),
-            end,
-            ev(4, "b", EventPhase::Start),
-        ])
+        let b = coalesce(
+            vec![
+                ev(1, "a", EventPhase::Start),
+                ev(2, "a", EventPhase::Progress),
+                end,
+                ev(4, "b", EventPhase::Start),
+            ],
+            CAP,
+        )
         .unwrap();
         assert_eq!(
             b.events.iter().map(|e| e.id).collect::<Vec<_>>(),
@@ -326,8 +475,8 @@ mod tests {
                 events.push(e);
             }
         }
-        let b = coalesce(events).unwrap();
-        assert_eq!(b.events.len(), MAX_EVENTS);
+        let b = coalesce(events, CAP).unwrap();
+        assert_eq!(b.events.len(), CAP);
         assert_eq!(b.omitted, 400);
         assert_eq!(b.events.last().unwrap().call, "c499", "the newest survive");
         assert_eq!(

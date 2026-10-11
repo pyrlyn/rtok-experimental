@@ -1,0 +1,18 @@
+bin.name = "rtok"
+args = "completions bash --dry-run"
+status.code = 2
+stdout = ""
+stderr = """
+...
+error: the following required arguments were not provided:
+  <--install|--uninstall>
+...
+"""
+
+# Hermetic by construction: isolated HOME/RTOK_HOME, inherit = false.
+[env]
+inherit = false
+
+[env.add]
+HOME = "target/tmp/t4164-completions-dry-run-needs-install"
+RTOK_HOME = "target/tmp/t4164-completions-dry-run-needs-install"

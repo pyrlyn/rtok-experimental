@@ -64,10 +64,9 @@ impl Agent for CommandCode {
     }
 
     fn plugin_surfaces(&self) -> &'static [rtok_plugin_sdk::Surface] {
-        &[
-            rtok_plugin_sdk::Surface::Hook,
-            rtok_plugin_sdk::Surface::Mcp,
-        ]
+        // The linked tree registers no server of its own (`scripts/mcp.sh` is only the command
+        // for a by-hand `cmd mcp add`): `mcpServers.rtok` comes from the installer alone (D33).
+        &[rtok_plugin_sdk::Surface::Hook]
     }
 
     fn support(&self, _kind: Kind, module: &str) -> Support {
@@ -92,8 +91,8 @@ impl Agent for CommandCode {
         if super::read(&settings_path(cfg)).contains("rtok hook") {
             out.push("hooks");
         }
-        let m = super::read(&mcp_path(cfg));
-        if m.contains("\"rtok\"") || PLUGIN.ours(cfg) {
+        // Only the config's own entry counts (T275/D33): the plugin never stands in for it.
+        if super::mcp::has_entry(&mcp_path(cfg), "mcpServers", "rtok") {
             out.push("mcp");
         }
         if PLUGIN.ours(cfg) {
@@ -104,10 +103,12 @@ impl Agent for CommandCode {
 
     fn apply(&self, cfg: &Config, _kind: Kind, mode: Mode) -> Result<Vec<String>> {
         let remove = mode == Mode::Remove;
-        let mut lines = vec![run(cfg, remove)?, offer_plugin(cfg, remove)?];
+        let mut lines = vec![run(cfg, remove)?, PLUGIN.offer(cfg, remove)?];
+        // MCP is independent of the plugin (T275/D33): written on every install and update,
+        // taken back only by `remove`.
         if remove {
             lines.push(unregister_mcp(cfg)?);
-        } else if cfg.setup.mcp && !plugin_is_mcp(cfg, remove) {
+        } else if cfg.setup.mcp {
             lines.push(register_mcp(cfg)?);
         }
         lines.push(super::skill::sync("commandcode", cfg, remove)?);
@@ -173,22 +174,6 @@ pub static PLUGIN: HostPlugin = HostPlugin {
 /// linked next to the user files when accepted.
 pub fn plugin_dest(cfg: &Config) -> PathBuf {
     cfg.setup.commandcode.dir.join("plugins").join("rtok")
-}
-
-/// [`PLUGIN`]'s offer plus the singleton rule: while the plugin is linked it serves
-/// the MCP itself, so a plain `mcpServers.rtok` entry must go (D21).
-pub fn offer_plugin(cfg: &Config, remove: bool) -> Result<String> {
-    let report = PLUGIN.offer(cfg, remove)?;
-    if !remove && PLUGIN.linked(cfg) {
-        let _ = unregister_mcp(cfg);
-    }
-    Ok(report)
-}
-
-/// True when the plugin is linked: it *is* the MCP (D21 singleton), so
-/// setup must not also register `mcpServers.rtok` in `mcp.json`.
-pub fn plugin_is_mcp(cfg: &Config, remove: bool) -> bool {
-    !remove && PLUGIN.linked(cfg)
 }
 
 fn insert_ours(root: &mut Value) -> String {
@@ -428,30 +413,90 @@ mod tests {
     fn dry_run_offer_names_plugin_and_ketch_and_writes_nothing() {
         let dir = tmp("offer-dry");
         let c = cfg(dir.clone(), true);
-        let s = offer_plugin(&c, false).unwrap();
+        let s = PLUGIN.offer(&c, false).unwrap();
         assert!(s.contains("plugins/commandcode"), "{s}");
         assert!(s.contains("ketch install pyrlyn/rtok"), "{s}");
         assert!(!plugin_dest(&c).exists());
         let _ = fs::remove_dir_all(dir);
     }
 
+    fn mcp_doc(c: &Config) -> Value {
+        serde_json::from_str(&fs::read_to_string(mcp_path(c)).unwrap()).unwrap()
+    }
+
+    /// T275.2/D33: a linked plugin neither suppresses nor strips `mcpServers.rtok` — install and
+    /// update both leave the entry, with the host's own args, next to a foreign server.
     #[test]
-    fn linked_plugin_clears_leftover_mcp_json_on_later_setup() {
-        let dir = tmp("singleton-clean");
+    fn linked_plugin_install_and_update_keep_the_mcp_entry() {
+        let dir = tmp("plugin-mcp");
         let mut c = cfg(dir.clone(), false);
         c.setup.yes = true;
-        let mcp = mcp_path(&c);
+        fs::write(mcp_path(&c), r#"{"mcpServers":{"other":{"command":"x"}}}"#).unwrap();
+        CommandCode.apply(&c, Kind::Cli, Mode::Install).unwrap();
+        assert!(PLUGIN.linked(&c));
+        assert_eq!(
+            mcp_doc(&c)["mcpServers"]["rtok"]["args"],
+            json!(["mcp", "--host", "commandcode"])
+        );
+        assert_eq!(mcp_doc(&c)["mcpServers"]["other"]["command"], "x");
+
+        // The update path rewrites a stale entry while the plugin stays linked.
         fs::write(
-            &mcp,
+            mcp_path(&c),
             r#"{"mcpServers":{"rtok":{"command":"rtok","args":["mcp"]}}}"#,
         )
         .unwrap();
-        assert!(offer_plugin(&c, false).unwrap().starts_with("+ plugin"));
+        CommandCode.apply(&c, Kind::Cli, Mode::Update).unwrap();
         assert!(PLUGIN.linked(&c));
-        let body = fs::read_to_string(&mcp).unwrap();
-        assert!(
-            !body.contains("\"rtok\""),
-            "fresh link must drop mcpServers.rtok: {body}"
+        assert_eq!(
+            mcp_doc(&c)["mcpServers"]["rtok"]["args"],
+            json!(["mcp", "--host", "commandcode"])
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn remove_takes_the_entry_out_even_with_the_plugin_linked() {
+        let dir = tmp("plugin-mcp-remove");
+        let mut c = cfg(dir.clone(), false);
+        c.setup.yes = true;
+        CommandCode.apply(&c, Kind::Cli, Mode::Install).unwrap();
+        assert!(CommandCode.installed(&c, Kind::Cli).contains(&"mcp"));
+        CommandCode.apply(&c, Kind::Cli, Mode::Remove).unwrap();
+        assert!(!CommandCode.installed(&c, Kind::Cli).contains(&"mcp"));
+        assert!(!fs::read_to_string(mcp_path(&c)).unwrap().contains("rtok"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The plugin alone never reads as an installed `mcp` module: only the config's entry does.
+    #[test]
+    fn plugin_without_a_config_entry_does_not_read_as_mcp() {
+        let dir = tmp("plugin-only");
+        let mut c = cfg(dir.clone(), false);
+        c.setup.yes = true;
+        c.setup.mcp = false;
+        CommandCode.apply(&c, Kind::Cli, Mode::Install).unwrap();
+        let have = CommandCode.installed(&c, Kind::Cli);
+        assert!(have.contains(&"plugin"), "{have:?}");
+        assert!(!have.contains(&"mcp"), "{have:?}");
+        assert!(!mcp_path(&c).exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_user_edited_entry_is_left_by_remove() {
+        let dir = tmp("edited");
+        let c = cfg(dir.clone(), false);
+        fs::write(
+            mcp_path(&c),
+            r#"{"mcpServers":{"rtok":{"command":"/opt/mine/server","args":["serve"]}}}"#,
+        )
+        .unwrap();
+        let line = unregister_mcp(&c).unwrap();
+        assert!(line.starts_with("leave "), "{line}");
+        assert_eq!(
+            mcp_doc(&c)["mcpServers"]["rtok"]["command"],
+            "/opt/mine/server"
         );
         let _ = fs::remove_dir_all(dir);
     }

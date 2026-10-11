@@ -29,7 +29,11 @@ the POSIX fallback. Install with ketch: `ketch install pyrlyn/rtok`.
 While the plugin is enabled it is the only path for the compaction hooks (D21): `rtok agents
 install codex` takes its own `~/.codex/hooks.json` copy back instead of adding it, so every event
 fires once. `[mcp_servers.rtok]` is independent of the plugin (T275/D33) and is written on every
-install/update regardless.
+install/update regardless. It carries `default_tools_approval_mode = "writes"` (T528): Codex runs
+rtok's read-only tools (marked `readOnlyHint` in `tools/list`) without asking, and still asks
+before a tool that changes a worktree, a task, a note or another agent's inbox. Without the key it
+asks before every call, and in code mode, where nobody can answer, the call fails. An existing rtok
+entry gains the key once; a value you set yourself is kept.
 
 Files:
 

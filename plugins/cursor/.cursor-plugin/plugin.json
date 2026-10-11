@@ -1,6 +1,6 @@
 {
   "name": "rtok",
-  "version": "0.15.1",
+  "version": "0.17.0",
   "description": "rtok hooks for Cursor Desktop and CLI",
   "hooks": "./hooks/hooks.json"
 }

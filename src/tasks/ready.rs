@@ -71,6 +71,7 @@ pub fn select_ready(tasks: &[Task], stale: impl Fn(&str) -> bool) -> Vec<ReadyIt
             Some(ReadyItem {
                 task: task.clone(),
                 stale: is_stale,
+                conflicts_in_progress: conflicting_in_progress(task, tasks),
             })
         })
         .collect();
@@ -81,6 +82,21 @@ pub fn select_ready(tasks: &[Task], stale: impl Fn(&str) -> bool) -> Vec<ReadyIt
             .then(a.task.id.cmp(&b.task.id))
     });
     ready
+}
+
+/// Conflict partners of `task` that are in progress. A conflict is symmetric, so an edge written
+/// on only one side (a hand edit, a half-finished write) still counts from both.
+fn conflicting_in_progress(task: &Task, tasks: &[Task]) -> Vec<TaskId> {
+    let mut out: Vec<TaskId> = tasks
+        .iter()
+        .filter(|other| other.status == Status::InProgress && other.id != task.id)
+        .filter(|other| {
+            task.conflicts_with.contains(&other.id) || other.conflicts_with.contains(&task.id)
+        })
+        .map(|other| other.id.clone())
+        .collect();
+    out.sort();
+    out
 }
 
 /// The first active id in `blocked_by`, if one is still open or in progress.
@@ -216,6 +232,31 @@ mod tests {
         tasks[2].status = Status::Open;
         let stale = select_ready(&tasks, |agent| agent == "live");
         assert!(stale.iter().any(|i| i.task.id == id("R3") && i.stale));
+    }
+
+    #[test]
+    fn a_conflict_with_a_task_in_progress_flags_the_ready_task_from_either_side() {
+        let mut tasks = vec![task("R1"), task("R2"), task("R3"), task("R4")];
+        tasks[0].status = Status::InProgress;
+        tasks[0].assignee = Some("live".into());
+        tasks[1].conflicts_with = vec![id("R1")];
+        tasks[2].conflicts_with = vec![id("R4")];
+        tasks[0].conflicts_with = vec![id("R4")];
+        let ready = select_ready(&tasks, |_| false);
+        let flagged = |n: &str| {
+            ready
+                .iter()
+                .find(|i| i.task.id == id(n))
+                .map(|i| i.conflicts_in_progress.clone())
+        };
+        assert_eq!(flagged("R1"), None, "the task in progress is not ready");
+        assert_eq!(flagged("R2"), Some(vec![id("R1")]), "flagged, not hidden");
+        assert_eq!(
+            flagged("R4"),
+            Some(vec![id("R1")]),
+            "R1 names R4 only on its own side"
+        );
+        assert_eq!(flagged("R3"), Some(vec![]), "R4 is not in progress");
     }
 
     #[test]

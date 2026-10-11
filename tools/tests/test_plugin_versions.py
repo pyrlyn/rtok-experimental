@@ -123,6 +123,7 @@ def test_files_lists_every_version_file_and_manifest():
 
     version_hosts = [
         "claude",
+        "codebuddy",
         "codex",
         "copilot",
         "cursor",
@@ -140,6 +141,7 @@ def test_files_lists_every_version_file_and_manifest():
 
     manifests = [
         "plugins/claude/.claude-plugin/plugin.json",
+        "plugins/codebuddy/.codebuddy-plugin/plugin.json",
         "plugins/codex/.codex-plugin/plugin.json",
         "plugins/cursor/plugin.json",
         "plugins/cursor/.cursor-plugin/plugin.json",

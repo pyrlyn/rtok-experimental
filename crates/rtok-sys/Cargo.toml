@@ -30,4 +30,6 @@ windows-sys = { version = "0.61", features = [
 workspace = true
 
 [dependencies]
+indicatif = "0.18" # spinner and progress bar of `proc::ProgressRunner` (T276); the root crate keeps its own until T276.6
+serde_json = { workspace = true } # `proc::JsonLines` progress lines (T276.2)
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }

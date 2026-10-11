@@ -35,8 +35,6 @@ export interface LiveOptions {
   more?: number;
 }
 
-/** Heat fades over this long. */
-const HEAT_MS = 300_000;
 /** The accents: running calls beyond this many are only counted ("busy"). */
 export const MAX_ACCENTS = 8;
 const FAIL_FLASH_MS = 5000;
@@ -58,6 +56,8 @@ export function liveState(
   now: number,
   { scope = null, more = 0 }: LiveOptions = {},
 ): LiveState {
+  // `[plugins.graph] live_heat_window_s`: heat fades over this long.
+  const heatMs = store.heat_window_s * 1000;
   const overview = scene.label === "registered projects";
   const key = (c: { project: string | null; target: string | null }) =>
     overview ? c.project : c.target;
@@ -86,13 +86,13 @@ export function liveState(
   for (const r of store.feed) {
     const age = now - r.at;
     const k = key(r);
-    if (r.interrupted || age > HEAT_MS || !k || outsideScope(scope, r.project)) continue;
+    if (r.interrupted || age > heatMs || !k || outsideScope(scope, r.project)) continue;
     const drawn = byKey.get(k);
     if (!drawn && !overview) fold(r.target);
     for (const id of drawn ?? []) {
       if (age <= FOCUS_MS) focus.add(id);
       const l = at(id);
-      l.heat = Math.min(1, l.heat + (1 - age / HEAT_MS) / FULL_HEAT);
+      l.heat = Math.min(1, l.heat + (1 - age / heatMs) / FULL_HEAT);
       if (!r.ok && age < FAIL_FLASH_MS) l.failed = true;
     }
   }

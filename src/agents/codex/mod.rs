@@ -23,6 +23,16 @@ use crate::config::Config;
 
 const NAME: &str = "rtok";
 
+/// Server-wide approval in `[mcp_servers.rtok]` (T528). Without it Codex asks before every
+/// rtok call, and where nobody can answer (code mode, `approval_policy = "never"`) the call
+/// fails. `"writes"` skips the ask only for tools whose `readOnlyHint` is true (`mcp::to_tool`)
+/// and keeps it for the ones that change worktrees, tasks, notes or messages (openai/codex
+/// `codex-rs/core/src/mcp_tool_call.rs` `requires_mcp_tool_approval_for_mode`, 78a19f5,
+/// 2026-10-08). codex-cli 0.162.1 refuses the whole config on a value outside
+/// `auto|prompt|writes|approve`, so the value is a constant, never user input.
+const APPROVAL_KEY: &str = "default_tools_approval_mode";
+const APPROVAL: &str = "writes";
+
 const COMPACT: &[(&str, &str)] = &[("PreCompact", ""), ("PostCompact", "")];
 
 /// The plugin tree (T121) and its id in the one-plugin marketplace `pyrlyn/rtok` also is.
@@ -403,23 +413,42 @@ fn insert_ours(doc: &mut DocumentMut, path: impl std::fmt::Display) -> Result<St
     };
     // No bare `[mcp_servers]` header: Codex's own files only carry the per-server tables.
     servers.set_implicit(true);
-    if servers
-        .get(NAME)
-        .and_then(Item::as_table)
-        .is_some_and(is_ours)
+    if let Some(ours) = servers
+        .get_mut(NAME)
+        .and_then(Item::as_table_mut)
+        .filter(|t| is_ours(t))
     {
-        return Ok(NO_CHANGES.into());
+        // An entry written before T528 gains the key; a value the user chose stays.
+        if ours.contains_key(APPROVAL_KEY) {
+            return Ok(NO_CHANGES.into());
+        }
+        ours[APPROVAL_KEY] = value(APPROVAL);
+        return Ok(format!(
+            "+ [mcp_servers.rtok] {APPROVAL_KEY} = \"{APPROVAL}\""
+        ));
     }
     let cmd = super::rtok_command();
     let mut entry = Table::new();
     entry["command"] = value(cmd.as_str());
     let args = Array::from_iter(super::mcp_args("codex"));
     entry["args"] = value(args);
+    entry[APPROVAL_KEY] = value(APPROVAL);
     servers.insert(NAME, Item::Table(entry));
     Ok(format!(
-        "+ [mcp_servers.rtok]\ncommand = \"{cmd}\"\nargs = [\"{}\"]",
+        "+ [mcp_servers.rtok]\ncommand = \"{cmd}\"\nargs = [\"{}\"]\n{APPROVAL_KEY} = \"{APPROVAL}\"",
         super::mcp_args("codex").join("\", \"")
     ))
+}
+
+/// `have` without our own approval value, so remove judges an entry written before T528 and
+/// one written after it the same way; any other value is the user's edit.
+fn without_our_approval(mut have: serde_json::Value) -> serde_json::Value {
+    if let Some(m) = have.as_object_mut()
+        && m.get(APPROVAL_KEY).and_then(serde_json::Value::as_str) == Some(APPROVAL)
+    {
+        m.remove(APPROVAL_KEY);
+    }
+    have
 }
 
 /// The `[mcp_servers.rtok]` table [`insert_ours`] writes, as JSON: the shape
@@ -437,7 +466,8 @@ fn strip_ours(apply: &Apply, path: &Path, doc: &mut DocumentMut) -> String {
     let have = doc
         .get("mcp_servers")
         .and_then(|s| s.get(NAME))
-        .map(super::mcp::toml_item_to_json);
+        .map(super::mcp::toml_item_to_json)
+        .map(without_our_approval);
     let Some(have) = have else {
         return NO_CHANGES.into();
     };
@@ -652,6 +682,10 @@ mod tests {
             parsed["mcp_servers"]["rtok"]["args"][0].as_str(),
             Some("mcp")
         );
+        assert_eq!(
+            parsed["mcp_servers"]["rtok"][APPROVAL_KEY].as_str(),
+            Some("writes")
+        );
         assert!(
             super::super::is_rtok_bin(
                 parsed["mcp_servers"]["rtok"]["command"]
@@ -663,6 +697,51 @@ mod tests {
         assert_eq!(run(&c, true).unwrap(), "- [mcp_servers.rtok]");
         assert_eq!(run(&c, true).unwrap(), NO_CHANGES);
         assert!(!fs::read_to_string(&path).unwrap().contains("rtok"));
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// T528: an entry written before the approval key gains it on the next install, its
+    /// per-tool tables survive, and remove still knows it as rtok's.
+    #[test]
+    fn an_entry_without_approval_gains_it_and_stays_ours() {
+        let (c, path) = cfg("approval-upgrade", false);
+        let old =
+            "[mcp_servers.rtok]\ncommand = \"rtok\"\nargs = [\"mcp\", \"--host\", \"codex\"]\n";
+        fs::write(
+            &path,
+            format!("{old}\n[mcp_servers.rtok.tools.read]\napproval_mode = \"approve\"\n"),
+        )
+        .unwrap();
+        assert_eq!(
+            run(&c, false).unwrap(),
+            "+ [mcp_servers.rtok] default_tools_approval_mode = \"writes\""
+        );
+        assert_eq!(run(&c, false).unwrap(), NO_CHANGES);
+        let raw = fs::read_to_string(&path).unwrap();
+        let parsed: DocumentMut = raw.parse().unwrap();
+        assert_eq!(
+            parsed["mcp_servers"]["rtok"][APPROVAL_KEY].as_str(),
+            Some("writes"),
+            "{raw}"
+        );
+        assert_eq!(
+            parsed["mcp_servers"]["rtok"]["tools"]["read"]["approval_mode"].as_str(),
+            Some("approve"),
+            "{raw}"
+        );
+        fs::write(&path, old).unwrap();
+        assert_eq!(run(&c, true).unwrap(), "- [mcp_servers.rtok]");
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// T528: an approval mode the user picked is theirs; install leaves the file alone.
+    #[test]
+    fn a_user_approval_mode_is_kept() {
+        let (c, path) = cfg("approval-user", false);
+        let mine = "[mcp_servers.rtok]\ncommand = \"rtok\"\nargs = [\"mcp\", \"--host\", \"codex\"]\ndefault_tools_approval_mode = \"prompt\" # mine\n";
+        fs::write(&path, mine).unwrap();
+        assert_eq!(run(&c, false).unwrap(), NO_CHANGES);
+        assert_eq!(fs::read_to_string(&path).unwrap(), mine);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 

@@ -22,10 +22,10 @@ use super::junk_review::EXTRA;
 use super::junk_worktrees::{self, Remover};
 use super::restart::{RealProcs, host_running};
 use super::{HOSTS, host};
-use crate::bytes::human_bytes;
 use crate::config::Config;
 use crate::store::Store;
 use crate::worktree::list::{is_cache_dir, usage_until};
+use change_preview::human_bytes;
 
 /// What `--kind` takes today: rtok's own T182 junk, then the T330.3, T330.5.1, T330.5.2 and
 /// T330.5.4 kinds. `snapshots` is accepted and never clears anything: its class is `never`.
@@ -116,6 +116,8 @@ pub struct Planned {
     pub kind: &'static str,
     pub path: String,
     pub bytes: u64,
+    /// Files in it, counted for a planned item before anything is removed.
+    pub files: u64,
     /// Unix seconds of the newest file in it; `None` when unreadable (T330.6).
     pub last_used: Option<i64>,
     /// Why it is junk, as `list` says it.
@@ -206,6 +208,7 @@ pub fn plan(
             kind,
             path: path.to_string(),
             bytes,
+            files: 0,
             last_used,
             reason,
             planned: note.is_none(),
@@ -429,6 +432,9 @@ pub fn run_in(
     if let Some(only) = only {
         items.retain(|p| only.contains(&p.path));
     }
+    for p in items.iter_mut().filter(|p| p.planned) {
+        p.files = crate::removal_preview::size_of(Path::new(&p.path)).1;
+    }
     if yes {
         apply(cfg, &mut items, f, now);
     }
@@ -474,6 +480,11 @@ pub fn to_text(c: &Cleared, view: &View) -> String {
         out.push_str(&format!("{} {}: {what}\n", g.agent, g.kind));
     }
     let n = c.items.iter().filter(|p| p.planned).count();
+    if !c.yes && n > 0 {
+        let planned = c.items.iter().filter(|p| p.planned);
+        let planned = planned.map(|p| (p.path.as_str(), p.bytes, p.files));
+        out.push_str(&crate::removal_preview::render(planned));
+    }
     out.push_str(&match (c.yes, n) {
         (_, 0) => "nothing to clear\n".to_string(),
         (false, n) => format!(

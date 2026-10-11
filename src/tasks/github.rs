@@ -82,7 +82,7 @@ impl Issue {
             _ => Status::Open,
         };
         let names: Vec<&str> = self.labels.iter().map(|l| l.name.as_str()).collect();
-        let (priority, assignee, blocked_by) = meta::read_meta(&names);
+        let meta = meta::read_meta(&names);
         Some(Task {
             title: task_title(&id, &self.title),
             description: self.body.unwrap_or_default().trim().to_string(),
@@ -96,9 +96,11 @@ impl Issue {
                 url: self.html_url,
                 node_id: self.node_id,
             }),
-            priority,
-            assignee,
-            blocked_by,
+            priority: meta.priority,
+            assignee: meta.assignee,
+            blocked_by: meta.blocked_by,
+            conflicts_with: meta.conflicts_with,
+            parallel: meta.parallel,
             id,
         })
     }
@@ -179,6 +181,48 @@ impl GithubAdapter {
             .issues(&id_label(id), "all")?
             .into_iter()
             .find(|i| i.task_id().as_ref() == Some(id)))
+    }
+
+    /// The `save` write. `text` also rewrites title and body: the exporter (T441.13.5) owns
+    /// them, while a claim must not clobber what people edited on the issue.
+    pub(super) fn patch(&self, task: &Task, text: bool) -> Result<Task> {
+        let issue = self
+            .find(&task.id)?
+            .with_context(|| format!("github tasks: no task {} in {}", task.id, self.repo))?;
+        for label in meta::managed_for(task) {
+            if label.len() > LABEL_MAX {
+                bail!("github tasks: label {label:?} is longer than {LABEL_MAX} characters");
+            }
+        }
+        let names: Vec<String> = issue.labels.iter().map(|l| l.name.clone()).collect();
+        let mut labels = meta::merge_labels(&names, task);
+        labels.retain(|label| label != IN_PROGRESS);
+        if task.status == Status::InProgress {
+            labels.push(IN_PROGRESS.to_string());
+        }
+        let mut body = json!({
+            "labels": labels,
+            "state": if task.status.is_active() { "open" } else { "closed" },
+        });
+        if text {
+            body["title"] = json!(issue_title(&task.id, &task.title));
+            body["body"] = json!(task.description);
+        }
+        let reason = match task.status {
+            Status::Done => Some("completed"),
+            Status::Closed => Some("not_planned"),
+            _ if issue.state == "closed" => Some("reopened"),
+            _ => None,
+        };
+        if let Some(reason) = reason {
+            body["state_reason"] = json!(reason);
+        }
+        let path = format!("/repos/{}/issues/{}", self.repo, issue.number);
+        let updated: Issue = self.http.send(Method::PATCH, &path, &body)?;
+        self.sync_project(&task.id, &updated, task.status);
+        updated
+            .into_task()
+            .with_context(|| format!("github tasks: {} lost its label", task.id))
     }
 }
 
@@ -291,39 +335,11 @@ impl TaskAdapter for GithubAdapter {
     /// Assignee, blockers and priority. Not compare-and-set: two callers can both PATCH, and
     /// the last write wins. `claim` refuses a live foreign assignee before this runs.
     fn save(&self, task: &Task) -> Result<Task> {
-        let issue = self
-            .find(&task.id)?
-            .with_context(|| format!("github tasks: no task {} in {}", task.id, self.repo))?;
-        for label in meta::managed_for(task) {
-            if label.len() > LABEL_MAX {
-                bail!("github tasks: label {label:?} is longer than {LABEL_MAX} characters");
-            }
-        }
-        let names: Vec<String> = issue.labels.iter().map(|l| l.name.clone()).collect();
-        let mut labels = meta::merge_labels(&names, task);
-        labels.retain(|label| label != IN_PROGRESS);
-        if task.status == Status::InProgress {
-            labels.push(IN_PROGRESS.to_string());
-        }
-        let mut body = json!({
-            "labels": labels,
-            "state": if task.status.is_active() { "open" } else { "closed" },
-        });
-        let reason = match task.status {
-            Status::Done => Some("completed"),
-            Status::Closed => Some("not_planned"),
-            _ if issue.state == "closed" => Some("reopened"),
-            _ => None,
-        };
-        if let Some(reason) = reason {
-            body["state_reason"] = json!(reason);
-        }
-        let path = format!("/repos/{}/issues/{}", self.repo, issue.number);
-        let updated: Issue = self.http.send(Method::PATCH, &path, &body)?;
-        self.sync_project(&task.id, &updated, task.status);
-        updated
-            .into_task()
-            .with_context(|| format!("github tasks: {} lost its label", task.id))
+        self.patch(task, false)
+    }
+
+    fn stores_markers(&self) -> bool {
+        true
     }
 
     fn max_id(&self, prefix: &str) -> Result<Option<TaskId>> {
@@ -697,5 +713,99 @@ mod tests {
         assert_eq!(saved.blocked_by, vec![id("A2")]);
         assert_eq!(saved.priority, 0);
         assert_eq!(saved.status, Status::InProgress);
+    }
+
+    #[test]
+    fn save_stores_conflict_and_parallel_markers_and_reads_them_back() {
+        let server = MockServer::start();
+        let gh = adapter(&server);
+        by_label(
+            &server,
+            "rtok:A1",
+            "all",
+            json!([issue(1, "A1", "open", None, &["bug", "rtok:conflicts:A9"])]),
+        );
+        let patch = server.mock(|when, then| {
+            when.method("PATCH")
+                .path(format!("{ISSUES}/1"))
+                .json_body(json!({
+                    "labels": [
+                        "rtok",
+                        "rtok:A1",
+                        "bug",
+                        "rtok:conflicts:A2",
+                        "rtok:conflicts:A3",
+                        "rtok:parallel",
+                    ],
+                    "state": "open",
+                }));
+            then.status(200).json_body(issue(
+                1,
+                "A1",
+                "open",
+                None,
+                &[
+                    "bug",
+                    "rtok:conflicts:A2",
+                    "rtok:conflicts:A3",
+                    "rtok:parallel",
+                ],
+            ));
+        });
+        let mut task = gh.get(&id("A1")).unwrap().unwrap();
+        assert_eq!(task.conflicts_with, vec![id("A9")]);
+        assert!(!task.parallel);
+        task.conflicts_with = vec![id("A2"), id("A3")];
+        task.parallel = true;
+        let saved = gh.save(&task).unwrap();
+        patch.assert();
+        assert_eq!(saved.conflicts_with, vec![id("A2"), id("A3")]);
+        assert!(saved.parallel);
+        assert!(gh.stores_markers());
+    }
+
+    #[test]
+    fn task_conflict_writes_both_issues_and_task_parallel_sets_the_label() {
+        let server = MockServer::start();
+        for (n, task) in [(1, "A1"), (2, "A2")] {
+            by_label(
+                &server,
+                &format!("rtok:{task}"),
+                "all",
+                json!([issue(n, task, "open", None, &["bug"])]),
+            );
+        }
+        let edge = |n: u64, task: &str, peer: &str| {
+            let label = format!("rtok:conflicts:{peer}");
+            let labels = json!(["rtok", format!("rtok:{task}"), "bug", label.clone()]);
+            server.mock(|when, then| {
+                when.method("PATCH")
+                    .path(format!("{ISSUES}/{n}"))
+                    .json_body(json!({"labels": labels, "state": "open"}));
+                then.status(200)
+                    .json_body(issue(n, task, "open", None, &["bug", &label]));
+            })
+        };
+        let (first, second) = (edge(1, "A1", "A2"), edge(2, "A2", "A1"));
+        let project = Project::with_adapter(
+            "github.com/me/app".into(),
+            std::env::temp_dir(),
+            "A".into(),
+            Box::new(adapter(&server)),
+        );
+        let task = project.conflict(&id("A1"), &id("A2"), false).unwrap();
+        first.assert();
+        second.assert();
+        assert_eq!(task.conflicts_with, vec![id("A2")]);
+
+        let parallel = server.mock(|when, then| {
+            when.method("PATCH").path(format!("{ISSUES}/1")).json_body(
+                json!({"labels": ["rtok", "rtok:A1", "bug", "rtok:parallel"], "state": "open"}),
+            );
+            then.status(200)
+                .json_body(issue(1, "A1", "open", None, &["bug", "rtok:parallel"]));
+        });
+        assert!(project.set_parallel(&id("A1"), true).unwrap().parallel);
+        parallel.assert();
     }
 }

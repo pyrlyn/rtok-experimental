@@ -66,11 +66,12 @@ impl DashState {
     /// For tests: swap the snapshot builder, e.g. to block it on a barrier so `/health` can be
     /// asserted to answer while a build is stuck (T206).
     pub fn with_builder(cfg: Config, build_fn: BuildFn) -> Self {
+        let live = Arc::new(live::LiveCalls::new(&cfg));
         Self {
             cfg: Mutex::new(cfg),
             build: Mutex::new(BuildSlot::Idle),
             build_fn,
-            live: Arc::new(live::LiveCalls::new()),
+            live,
         }
     }
 

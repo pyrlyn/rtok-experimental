@@ -30,7 +30,7 @@ humantime = "2.4" # idle duration: the store and `rtok agents`
 uuid = { version = "1.26", features = ["v4"] } # agent ids in the store; already transitive elsewhere
 thiserror = "2.0" # public error enums: rtok-store and rtok-config
 figment = { version = "0.10", features = ["toml", "env"] } # config layering; the CLI builds flag dicts
-similar = "3.2" # unified diffs: config dry-run and the binary's file diff
+change-preview = "0.1.0" # config and file-edit previews, byte sizes (replaces the in-tree diff and bytes renderers)
 globset = "0.4" # junk globs and config validation of agents.junk.exclude
 url = "2.5" # file:// MCP roots and http(s) checks in config
 
@@ -58,7 +58,7 @@ print_stderr = "warn"
 
 [package]
 name = "rtok"
-version = "0.15.1"
+version = "0.17.0"
 edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
@@ -149,7 +149,7 @@ serde_json = { workspace = true }
 schemars = { workspace = true } # JSON Schema of the /ws protocol, TS types generated from it (T310.2)
 shlex = "2.0.1" # POSIX word splitting of a hook command, to find the file it runs (T331.1)
 sha2 = { workspace = true } # call_io archive checksums (T13.3); the store crate owns the writer
-similar = { workspace = true } # unified diff for `--dry-run` output (T12.6)
+change-preview = { workspace = true } # unified diff, colour and byte sizes for `--dry-run` output
 wasmi = { version = "2.0", optional = true } # pure-Rust WASM interpreter for optional out-of-tree plugin host (P32)
 toml_edit = { workspace = true } # `config set` (T12.3) edits in place, preserving comments
 toml = "0.8" # Cargo.lock [[package]] parse for docs_resolve (already in the lock via figment)

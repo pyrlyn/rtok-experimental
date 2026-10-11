@@ -1,0 +1,12 @@
+bin.name = "rtok"
+args = "agents junk clear --json"
+stdout = """
+[]
+"""
+
+[env]
+inherit = false
+
+[env.add]
+HOME = "target/tmp/agents-junk-clear-json"
+RTOK_HOME = "target/tmp/agents-junk-clear-json"

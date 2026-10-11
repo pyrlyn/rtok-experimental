@@ -192,6 +192,21 @@ export type LinkKind = "manual" | "auto";
  * via the `definition` "Origin".
  */
 export type Origin = "manual" | "session" | "worktree" | "mcp" | "reference";
+/**
+ * The board's columns, the four statuses of [`Status`] under their `rtok task` names.
+ *
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "TaskColumn".
+ */
+export type TaskColumn = "open" | "in-progress" | "done" | "closed";
+/**
+ * Where the Tasks page stands. `Unconfigured` is an ordinary case (the project never ran
+ * `rtok task init`), not a failure, so the page shows how to start instead of an error.
+ *
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "TasksState".
+ */
+export type TasksState = "ready" | "reading" | "unconfigured" | "failed";
 
 /**
  * Root of the schema: one property per direction, so every type lands in `$defs` once.
@@ -453,6 +468,10 @@ export interface Planned {
    * Planned and not removed: the re-check refused it or the removal failed.
    */
   failed: boolean;
+  /**
+   * Files in it, counted for a planned item before anything is removed.
+   */
+  files: number;
   kind: string;
   /**
    * Unix seconds of the newest file in it; `None` when unreadable (T330.6).
@@ -753,13 +772,17 @@ export interface CallsView {
    */
   feed: Finished[];
   /**
+   * `[plugins.graph] live_heat_window_s`: how long a node stays warm on the live canvas.
+   */
+  heat_window_s: number;
+  /**
    * The server's clock in epoch milliseconds: the page ages rows by `now - at` on this clock,
    * so a skew between the two machines moves nothing.
    */
   now: number;
   running: Running[];
   /**
-   * One per chip, in the order of [`WINDOWS`]; the last is "since open".
+   * One per chip, in the order of [`WINDOWS`]; the last is "since start".
    */
   windows: WindowView[];
 }
@@ -773,6 +796,7 @@ export interface Finished {
   backend: string | null;
   before: number;
   call: string;
+  caller: string;
   error: string | null;
   interrupted: boolean;
   ms: number | null;
@@ -792,6 +816,10 @@ export interface Running {
    */
   at: number;
   call: string;
+  /**
+   * T329.34: what the store calls the session (`claude 3f9a1c2e`), else the session's start.
+   */
+  caller: string;
   project: string | null;
   session: string;
   target: string | null;
@@ -846,7 +874,7 @@ export interface Spark {
   calls: number[];
   saved: number[];
   /**
-   * What the slots cover. "since open" reads the buckets, which are kept for 15 minutes only.
+   * What the slots cover. "since start" reads the buckets, which are kept for 15 minutes only.
    */
   span_ms: number;
 }
@@ -956,6 +984,7 @@ export interface Snapshot {
    * when this tick's transcripts read failed.
    */
   stats: string | null;
+  tasks: TasksPage;
   type: string;
   usage: Overview;
   /**
@@ -1697,6 +1726,76 @@ export interface SkillPageRow {
   source: string;
 }
 /**
+ * Tasks page (T441.13.7): the project's `rtok task list --all` as a board, through
+ * [`tasks::page`]. Read-only; the slow adapters are read off the tick.
+ */
+export interface TasksPage {
+  board: TaskBoard | null;
+  state: TasksState;
+  text: string;
+}
+/**
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "TaskBoard".
+ */
+export interface TaskBoard {
+  /**
+   * `disk`, `github` or `gitlab`.
+   */
+  adapter: string;
+  /**
+   * Finished tasks left off `tasks`.
+   */
+  hidden: number;
+  /**
+   * Every active task, and the newest [`FINISHED_SHOWN`] of each finished status, by id.
+   */
+  tasks: TaskCard[];
+}
+/**
+ * One task as the board draws it: the fields of `rtok task list --json` except the description,
+ * which can be pages long and has no place on a card (`rtok task show` has it).
+ *
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "TaskCard".
+ */
+export interface TaskCard {
+  assignee: string | null;
+  /**
+   * The tasks this one waits for (`task_dep`), shown as "needs".
+   */
+  blocked_by: string[];
+  conflicts_with: string[];
+  external: TaskLink | null;
+  id: string;
+  parallel: boolean;
+  parent: string | null;
+  /**
+   * `0` is highest. Unlike the CLI's JSON, the default is carried too: a card always has one.
+   */
+  priority: number;
+  status: TaskColumn;
+  title: string;
+  /**
+   * Unix seconds.
+   */
+  updated_at: number;
+}
+/**
+ * The issue a task lives in on GitHub or GitLab.
+ *
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "TaskLink".
+ */
+export interface TaskLink {
+  adapter: string;
+  number: number;
+  /**
+   * Always `http(s)`: an issue host's reply is untrusted, and the page turns this into a link.
+   */
+  url: string;
+}
+/**
  * Overview page: provider usage totals, CTT and the per-turn series.
  */
 export interface Overview {
@@ -1845,6 +1944,18 @@ export interface SkillsPage1 {
    */
   header: string;
   rows: SkillPageRow[];
+}
+/**
+ * The Tasks page. `text` is the `rtok task list` screen for the tui and the SPA's status line;
+ * `board` is the same rows as data for the SPA. Both come from one list.
+ *
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "TasksPage".
+ */
+export interface TasksPage1 {
+  board: TaskBoard | null;
+  state: TasksState;
+  text: string;
 }
 /**
  * The Usage page: one [`usage::Report`] — the call `rtok agents usage` makes — read once and

@@ -25,6 +25,7 @@ import { Skills } from "./pages/Skills";
 import { Stats } from "./pages/Stats";
 import { Usage } from "./pages/Usage";
 import { Worktrees } from "./pages/Worktrees";
+import { Tasks } from "./pages/Tasks";
 import { PAGES, type Page } from "./pages";
 import { drillSearch, parseDrill } from "./pages/graph3d/drillState";
 import { NotFound, Shell } from "./Shell";
@@ -44,6 +45,7 @@ const screens: Record<Page["id"], RouteComponent> = {
     config: Config,
     services: Services,
     worktrees: Worktrees,
+    tasks: Tasks,
     usage: Usage,
 };
 

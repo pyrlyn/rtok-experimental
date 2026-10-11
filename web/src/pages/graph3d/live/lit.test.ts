@@ -24,6 +24,12 @@ describe("what the live canvas lights", () => {
     expect(busy).toBe(0);
   });
 
+  test("the heat window is the server's setting", () => {
+    const s = { ...ended(done("a", 10, 4)), heat_window_s: 60 };
+    expect(liveState(overview, s, NOW + 30_000).lit.get(idOf("rtok"))!.heat).toBeGreaterThan(0);
+    expect(liveState(overview, s, NOW + 60_001).lit.size).toBe(0);
+  });
+
   test("a finished call leaves heat that fades over five minutes and is gone after", () => {
     const s = ended(done("a", 10, 4));
     const fresh = liveState(overview, s, NOW).lit.get(idOf("rtok"))!;

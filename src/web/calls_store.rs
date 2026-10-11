@@ -15,23 +15,23 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use super::live::CallBatch;
+use crate::config::Graph;
 use crate::store::{EventPhase, GraphEvent};
 
-pub const FEED_ROWS: usize = 200;
 /// A call with no end this long after its start is shown as interrupted: its process is gone.
 pub const INTERRUPT_MS: i64 = 120_000;
 const LONGEST_BUCKET_MS: i64 = 900_000;
-/// Latencies kept for the percentiles: "since open" would otherwise grow with every call.
+/// Latencies kept for the percentiles: "since start" would otherwise grow with every call.
 pub const LATENCY_KEEP: usize = 1000;
 /// Slots of a sparkline. The page and the TUI draw the same series, so the count is fixed here.
 pub const SPARK_SLOTS: usize = 30;
 
-/// The window chips of the page; the last one is "since open" and reads the running total.
+/// The window chips of the page; the last one is "since start" and reads the running total.
 pub const WINDOWS: [(&str, i64); 4] = [
     ("1 min", 60_000),
     ("5 min", 300_000),
     ("15 min", LONGEST_BUCKET_MS),
-    ("since open", i64::MAX),
+    ("since start", i64::MAX),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
@@ -41,6 +41,8 @@ pub struct Running {
     pub target: Option<String>,
     pub project: Option<String>,
     pub session: String,
+    /// T329.34: what the store calls the session (`claude 3f9a1c2e`), else the session's start.
+    pub caller: String,
     /// The reader's clock: the interrupt timeout must not depend on the writer's.
     pub at: i64,
 }
@@ -52,6 +54,7 @@ pub struct Finished {
     pub target: Option<String>,
     pub project: Option<String>,
     pub session: String,
+    pub caller: String,
     pub ok: bool,
     pub error: Option<String>,
     pub backend: Option<String>,
@@ -66,7 +69,7 @@ pub struct Finished {
 /// the window totals, so the slots add up to them.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct Spark {
-    /// What the slots cover. "since open" reads the buckets, which are kept for 15 minutes only.
+    /// What the slots cover. "since start" reads the buckets, which are kept for 15 minutes only.
     pub span_ms: i64,
     pub calls: Vec<u64>,
     pub saved: Vec<i64>,
@@ -149,23 +152,39 @@ impl Totals {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct CallsStore {
     pub running: Vec<Running>,
     /// Newest first.
     pub feed: Vec<Finished>,
+    /// `[plugins.graph] live_feed_rows`: how long the feed grows.
+    feed_rows: usize,
+    /// `[plugins.graph] live_heat_window_s`, carried to the page in the view.
+    pub heat_window_s: u32,
     /// One per batch, kept for the longest window.
     buckets: Vec<(i64, Totals)>,
     pub all: Totals,
 }
 
-fn ended(e: &GraphEvent, at: i64) -> Finished {
+impl Default for CallsStore {
+    fn default() -> Self {
+        Self::with(&Graph::default())
+    }
+}
+
+/// The session as a caller column shows it when the store names nobody.
+pub fn bare_caller(session: &str) -> String {
+    session.chars().take(8).collect()
+}
+
+fn ended(e: &GraphEvent, at: i64, caller: String) -> Finished {
     Finished {
         call: e.call.clone(),
         tool: e.tool.clone(),
         target: e.target.clone(),
         project: e.project.clone(),
         session: e.session.clone(),
+        caller,
         ok: e.ok,
         error: e.error.clone(),
         backend: e.backend.clone(),
@@ -178,6 +197,17 @@ fn ended(e: &GraphEvent, at: i64) -> Finished {
 }
 
 impl CallsStore {
+    pub fn with(cfg: &Graph) -> Self {
+        Self {
+            running: Vec::new(),
+            feed: Vec::new(),
+            feed_rows: cfg.live_feed_rows as usize,
+            heat_window_s: cfg.live_heat_window_s,
+            buckets: Vec::new(),
+            all: Totals::default(),
+        }
+    }
+
     /// Folds one batch in. Totals come from the batch `summary`, which counts every event, so a
     /// burst cut down to the listed events still adds up to what `rtok stats` sums.
     pub fn fold(&mut self, batch: &CallBatch, now: i64) {
@@ -203,6 +233,7 @@ impl CallsStore {
                     target: e.target.clone(),
                     project: e.project.clone(),
                     session: e.session.clone(),
+                    caller: batch.caller(&e.session),
                     at,
                 };
                 match self.running.iter_mut().find(|x| x.call == e.call) {
@@ -225,7 +256,10 @@ impl CallsStore {
             projects_hit: u64::from(batch.summary.projects_hit),
             ..Totals::default()
         };
-        let rows: Vec<Finished> = ends.iter().map(|e| ended(e, now)).collect();
+        let rows: Vec<Finished> = ends
+            .iter()
+            .map(|e| ended(e, now, batch.caller(&e.session)))
+            .collect();
         for row in &rows {
             let t = bucket.tools.entry(row.tool.clone()).or_default();
             t.calls += 1;
@@ -239,7 +273,7 @@ impl CallsStore {
         // A late end for a call already marked interrupted replaces the mark.
         self.feed.retain(|r| !done.contains(r.call.as_str()));
         self.feed.splice(0..0, rows.into_iter().rev());
-        self.feed.truncate(FEED_ROWS);
+        self.feed.truncate(self.feed_rows);
         self.buckets.push((now, bucket));
         self.buckets.retain(|(at, _)| now - at <= LONGEST_BUCKET_MS);
     }
@@ -256,6 +290,7 @@ impl CallsStore {
             target: r.target,
             project: r.project,
             session: r.session,
+            caller: r.caller,
             ok: false,
             error: None,
             backend: None,
@@ -266,7 +301,7 @@ impl CallsStore {
             interrupted: true,
         });
         self.feed.splice(0..0, rows);
-        self.feed.truncate(FEED_ROWS);
+        self.feed.truncate(self.feed_rows);
     }
 
     /// Summed from the buckets on every call, never kept as a second counter.
@@ -309,17 +344,148 @@ impl CallsStore {
     }
 }
 
+/// The mark on a feed row whose project is not in the scope; the page shows the same text.
+pub const OUTSIDE_SCOPE: &str = "outside scope";
+/// Folded calls are those of this long ago or less (the page's heat window is a config knob,
+/// this one is fixed so the TUI and the page count alike).
+pub const FOLD_MS: i64 = 300_000;
+
+/// What a sparkline is called: "calls over the last 5 min", as the page names it.
+pub fn spark_label(what: &str, span_ms: i64) -> String {
+    format!(
+        "{what} over the last {} min",
+        (span_ms as f64 / 60_000.0).round()
+    )
+}
+
+/// One registry row, as far as the scope needs it.
+pub struct ScopeRow<'a> {
+    pub id: i32,
+    pub name: &'a str,
+    pub selected: bool,
+    pub links: Vec<i32>,
+}
+
+/// The names of the projects the live part is scoped to: the drilled project, else the selected
+/// one, with everything its links reach. `None` when there is none, so no call is "outside" a
+/// scope that was never chosen (the page's `scopeNames`).
+pub fn scope_names(rows: &[ScopeRow], drilled: Option<i32>) -> Option<HashSet<String>> {
+    let from = drilled.or_else(|| rows.iter().find(|r| r.selected).map(|r| r.id))?;
+    let mut seen = HashSet::new();
+    let mut todo = vec![from];
+    // A link to an id the registry no longer holds is ignored; cycles end at the first revisit.
+    while let Some(id) = todo.pop() {
+        if let Some(row) = rows.iter().find(|r| r.id == id)
+            && seen.insert(id)
+        {
+            todo.extend(&row.links);
+        }
+    }
+    let names: HashSet<String> = rows
+        .iter()
+        .filter(|r| seen.contains(&r.id))
+        .map(|r| r.name.to_owned())
+        .collect();
+    (!names.is_empty()).then_some(names)
+}
+
+/// A call names its project; one the scope lacks is counted and listed but never lights the canvas.
+pub fn outside_scope(scope: Option<&HashSet<String>>, project: Option<&str>) -> bool {
+    matches!((scope, project), (Some(s), Some(p)) if !s.contains(p))
+}
+
+/// A node the one-project view draws: its label and the path it stands for.
+pub struct DrawnNode {
+    pub label: String,
+    pub root: String,
+}
+
+/// Calls whose own node the cap folded into "+N more", on the node that holds them.
+#[derive(Debug, PartialEq, Eq)]
+pub struct FoldedCount {
+    pub label: String,
+    pub calls: u64,
+}
+
+impl CallsStore {
+    /// The page's `foldedCounters`: with `more` nodes left out, a recent in-scope call whose
+    /// target no drawn node is named after counts on the drawn node whose path equals or is a
+    /// directory prefix of the target (longest first), else on the "+N more" group. Largest first.
+    pub fn folded_counters(
+        &self,
+        drawn: &[DrawnNode],
+        more: usize,
+        scope: Option<&HashSet<String>>,
+        now: i64,
+    ) -> Vec<FoldedCount> {
+        if more == 0 {
+            return Vec::new();
+        }
+        let mut by_root: Vec<usize> = (0..drawn.len()).collect();
+        by_root.sort_by_key(|&i| std::cmp::Reverse(drawn[i].root.len()));
+        let mut counts = vec![0u64; drawn.len()];
+        let mut group = 0u64;
+        let finished = self
+            .feed
+            .iter()
+            .filter(|r| !r.interrupted && now - r.at <= FOLD_MS)
+            .map(|r| (&r.target, &r.project));
+        let running = self
+            .running
+            .iter()
+            .filter(|r| now - r.at <= FOLD_MS)
+            .map(|r| (&r.target, &r.project));
+        for (target, project) in finished.chain(running) {
+            let Some(target) = target.as_deref() else {
+                continue;
+            };
+            if outside_scope(scope, project.as_deref()) || drawn.iter().any(|n| n.label == target) {
+                continue;
+            }
+            let holder = by_root.iter().find(|&&i| {
+                let root = &drawn[i].root;
+                !root.is_empty()
+                    && (target == root
+                        || target
+                            .strip_prefix(root.as_str())
+                            .is_some_and(|t| t.starts_with('/')))
+            });
+            match holder {
+                Some(&i) => counts[i] += 1,
+                None => group += 1,
+            }
+        }
+        let mut out: Vec<FoldedCount> = drawn
+            .iter()
+            .zip(counts)
+            .filter(|(_, calls)| *calls > 0)
+            .map(|(n, calls)| FoldedCount {
+                label: n.label.clone(),
+                calls,
+            })
+            .collect();
+        if group > 0 {
+            out.push(FoldedCount {
+                label: format!("+{more} more"),
+                calls: group,
+            });
+        }
+        out.sort_by_key(|a| std::cmp::Reverse(a.calls));
+        out
+    }
+}
+
 /// Empty strings mean "all".
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FeedFilter {
-    pub session: String,
+    pub caller: String,
     pub tool: String,
     pub project: String,
 }
 
 impl FeedFilter {
     fn keeps(&self, r: &Finished) -> bool {
-        (self.session.is_empty() || r.session == self.session)
+        (self.caller.is_empty() || r.caller == self.caller)
             && (self.tool.is_empty() || r.tool == self.tool)
             && (self.project.is_empty() || Some(&self.project) == r.project.as_ref())
     }
@@ -399,6 +565,7 @@ pub(crate) mod fixtures {
         CallBatch {
             head: events.len() as i64,
             omitted,
+            callers: Default::default(),
             summary: CallSummary {
                 starts: events
                     .iter()
@@ -463,8 +630,110 @@ mod tests {
             (60_000, 1, 2)
         );
         assert_eq!(short.calls.iter().sum::<u64>(), 3);
-        // "since open" has no buckets beyond 15 minutes: it draws the last 15.
+        // "since start" has no buckets beyond 15 minutes: it draws the last 15.
         assert_eq!(s.spark(3, now), long);
+    }
+
+    fn row<'a>(id: i32, name: &'a str, selected: bool, links: &[i32]) -> ScopeRow<'a> {
+        ScopeRow {
+            id,
+            name,
+            selected,
+            links: links.to_vec(),
+        }
+    }
+
+    #[test]
+    fn the_scope_is_the_drilled_or_selected_project_and_what_its_links_reach() {
+        let rows = [
+            row(1, "a", true, &[2, 9]),
+            row(2, "b", false, &[1]),
+            row(3, "c", false, &[]),
+        ];
+        let names = scope_names(&rows, None).unwrap();
+        assert_eq!(names, HashSet::from(["a".to_owned(), "b".to_owned()]));
+        let drilled = scope_names(&rows, Some(3)).unwrap();
+        assert_eq!(drilled, HashSet::from(["c".to_owned()]));
+        assert!(scope_names(&[row(1, "a", false, &[])], None).is_none());
+        assert!(scope_names(&rows, Some(42)).is_none());
+
+        assert!(outside_scope(Some(&names), Some("c")));
+        assert!(!outside_scope(Some(&names), Some("a")));
+        assert!(
+            !outside_scope(Some(&names), None),
+            "no project is never outside"
+        );
+        assert!(!outside_scope(None, Some("c")), "no scope, nothing outside");
+    }
+
+    #[test]
+    fn the_sparkline_is_named_with_the_pages_wording() {
+        assert_eq!(spark_label("calls", 300_000), "calls over the last 5 min");
+        assert_eq!(
+            spark_label("tokens saved", 900_000),
+            "tokens saved over the last 15 min"
+        );
+    }
+
+    #[test]
+    fn folded_targets_count_on_the_nearest_drawn_ancestor_else_on_the_group() {
+        let target = |call: &str, t: &str, project: &str| {
+            let mut e = end(call, 10, 5);
+            e.target = Some(t.into());
+            e.project = Some(project.into());
+            e
+        };
+        let mut s = CallsStore::default();
+        let mut running = event("run");
+        running.target = Some("src/web/mod.rs".into());
+        folded(
+            &mut s,
+            vec![
+                target("a", "src/web/calls.rs", "rtok"),
+                target("b", "src/web/x/deep.rs", "rtok"),
+                target("c", "src/webby/other.rs", "rtok"),
+                target("d", "drawn_symbol", "rtok"),
+                target("e", "src/web/out.rs", "elsewhere"),
+                running,
+            ],
+            T,
+        );
+        let drawn = [
+            DrawnNode {
+                label: "src".into(),
+                root: "src".into(),
+            },
+            DrawnNode {
+                label: "web".into(),
+                root: "src/web".into(),
+            },
+            DrawnNode {
+                label: "drawn_symbol".into(),
+                root: "src/lib.rs".into(),
+            },
+        ];
+        let scope = HashSet::from(["rtok".to_owned()]);
+        let got = s.folded_counters(&drawn, 7, Some(&scope), T);
+        let pairs: Vec<(&str, u64)> = got.iter().map(|f| (f.label.as_str(), f.calls)).collect();
+        // web holds a, b and the running call; `src/webby` is not under `src/web`, so it is
+        // under `src`; the drawn symbol and the out-of-scope call count nowhere.
+        assert_eq!(pairs, [("web", 3), ("src", 1)]);
+        // A target under no drawn root lands on the group, named after the cap's count.
+        let mut lone = CallsStore::default();
+        folded(&mut lone, vec![target("z", "other/z.rs", "rtok")], T);
+        assert_eq!(
+            lone.folded_counters(&drawn, 7, None, T),
+            [FoldedCount {
+                label: "+7 more".into(),
+                calls: 1
+            }]
+        );
+        // Nothing was folded without a cap, and calls older than five minutes do not count.
+        assert!(s.folded_counters(&drawn, 0, None, T).is_empty());
+        assert!(
+            s.folded_counters(&drawn, 7, None, T + FOLD_MS + 1)
+                .is_empty()
+        );
     }
 
     #[test]
@@ -569,14 +838,41 @@ mod tests {
     }
 
     #[test]
-    fn the_feed_keeps_the_newest_rows_first_up_to_the_cap() {
-        let mut s = CallsStore::default();
-        for i in 0..FEED_ROWS + 5 {
+    fn the_feed_keeps_the_newest_rows_first_up_to_the_configured_cap() {
+        let cfg = Graph {
+            live_feed_rows: 5,
+            live_heat_window_s: 90,
+            ..Graph::default()
+        };
+        let mut s = CallsStore::with(&cfg);
+        for i in 0..8 {
             folded(&mut s, vec![end(&format!("c{i}"), 2, 1)], T + i as i64);
         }
-        assert_eq!(s.feed.len(), FEED_ROWS);
-        assert_eq!(s.feed[0].call, format!("c{}", FEED_ROWS + 4));
-        assert_eq!(s.all.calls, FEED_ROWS as u64 + 5);
+        assert_eq!(s.feed.len(), 5);
+        assert_eq!(s.feed[0].call, "c7");
+        assert_eq!(s.all.calls, 8);
+        assert_eq!(s.heat_window_s, 90);
+        assert_eq!(CallsStore::default().feed_rows, 200, "the shipped default");
+    }
+
+    #[test]
+    fn a_row_carries_the_name_the_batch_gives_its_session_else_the_session() {
+        let mut s = CallsStore::default();
+        let mut b = batch(vec![event("run"), end("a", 2, 1)], 0);
+        b.callers
+            .insert("session-abcdef".into(), "claude 3f9a1c2e".into());
+        s.fold(&b, T);
+        assert_eq!(s.running[0].caller, "claude 3f9a1c2e");
+        assert_eq!(s.feed[0].caller, "claude 3f9a1c2e");
+        let mut other = end("b", 2, 1);
+        other.session = "mcp-1234567890".into();
+        folded(&mut s, vec![other], T + 1);
+        assert_eq!(s.feed[0].caller, "mcp-1234", "no name: the session's start");
+        let by = |caller: &str| FeedFilter {
+            caller: caller.into(),
+            ..FeedFilter::default()
+        };
+        assert_eq!(filter_feed(&s.feed, &by("claude 3f9a1c2e")).len(), 1);
     }
 
     #[test]
@@ -637,8 +933,8 @@ mod tests {
             ],
             T,
         );
-        let f = |session: &str, tool: &str| FeedFilter {
-            session: session.into(),
+        let f = |caller: &str, tool: &str| FeedFilter {
+            caller: caller.into(),
             tool: tool.into(),
             project: String::new(),
         };

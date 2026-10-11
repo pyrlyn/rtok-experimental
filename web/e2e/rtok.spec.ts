@@ -178,7 +178,8 @@ test("clear safe junk plans without deleting and deletes only on the confirmed m
   await junk.getByRole("button", { name: "Clear safe junk" }).click();
   await junk.getByRole("button", { name: "Clear 2 items" }).click();
   await junk.getByRole("button", { name: "Confirm" }).click();
-  await expect(junk.getByRole("status")).toContainText("Freed");
+  // The section reloads after the apply, so its loading status can sit beside the result.
+  await expect(junk.getByRole("status").filter({ hasText: "Freed" })).toBeVisible();
   expect(stale.some((p) => existsSync(p))).toBe(false);
   const applies = sent.filter((m) => m.junk?.action === "apply");
   expect(applies).toHaveLength(1);
@@ -295,8 +296,8 @@ test("a graph call from another process lights its node on the read-only live gr
   await expect(live).toHaveCSS("pointer-events", "none");
   await expect(live).toHaveCSS("cursor", "auto");
 
-  // The stream has no replay, so a call made before the server saw the subscription is lost:
-  // the call is repeated until the first one lands, and each try has one second to light the node.
+  // The server replays the stored events a new subscriber missed, but the call is still repeated
+  // until the first one lands: the poll that reads it runs after the call, not with it.
   await expect(async () => {
     callers(rtok);
     await expect(live.locator("[data-testid=node-live][data-hot]")).toHaveCount(1, {
@@ -422,6 +423,31 @@ test("under 900 px the two parts stack and there is no splitter", async ({ page,
   await expect(page.getByRole("separator")).toBeHidden();
 });
 
+test("each part of the graph page maximises to fill the page and Escape restores", async ({
+  page,
+  rtok,
+}) => {
+  await viewing(page, "2d");
+  rtok.addProject();
+  await page.goto("/#/graph");
+  const live = page.getByTestId("graph-live");
+  await expect(live).toBeVisible();
+
+  await page.getByRole("button", { name: "Maximise live graph" }).click();
+  // The section, not the picture inside it: the section pads the picture on its own.
+  const fill = await page.getByRole("region", { name: "live graph" }).boundingBox();
+  const view = page.viewportSize();
+  expect(fill?.width).toBeGreaterThan((view?.width ?? 0) - 40);
+  await expect(live).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Maximise live graph" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Maximise explorer" }).click();
+  await expect(live).toHaveCount(0);
+  await page.getByRole("button", { name: "Restore explorer" }).click();
+  await expect(live).toBeVisible();
+});
+
 test("a 500-call burst leaves the page responsive", async ({ page, rtok }) => {
   await viewing(page, "2d");
   rtok.addProject();
@@ -533,4 +559,33 @@ test("Export downloads the JSON the CLI writes, and the page opens it back read-
   await expect(page.getByTestId("graph-live")).toHaveCount(0);
   await page.getByRole("button", { name: "Close export" }).click();
   await expect(page.getByText(/viewing export from/)).toHaveCount(0);
+});
+
+test("a project with tasks shows them on the board, a subtask under its parent, and writes nothing", async ({
+  page,
+  rtok,
+}) => {
+  // The server reads the project again on its own schedule, so the page is opened after the
+  // tasks exist and given a few refreshes to catch up.
+  const [parent, child, finished] = rtok.addTasks(["Ship it", "Write the docs", "Cut the release"]);
+  await page.goto("/#/tasks");
+
+  const open = page.getByRole("region", { name: "open" });
+  await expect(open.getByText("Ship it")).toBeVisible({ timeout: 20_000 });
+  await expect(open.getByText("Write the docs")).toBeVisible();
+  await expect(open.getByText(`in ${parent}`)).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "done" }).getByText("Cut the release"),
+  ).toBeVisible();
+  expect([parent, child, finished]).toEqual(["E1", "E1.1", "E2"]);
+
+  await page.getByRole("button", { name: "list" }).click();
+  const row = page
+    .getByRole("table", { name: "tasks" })
+    .getByRole("row", { name: /Write the docs/ });
+  await row.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("region", { name: child! })).toBeVisible();
+  // Read-only: nothing on the page is a form control that could change a task.
+  await expect(page.getByRole("main").getByRole("switch")).toHaveCount(0);
 });

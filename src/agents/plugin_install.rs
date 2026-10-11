@@ -37,7 +37,11 @@ pub(crate) fn install_probe(
     }
     match host_id {
         "claude" if kind == Kind::Cli => claude_probe(cfg),
-        "codex" => Some(codex_probe(cfg)),
+        "codex" => Some(cache_probe(codex_home(cfg), Source::Github)),
+        "codebuddy" => Some(cache_probe(
+            super::codebuddy::dir(cfg, kind).to_path_buf(),
+            Source::Local,
+        )),
         "cursor" => linked_probe(super::cursor::PLUGIN.path(cfg), Source::Local),
         "opencode" => linked_probe(
             super::opencode::plugin_dest(&super::opencode::for_kind(cfg, kind)),
@@ -133,6 +137,7 @@ fn manifest_version(dir: &Path) -> Option<String> {
         "plugin.json",
         ".cursor-plugin/plugin.json",
         ".codex-plugin/plugin.json",
+        ".codebuddy-plugin/plugin.json",
         "gemini-extension.json",
         "kimi.plugin.json",
         "devin.plugin.json",
@@ -180,13 +185,15 @@ fn claude_probe(cfg: &Config) -> Option<InstallProbe> {
     })
 }
 
-fn codex_probe(cfg: &Config) -> InstallProbe {
-    let base = codex_home(cfg).join(PLUGIN_CACHE);
+/// The `plugins/cache/rtok/rtok/<version>` copy a host unpacks into its config dir (Codex,
+/// CodeBuddy, whose marketplace is a local directory); the newest version directory wins.
+fn cache_probe(home: PathBuf, fallback_source: Source) -> InstallProbe {
+    let base = home.join(PLUGIN_CACHE);
     let root = newest_child_dir(&base).unwrap_or(base);
     InstallProbe {
         version_file: root.join(".rtok-plugin-version"),
         host_record_version: manifest_version(&root),
-        fallback_source: Source::Github,
+        fallback_source,
     }
 }
 

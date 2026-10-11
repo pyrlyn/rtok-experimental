@@ -1,5 +1,5 @@
 {
   "name": "rtok",
-  "version": "0.15.1",
+  "version": "0.17.0",
   "description": "rtok hooks for Qwen Code: lossless token savings for tool output"
 }

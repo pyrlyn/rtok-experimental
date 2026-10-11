@@ -35,7 +35,7 @@ pub fn hit(
     }
     let before = std::str::from_utf8(&prev).ok()?;
     let after = std::str::from_utf8(body).ok()?;
-    let diff = crate::render::unified_diff(Path::new(path), before, after);
+    let diff = change_preview::unified_diff(Path::new(path), before, after);
     if diff.is_empty() || body.is_empty() {
         return None;
     }

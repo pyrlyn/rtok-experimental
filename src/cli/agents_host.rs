@@ -26,6 +26,10 @@ pub(super) struct RemoveArgs {
     /// Take rtok out of the project's post-create script (`cursor`, `kilo`, `windsurf`, `devin`) instead of the host's config
     #[arg(long)]
     pub(super) project: bool,
+    // T416.3
+    /// With --dry-run: stat lines and totals instead of the planned edits
+    #[arg(long, requires = "dry_run")]
+    pub(super) stat: bool,
 }
 
 #[derive(clap::Args)]
@@ -59,6 +63,10 @@ pub(super) struct UpdateArgs {
     /// List outdated plugins only (same output as `agents outdated`)
     #[arg(long)]
     pub(super) check: bool,
+    // T416.3
+    /// With --dry-run: stat lines and totals instead of the planned edits
+    #[arg(long, requires = "dry_run")]
+    pub(super) stat: bool,
 }
 
 /// `--source` for `rtok agents update` (T279): mirrors `agents::plugin_version::Source`, kept
@@ -146,6 +154,10 @@ pub(super) struct SetupArgs {
     /// (`cursor`, `kilo`, `windsurf`, `devin`); run it inside the repository
     #[arg(long)]
     pub(super) project: bool,
+    // T416.3
+    /// With --dry-run: stat lines and totals instead of the planned edits
+    #[arg(long, requires = "dry_run")]
+    pub(super) stat: bool,
 }
 
 impl SetupArgs {
@@ -165,6 +177,7 @@ impl SetupArgs {
             all: true,
             no_restart: args.no_restart,
             project: args.project,
+            stat: args.stat,
         }
     }
 }
@@ -186,7 +199,9 @@ pub(super) fn setup_host(config_file: Option<&std::path::Path>, args: SetupArgs)
         all,
         no_restart,
         project,
+        stat,
     } = args;
+    crate::stat_preview::set(stat);
     crate::agents::command::install(
         config_file,
         crate::agents::command::Install {
@@ -234,6 +249,7 @@ pub(super) fn outdated_hosts(
 }
 
 pub(super) fn update_hosts(config_file: Option<&std::path::Path>, args: UpdateArgs) -> Result<()> {
+    crate::stat_preview::set(args.stat);
     let flags = setup_flags(
         args.dry_run,
         false,

@@ -24,6 +24,12 @@ const snap: Snapshot = {
 beforeEach(() => {
     localStorage.clear();
     localStorage.setItem(VIEW_KEY, "list");
+    // The cards' numbers jump under reduced motion (T329.53), so a test reads the total at once.
+    vi.stubGlobal("matchMedia", (q: string) => ({
+        matches: q.includes("reduce"),
+        addEventListener: () => {},
+        removeEventListener: () => {},
+    }));
 });
 afterEach(() => {
     cleanup();
@@ -212,6 +218,36 @@ describe("live graph", () => {
         await waitFor(() => expect(height()).toBeGreaterThan(140), { timeout: 3000 });
     });
 
+    test("the caller column names the agent and host, else the session, and the filter lists the names", async () => {
+        const w = wire(snap);
+        mount(w.connect, "/graph");
+        await canvas();
+        act(() =>
+            w.frame({
+                type: "calls",
+                calls: view({
+                    feed: [
+                        done("b", 2, 1, {
+                            caller: "mcp-4242",
+                            session: "mcp-4242",
+                            target: "beta",
+                        }),
+                        done("a", 2, 1, { target: "alpha" }),
+                    ],
+                }),
+            }),
+        );
+        await screen.findByText("alpha");
+        const table = within(screen.getByRole("table", { name: "graph calls" }));
+        expect(table.getAllByText("claude 3f9a1c2e")).toHaveLength(1);
+        expect(table.getByText("mcp-4242")).toBeTruthy();
+        const pick = screen.getByLabelText("filter by caller") as HTMLSelectElement;
+        expect([...pick.options].map((o) => o.value)).toEqual(["", "claude 3f9a1c2e", "mcp-4242"]);
+        fireEvent.change(pick, { target: { value: "mcp-4242" } });
+        expect(table.queryByText("alpha")).toBeNull();
+        expect(table.getByText("beta")).toBeTruthy();
+    });
+
     test("the 2D/3D switch is remembered; 3D without WebGL says so and still shows 2D", async () => {
         mount(wire(snap).connect, "/graph");
         await canvas();
@@ -248,7 +284,7 @@ describe("live graph", () => {
         fireEvent.click(screen.getByRole("button", { name: "Unfreeze" }));
         expect(await screen.findByText("beta")).toBeTruthy();
         await waitFor(() => expect(screen.queryByText("2 held")).toBeNull());
-        fireEvent.click(screen.getByRole("button", { name: "since open" }));
+        fireEvent.click(screen.getByRole("button", { name: "since start" }));
         // Three calls of 100 tokens each, none dropped by the freeze.
         expect(await screen.findByText("300")).toBeTruthy();
     });
@@ -290,7 +326,7 @@ describe("live graph", () => {
         act(() =>
             w.frame({ type: "calls", calls: view({ feed: listed, totals: { calls: 500 } }) }),
         );
-        fireEvent.click(screen.getByRole("button", { name: "since open" }));
+        fireEvent.click(screen.getByRole("button", { name: "since start" }));
         await waitFor(() => expect(screen.getByText("500")).toBeTruthy());
     });
 });

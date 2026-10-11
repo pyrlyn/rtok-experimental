@@ -21,6 +21,10 @@ pub(super) enum ConfigCmd {
         /// Print the diff it would write and exit
         #[arg(long)]
         dry_run: bool,
+        // T416.3
+        /// With --dry-run: stat lines and totals instead of the diff
+        #[arg(long, requires = "dry_run")]
+        stat: bool,
     },
     /// Print the path of the config file
     Path,
@@ -53,7 +57,23 @@ pub(super) enum ConfigCmd {
         /// Print the diff it would write and exit
         #[arg(long)]
         dry_run: bool,
+        // T416.3
+        /// With --dry-run: stat lines and totals instead of the diff
+        #[arg(long, requires = "dry_run")]
+        stat: bool,
     },
+}
+
+/// The diff of a dry run closes with the totals line (or becomes the stat lines); a real write
+/// prints its diff as before.
+fn preview(path: &std::path::Path, diff: &str, dry_run: bool) -> String {
+    if dry_run {
+        // The registered painter has already coloured `diff`; it only needs counting.
+        let shown = if crate::stat_preview::on() { "" } else { diff };
+        crate::stat_preview::show(&[(path.to_path_buf(), diff.to_string())], shown)
+    } else {
+        diff.to_string()
+    }
 }
 
 fn show(rows: &[model::ConfigEntry], sources: bool, json: bool) -> Result<()> {
@@ -74,10 +94,15 @@ pub(super) fn run(config_file: &Option<PathBuf>, action: ConfigCmd) -> Result<()
     let home = Config::home_dir();
     let user = Config::user_path(&home, config_file.as_deref());
     match action {
-        ConfigCmd::Init { force, dry_run } => {
+        ConfigCmd::Init {
+            force,
+            dry_run,
+            stat,
+        } => {
+            crate::stat_preview::set(stat);
             let (path, diff) = Config::init_maybe(&home, config_file.as_deref(), force, dry_run)?;
             println!("{}", path.display());
-            print_diff(&diff);
+            print_diff(&preview(&path, &diff, dry_run));
         }
         ConfigCmd::Path => println!("{}", user.display()),
         ConfigCmd::Show { sources, json } => {
@@ -133,12 +158,14 @@ pub(super) fn run(config_file: &Option<PathBuf>, action: ConfigCmd) -> Result<()
             key,
             value,
             dry_run,
+            stat,
         } => {
-            let (_, diff) =
+            crate::stat_preview::set(stat);
+            let (path, diff) =
                 validate::set_with(&home, config_file.as_deref(), &key, &value, dry_run)?;
             if dry_run {
                 // Nothing was written, so the loader would still report the old value.
-                print_diff(&diff);
+                print_diff(&preview(&path, &diff, dry_run));
             } else {
                 let rows = model::config_entries(&home, config_file.as_deref())?;
                 match rows.into_iter().find(|r| r.key == key) {

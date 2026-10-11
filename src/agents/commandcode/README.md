@@ -14,7 +14,7 @@ definitions survive); `remove` takes back exactly rtok's own entries.
 | hooks | yes | the `hooks` key of `settings.json` runs `rtok hook <Event> --host commandcode` (`timeout: 5`) on PreToolUse (SHELL READ WRITE EDIT matchers), PostToolUse, SessionStart and Stop (no matcher on lifecycle events — a matcher there never fires) |
 | mcp | yes | `mcpServers.rtok` → `rtok mcp --host commandcode` in the user-scope `mcp.json` as `{command, args: ["mcp", "--host", "commandcode"]}` (off with `[setup] mcp = false`) |
 | proxy | no | Command Code has no documented base-URL override for the proxy |
-| plugin | yes | the offer links `plugins/commandcode` to `~/.commandcode/plugins/rtok` — rtok never writes a host plugin store, there is none documented. While the plugin is linked, setup takes back `mcpServers.rtok` instead of adding it (D21: the plugin is the MCP as one unit) |
+| plugin | yes | the offer links `plugins/commandcode` to `~/.commandcode/plugins/rtok` — rtok never writes a host plugin store, there is none documented. The plugin does not replace the config entry: install and update write `mcpServers.rtok` whether the plugin is linked or not, and only `remove` takes it out (T275/D33) |
 
 Command Code's hook protocol is Claude-shaped on the way out (`hookSpecificOutput` with
 `permissionDecision`, `permissionDecisionReason`, `additionalContext`) but carries its own

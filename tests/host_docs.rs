@@ -43,6 +43,7 @@ fn docs_section(text: &str) -> Option<&str> {
 const DOC_DOMAINS: &[(&str, &str)] = &[
     ("plugins/antigravity", "antigravity.google"),
     ("plugins/claude", "code.claude.com"),
+    ("plugins/codebuddy", "codebuddy.ai"),
     ("plugins/cline", "docs.cline.bot"),
     ("plugins/codex", "chatgpt.com"),
     ("plugins/commandcode", "commandcode.ai"),
@@ -60,6 +61,7 @@ const DOC_DOMAINS: &[(&str, &str)] = &[
     ("src/agents/antigravity", "antigravity.google"),
     ("src/agents/claude", "code.claude.com"),
     ("src/agents/cline", "docs.cline.bot"),
+    ("src/agents/codebuddy", "codebuddy.ai"),
     ("src/agents/codewhale", "github.com"),
     ("src/agents/codex", "chatgpt.com"),
     ("src/agents/commandcode", "commandcode.ai"),

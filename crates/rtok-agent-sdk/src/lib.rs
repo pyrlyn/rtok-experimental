@@ -235,10 +235,16 @@ pub fn read_json(path: &Path) -> Result<Value> {
         return Ok(json!({}));
     }
     let raw = fs::read_to_string(path).with_context(|| path.display().to_string())?;
+    parse_strict_json(path, &raw)
+}
+
+/// [`read_json`] on text a caller already holds (rtok-mcp reads through its own `Fs`): an empty
+/// document is an empty object, anything that is not strict JSON gets the same refusal message.
+pub fn parse_strict_json(path: &Path, raw: &str) -> Result<Value> {
     if raw.trim().is_empty() {
         return Ok(json!({}));
     }
-    serde_json::from_str(&raw).map_err(|e| {
+    serde_json::from_str(raw).map_err(|e| {
         let line = e.line();
         let src = raw.lines().nth(line.saturating_sub(1)).unwrap_or("").trim();
         anyhow::anyhow!(
@@ -554,7 +560,7 @@ pub fn runs_bin(v: &Value, is_bin: fn(&str) -> bool) -> bool {
 
 /// `v` without a top-level `"type": "stdio"`, the MCP default [`mcp_entry`] spells out:
 /// Claude.app drops it when it re-saves its config (T265). Anything else is unchanged.
-fn without_default_type(v: &Value) -> Value {
+pub fn without_default_type(v: &Value) -> Value {
     match v {
         Value::Object(m) if m.get("type").and_then(Value::as_str) == Some("stdio") => {
             let mut m = m.clone();

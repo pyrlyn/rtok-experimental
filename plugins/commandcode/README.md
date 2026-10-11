@@ -1,7 +1,7 @@
 # rtok Command Code plugin tree
 
-The install source `rtok agents install commandcode` links from: rtok's hooks and its
-MCP server as one unit (D21: plugin and MCP together, one `rtok mcp` per store).
+The install source `rtok agents install commandcode` links from: rtok's hooks and the
+stdio command of its MCP server (the installer registers the server itself, T275/D33).
 Command Code documents no local plugin-bundle format (no `plugin.json` store like
 Copilot's `installed-plugins/`), so this tree is the files the installer places, not
 a bundle the host loads: `rtok-hook` is linked once per event, `mcp.sh` is the stdio
@@ -20,11 +20,10 @@ Install by hand:
 every hook fails open when it is missing (exit 0, empty stdout except the one
 SessionStart note) and the MCP script exits 1 with the ketch hint.
 
-D21 singleton: use the plugin tree **or** `rtok agents install commandcode`, not both.
-The installer writes the `hooks` key of `~/.commandcode/settings.json` and
-`mcpServers.rtok` in `~/.commandcode/mcp.json` only while this tree is not linked;
-with the tree linked it takes those two back instead of firing every event twice and
-running two `rtok mcp` processes on one store.
+MCP (T275/D33): the installer writes `mcpServers.rtok` in `~/.commandcode/mcp.json`
+on every install and update, whether this tree is linked or not. The tree registers
+nothing by itself: `scripts/mcp.sh` is only the command for a by-hand
+`cmd mcp add rtok`, which writes the same `rtok` key, so the host still runs one server.
 
 Files:
 

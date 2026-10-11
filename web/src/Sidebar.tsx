@@ -13,7 +13,10 @@ import { Icon } from "./ui/Icon";
 // Display order and grouping only; `PAGES` stays the list of what exists, and a test fails
 // when a page is in no group or in two.
 export const NAV_GROUPS = [
-    { label: "Monitor", pages: ["overview", "stats", "usage", "calls", "sessions", "logs"] },
+    {
+        label: "Monitor",
+        pages: ["overview", "stats", "usage", "tasks", "calls", "sessions", "logs"],
+    },
     {
         label: "Configure",
         pages: ["plugins", "hosts", "skills", "config", "services", "worktrees"],

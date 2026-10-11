@@ -139,6 +139,13 @@ fn every_plugin_manifest_matches_the_event_table() {
         );
         seen_hosts.insert(host);
     }
+    // A host dropped from `plugins/` would otherwise pass by having nothing to compare.
+    for host in ["claude", "codebuddy"] {
+        assert!(
+            seen_hosts.contains(host),
+            "plugins/{host} has no hooks manifest"
+        );
+    }
     for host in ["cline", "commandcode"] {
         let script = plugins().join(host).join("hooks/rtok-hook");
         let text =

@@ -1,0 +1,15 @@
+bin.name = "rtok"
+args = "graph projects remove 9999 --dry-run"
+status.code = 1
+stdout = ""
+stderr = """
+Error: no project `9999`; see `rtok graph projects`
+"""
+
+# Hermetic by construction: isolated HOME/RTOK_HOME, inherit = false.
+[env]
+inherit = false
+
+[env.add]
+HOME = "target/tmp/t4164-graph-projects-remove-dry-run"
+RTOK_HOME = "target/tmp/t4164-graph-projects-remove-dry-run"

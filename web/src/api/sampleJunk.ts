@@ -41,6 +41,7 @@ const item = (agent: string, kind: string, path: string, bytes: number, over = {
   agent,
   bytes,
   failed: false,
+  files: 1,
   kind,
   last_used: 1_789_000_000,
   note: "",

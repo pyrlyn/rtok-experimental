@@ -121,6 +121,9 @@ pub(super) enum AgentCmd {
         /// Every live agent of this project (same repository or cwd), except the sender
         #[arg(long)]
         all_live: bool,
+        /// The task this message is about (e.g. `A12`); the recipient can read just that thread
+        #[arg(long, value_name = "ID")]
+        task: Option<String>,
     },
     // T287
     /// Read messages: your own inbox from `RTOK_AGENT_ID` (marks them read), or with an
@@ -131,6 +134,9 @@ pub(super) enum AgentCmd {
         /// Only messages not read yet
         #[arg(long)]
         unread: bool,
+        /// Only messages about this task (e.g. `A12`)
+        #[arg(long, value_name = "ID")]
+        task: Option<String>,
         /// JSON instead of the framed text
         #[arg(long)]
         json: bool,
@@ -191,6 +197,12 @@ pub(super) enum JunkCmd {
         /// Apply; without it this is a dry run that changes nothing
         #[arg(long)]
         yes: bool,
+        /// Say the dry run out loud: print what would go and change nothing (the default)
+        #[arg(long, conflicts_with = "yes")]
+        dry_run: bool,
+        /// The same preview as the dry run: a removal's line already is its stat
+        #[arg(long)]
+        stat: bool,
         /// JSON instead of the table
         #[arg(long)]
         json: bool,
@@ -412,6 +424,8 @@ pub(super) fn run(config_file: &Option<PathBuf>, action: AgentCmd) -> Result<()>
             action:
                 JunkCmd::Clear {
                     yes,
+                    dry_run: _,
+                    stat: _,
                     json,
                     agents,
                     kinds,
@@ -482,13 +496,23 @@ pub(super) fn run(config_file: &Option<PathBuf>, action: AgentCmd) -> Result<()>
                 None => println!("status cleared"),
             }
         }
-        AgentCmd::Send { to, text, all_live } => {
+        AgentCmd::Send {
+            to,
+            text,
+            all_live,
+            task,
+        } => {
             let cfg = Config::load_with(config_file.as_deref(), None)?;
-            crate::agents::command::send(&cfg, to, text, all_live)?;
+            crate::agents::command::send(&cfg, to, text, all_live, task.as_deref())?;
         }
-        AgentCmd::Inbox { id, unread, json } => {
+        AgentCmd::Inbox {
+            id,
+            unread,
+            task,
+            json,
+        } => {
             let cfg = Config::load_with(config_file.as_deref(), None)?;
-            crate::agents::command::inbox(&cfg, id, unread, json)?;
+            crate::agents::command::inbox(&cfg, id, unread, task.as_deref(), json)?;
         }
     };
     Ok(())

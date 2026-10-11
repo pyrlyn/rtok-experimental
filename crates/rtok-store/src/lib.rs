@@ -405,7 +405,6 @@ fn rebuild_hook_inputs(rows: Vec<HookInputRow>) -> Vec<String> {
 }
 
 /// `(host slug, project, cwd)` — [`Store::session_row`].
-#[cfg(any(test, feature = "test-util"))]
 pub type SessionRow = (Option<String>, Option<String>, Option<String>);
 
 /// Text stored inline for display, the sha256 of `body`'s raw bytes, and — only when `body`
@@ -667,6 +666,13 @@ pub struct ModelUsage {
     pub cache_create: i64,
     pub cache_read: i64,
     pub output: i64,
+}
+
+/// [`ModelUsage`] of one `calls.kind` (the proxy lane), T385.10.
+#[derive(Debug, Clone)]
+pub struct LaneModelUsage {
+    pub kind: Option<String>,
+    pub usage: ModelUsage,
 }
 
 /// One [`Store::usage_slices`] row: the usage of one session on one model at `ts` (unix

@@ -55,6 +55,18 @@ const ALLOW_KEYS: &[&str] = &[
     "completions.list",
     "config.init.dry_run",
     "config.set.dry_run",
+    // T416.4: print-do-not-write previews on the destructive commands, one-shot like the above.
+    "worktree.remove.dry_run",
+    "completions.dry_run",
+    "graph.projects.remove.dry_run",
+    "graph.projects.unlink.dry_run",
+    // T416.2: the deletion commands' explicit preview flags, one-shot like the above.
+    "worktree.gc.dry_run",
+    "worktree.gc.stat",
+    "worktree.clean.dry_run",
+    "worktree.clean.stat",
+    "agents.junk.clear.dry_run",
+    "agents.junk.clear.stat",
     "guard.check.host", // overlay `[hook] host` on the plugin CLI path (T70.5)
     "memory.import.dry_run",
     "graph.index.dry_run",
@@ -116,6 +128,9 @@ const ALLOW_KEYS: &[&str] = &[
     "junk.yes",
     // `agents junk list --bytes` (T330.1): how one call prints sizes, not a stored setting.
     "junk.bytes",
+    // `agents junk clear --dry-run/--stat` (T416.2): one-shot preview flags, like `junk.yes`.
+    "junk.dry_run",
+    "junk.stat",
     // `agents junk clear` filters (T330.4): what one run removes. A stored filter would widen
     // a later bare `clear --yes` without anyone typing it; `--trash` is the same per-call choice.
     "junk.agent",
@@ -137,6 +152,9 @@ const ALLOW_KEYS: &[&str] = &[
     // which rows one read shows; `agents` flags map onto `setup.*`, which they are not.
     "setup.all_live",
     "setup.unread",
+    // `agents send --task` / `agents inbox --task` (T441.13.1): which task one message is about or
+    // which thread one read shows, per call like the two flags above.
+    "setup.task",
     // `agents update --check` / `agents outdated --exit-code` (T279.1): one-shot
     // listing and a one-shot exit status, not stored settings.
     "setup.check",
@@ -151,6 +169,12 @@ const ALLOW_KEYS: &[&str] = &[
     "doctor.yes",
     "doctor.dry_run",
     "doctor.only",
+    // T416.3: which preview one dry run prints (stat lines or the diff), a per-call choice.
+    "doctor.stat",
+    "config.init.stat",
+    "config.set.stat",
+    "memory.sync.stat",
+    "setup.stat",
     // `graph projects link|unlink --from/--both/--reason` (T329.3): which two projects one call
     // links and why, not stored settings.
     "graph.projects.link.from",
@@ -184,6 +208,12 @@ const ALLOW_KEYS: &[&str] = &[
     "task.list.all",
     "task.list.parent",
     "task.status.force",
+    // `task conflict|parallel` (T441.13.2): undo flags for one call, nothing to store.
+    "task.conflict.remove",
+    "task.parallel.off",
+    // `task export --dry-run` (T441.13.5): a stored `true` would turn a later export into a
+    // silent no-op; the repo is the setting (`tasks.export.github.repo`).
+    "task.export.dry_run",
     // `batch submit|status|fetch --provider/--url` (T385.12.1): which provider's Batch API and
     // which proxy one call talks to; the URL defaults to `[proxy] bind`/`port`, and the
     // provider is read from the batch id, so there is nothing to store.

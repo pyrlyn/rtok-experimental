@@ -121,6 +121,7 @@ complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l json -d 'JSON inste
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l fix -d 'Clean up broken hooks and duplicate hooks and MCP entries: a terminal gets a checklist, a pipe the diff; --yes writes without asking'
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l yes -d 'With --fix: write the changes (a copy goes to `_backup/` first)'
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l dry-run -d 'With --fix --yes: print the diffs and write nothing'
+complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l stat -d 'With --fix: stat lines and totals instead of the diffs (a dry run)'
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and not __fish_seen_subcommand_from add claim adopt remove list whoami gc clean help" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and not __fish_seen_subcommand_from add claim adopt remove list whoami gc clean help" -s h -l help -d 'Print help'
@@ -151,6 +152,7 @@ complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subc
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from remove" -l owner -d 'The owner an old lock names, as `<provider> / <model>`. Defaults to `<host> / <model>` of the agent' -r
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from remove" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from remove" -l keep-branch -d 'Remove an unmerged worktree too and keep its branch (a merged branch is kept as well)'
+complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from remove" -l dry-run -d 'Show the path, branch, size and file count that would go; remove nothing'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from remove" -l json -d 'JSON instead of the text line'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from remove" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from list" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
@@ -164,11 +166,15 @@ complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subc
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from gc" -l stale-lock -d 'Treat someone else/'s lock as abandoned once its merged, clean worktree is untouched this long' -r
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from gc" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from gc" -l yes -d 'Apply; without it this is a dry run that changes nothing'
+complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from gc" -l dry-run -d 'Say the dry run out loud: print what would go and change nothing (the default)'
+complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from gc" -l stat -d 'The same preview as the dry run: a removal/'s line already is its stat'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from gc" -l json -d 'JSON instead of the table'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from gc" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from clean" -l idle -d 'Keep caches modified within this window (`24h`, `7d`)' -r
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from clean" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from clean" -l yes -d 'Apply; without it this is a dry run that changes nothing'
+complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from clean" -l dry-run -d 'Say the dry run out loud: print what would go and change nothing (the default)'
+complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from clean" -l stat -d 'The same preview as the dry run: a removal/'s line already is its stat'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from clean" -l json -d 'JSON instead of the table'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from clean" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from help" -f -a "add" -d 'Create the worktree for a task: one location, one name, one locked owner; prints its path'
@@ -180,21 +186,24 @@ complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subc
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from help" -f -a "gc" -d 'Remove merged, clean, idle worktrees with their branches; drop records of deleted ones'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from help" -f -a "clean" -d 'Delete idle tagged build caches (`CACHEDIR.TAG`) and keep the worktrees; dry run without `--yes`'
 complete -c rtok -n "__fish_rtok_using_subcommand worktree; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -s h -l help -d 'Print help'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "create" -d 'Create a task under the next free id and print the id'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "list" -d 'The plan: open and in-progress tasks, subtasks under their parent'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "show" -d 'One task: title, status, parent, subtasks, link and description'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "status" -d 'Print a task/'s status, or set it; done and closed move it out of the plan'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "next" -d 'The first ready task: free or stale, not blocked; a leaf when nothing is blocked'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "ready" -d 'Tasks that can be claimed, highest priority first'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "claim" -d 'Claim a task for this agent, or the first ready task when no id is given. On GitHub and GitLab the assignee write is last-write-wins, not compare-and-set'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "release" -d 'Clear the assignee and set the task open. Only the holder, unless --force'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "dep" -d 'Record that this task waits on another. A cycle is refused and nothing is written'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "priority" -d 'Set priority from 0 (highest) to 4. 2 is the default and is not stored'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "sync" -d 'Raise the id counters to the adapter/'s highest ids and report drift; never writes the adapter'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "init" -d 'Write `[tasks]` into this checkout/'s `.rtok.toml` and seed the counter from existing tasks'
-complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority sync init help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -s h -l help -d 'Print help'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "create" -d 'Create a task under the next free id and print the id'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "list" -d 'The plan: open and in-progress tasks, subtasks under their parent'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "show" -d 'One task: title, status, parent, subtasks, link and description'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "status" -d 'Print a task/'s status, or set it; done and closed move it out of the plan'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "next" -d 'The first ready task: free or stale, not blocked; a leaf when nothing is blocked'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "ready" -d 'Tasks that can be claimed, highest priority first'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "claim" -d 'Claim a task for this agent, or the first ready task when no id is given. On GitHub and GitLab the assignee write is last-write-wins, not compare-and-set'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "release" -d 'Clear the assignee and set the task open. Only the holder, unless --force'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "dep" -d 'Record that this task waits on another. A cycle is refused and nothing is written'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "priority" -d 'Set priority from 0 (highest) to 4. 2 is the default and is not stored'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "conflict" -d 'Record that two tasks touch the same files, so they should not run at once. Symmetric; `ready` flags a task whose partner is in progress'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "parallel" -d 'Mark a task safe to run beside any other task'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "sync" -d 'Raise the id counters to the adapter/'s highest ids and report drift; never writes the adapter'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "export" -d 'Mirror the disk tasks one way into an issue tracker; the files stay the source of truth. A second run with nothing changed sends no write'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "init" -d 'Write `[tasks]` into this checkout/'s `.rtok.toml` and seed the counter from existing tasks'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and not __fish_seen_subcommand_from create list show status next ready claim release dep priority conflict parallel sync export init help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from create" -s d -l description -d 'Description: why the task exists and what done means' -r
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from create" -l body-file -d 'Read the description from this file (`-` for stdin)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from create" -l parent -d 'Make it a subtask of this task, e.g. `R2` → `R2.1`' -r
@@ -235,9 +244,21 @@ complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcomma
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from priority" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from priority" -l json -d 'Print the task as JSON'
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from priority" -s h -l help -d 'Print help'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from conflict" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from conflict" -l remove -d 'Take the conflict off instead'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from conflict" -l json -d 'Print the task as JSON'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from conflict" -s h -l help -d 'Print help'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from parallel" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from parallel" -l off -d 'Take the mark off instead'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from parallel" -l json -d 'Print the task as JSON'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from parallel" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from sync" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from sync" -l json -d 'JSON instead of the text'
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from sync" -s h -l help -d 'Print help'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from export" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from export" -l dry-run -d 'Print the planned creates, updates and closes and send nothing'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from export" -l json -d 'JSON instead of the text'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from export" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from init" -l adapter -d 'disk, github or gitlab (default: disk, or what the file already says)' -r
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from init" -l prefix -d 'Task id prefix, 1–8 ASCII letters (default: the project name/'s first letter)' -r
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from init" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
@@ -252,7 +273,10 @@ complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcomma
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from help" -f -a "release" -d 'Clear the assignee and set the task open. Only the holder, unless --force'
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from help" -f -a "dep" -d 'Record that this task waits on another. A cycle is refused and nothing is written'
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from help" -f -a "priority" -d 'Set priority from 0 (highest) to 4. 2 is the default and is not stored'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from help" -f -a "conflict" -d 'Record that two tasks touch the same files, so they should not run at once. Symmetric; `ready` flags a task whose partner is in progress'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from help" -f -a "parallel" -d 'Mark a task safe to run beside any other task'
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from help" -f -a "sync" -d 'Raise the id counters to the adapter/'s highest ids and report drift; never writes the adapter'
+complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from help" -f -a "export" -d 'Mirror the disk tasks one way into an issue tracker; the files stay the source of truth. A second run with nothing changed sends no write'
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from help" -f -a "init" -d 'Write `[tasks]` into this checkout/'s `.rtok.toml` and seed the counter from existing tasks'
 complete -c rtok -n "__fish_rtok_using_subcommand task; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c rtok -n "__fish_rtok_using_subcommand batch; and not __fish_seen_subcommand_from submit status fetch help" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
@@ -314,18 +338,21 @@ complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcom
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from install" -l all -d 'All variants (the default when neither `--cli` nor `--desktop` is given)'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from install" -l no-restart -d 'Skip closing/reopening a running desktop app around the write'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from install" -l project -d 'Add rtok to the project/'s post-create script, so a worktree the host makes joins rtok (`cursor`, `kilo`, `windsurf`, `devin`); run it inside the repository'
+complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from install" -l stat -d 'With --dry-run: stat lines and totals instead of the planned edits'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from install" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from uninstall" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from uninstall" -l dry-run -d 'Print what would be removed and exit'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from uninstall" -l no-restart -d 'Skip closing/reopening a running desktop app around the write'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from uninstall" -l yes -d 'Also remove rtok entries you changed, without asking'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from uninstall" -l project -d 'Take rtok out of the project/'s post-create script (`cursor`, `kilo`, `windsurf`, `devin`) instead of the host/'s config'
+complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from uninstall" -l stat -d 'With --dry-run: stat lines and totals instead of the planned edits'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from uninstall" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from remove" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from remove" -l dry-run -d 'Print what would be removed and exit'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from remove" -l no-restart -d 'Skip closing/reopening a running desktop app around the write'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from remove" -l yes -d 'Also remove rtok entries you changed, without asking'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from remove" -l project -d 'Take rtok out of the project/'s post-create script (`cursor`, `kilo`, `windsurf`, `devin`) instead of the host/'s config'
+complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from remove" -l stat -d 'With --dry-run: stat lines and totals instead of the planned edits'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from remove" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from update" -l source -d 'Compare against this install source instead of the one on record' -r -f -a "github/t''
 local/t''
@@ -338,6 +365,7 @@ complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcom
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from update" -l no-restart -d 'Skip closing/reopening a running desktop app around the write'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from update" -l force -d 'Reinstall the plugin even when it is already at the available version'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from update" -l check -d 'List outdated plugins only (same output as `agents outdated`)'
+complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from update" -l stat -d 'With --dry-run: stat lines and totals instead of the planned edits'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from update" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from outdated" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from outdated" -l cli -d 'Only the CLI app (default is all)'
@@ -383,9 +411,11 @@ complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcom
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from show" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from status" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from status" -s h -l help -d 'Print help'
+complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from send" -l task -d 'The task this message is about (e.g. `A12`); the recipient can read just that thread' -r
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from send" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from send" -l all-live -d 'Every live agent of this project (same repository or cwd), except the sender'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from send" -s h -l help -d 'Print help'
+complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from inbox" -l task -d 'Only messages about this task (e.g. `A12`)' -r
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from inbox" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from inbox" -l unread -d 'Only messages not read yet'
 complete -c rtok -n "__fish_rtok_using_subcommand agents; and __fish_seen_subcommand_from inbox" -l json -d 'JSON instead of the framed text'
@@ -436,18 +466,21 @@ complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcomm
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from install" -l all -d 'All variants (the default when neither `--cli` nor `--desktop` is given)'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from install" -l no-restart -d 'Skip closing/reopening a running desktop app around the write'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from install" -l project -d 'Add rtok to the project/'s post-create script, so a worktree the host makes joins rtok (`cursor`, `kilo`, `windsurf`, `devin`); run it inside the repository'
+complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from install" -l stat -d 'With --dry-run: stat lines and totals instead of the planned edits'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from install" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from uninstall" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from uninstall" -l dry-run -d 'Print what would be removed and exit'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from uninstall" -l no-restart -d 'Skip closing/reopening a running desktop app around the write'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from uninstall" -l yes -d 'Also remove rtok entries you changed, without asking'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from uninstall" -l project -d 'Take rtok out of the project/'s post-create script (`cursor`, `kilo`, `windsurf`, `devin`) instead of the host/'s config'
+complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from uninstall" -l stat -d 'With --dry-run: stat lines and totals instead of the planned edits'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from uninstall" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from remove" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from remove" -l dry-run -d 'Print what would be removed and exit'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from remove" -l no-restart -d 'Skip closing/reopening a running desktop app around the write'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from remove" -l yes -d 'Also remove rtok entries you changed, without asking'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from remove" -l project -d 'Take rtok out of the project/'s post-create script (`cursor`, `kilo`, `windsurf`, `devin`) instead of the host/'s config'
+complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from remove" -l stat -d 'With --dry-run: stat lines and totals instead of the planned edits'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from remove" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from update" -l source -d 'Compare against this install source instead of the one on record' -r -f -a "github/t''
 local/t''
@@ -460,6 +493,7 @@ complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcomm
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from update" -l no-restart -d 'Skip closing/reopening a running desktop app around the write'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from update" -l force -d 'Reinstall the plugin even when it is already at the available version'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from update" -l check -d 'List outdated plugins only (same output as `agents outdated`)'
+complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from update" -l stat -d 'With --dry-run: stat lines and totals instead of the planned edits'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from update" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from outdated" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from outdated" -l cli -d 'Only the CLI app (default is all)'
@@ -505,9 +539,11 @@ complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcomm
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from show" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from status" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from status" -s h -l help -d 'Print help'
+complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from send" -l task -d 'The task this message is about (e.g. `A12`); the recipient can read just that thread' -r
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from send" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from send" -l all-live -d 'Every live agent of this project (same repository or cwd), except the sender'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from send" -s h -l help -d 'Print help'
+complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from inbox" -l task -d 'Only messages about this task (e.g. `A12`)' -r
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from inbox" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from inbox" -l unread -d 'Only messages not read yet'
 complete -c rtok -n "__fish_rtok_using_subcommand agent; and __fish_seen_subcommand_from inbox" -l json -d 'JSON instead of the framed text'
@@ -540,6 +576,7 @@ complete -c rtok -n "__fish_rtok_using_subcommand setup" -l desktop -d 'Only the
 complete -c rtok -n "__fish_rtok_using_subcommand setup" -l all -d 'All variants (the default when neither `--cli` nor `--desktop` is given)'
 complete -c rtok -n "__fish_rtok_using_subcommand setup" -l no-restart -d 'Skip closing/reopening a running desktop app around the write'
 complete -c rtok -n "__fish_rtok_using_subcommand setup" -l project -d 'Add rtok to the project/'s post-create script, so a worktree the host makes joins rtok (`cursor`, `kilo`, `windsurf`, `devin`); run it inside the repository'
+complete -c rtok -n "__fish_rtok_using_subcommand setup" -l stat -d 'With --dry-run: stat lines and totals instead of the planned edits'
 complete -c rtok -n "__fish_rtok_using_subcommand setup" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand run" -l agent -d 'Sub-agent id from PreToolUse; scopes the dedup pointer' -r
 complete -c rtok -n "__fish_rtok_using_subcommand run" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
@@ -567,6 +604,7 @@ complete -c rtok -n "__fish_rtok_using_subcommand completions" -l config -d 'Use
 complete -c rtok -n "__fish_rtok_using_subcommand completions" -l install -d 'Write the script to the shell/'s per-user completions directory'
 complete -c rtok -n "__fish_rtok_using_subcommand completions" -l uninstall -d 'Remove what `--install` wrote'
 complete -c rtok -n "__fish_rtok_using_subcommand completions" -l list -d 'Print each shell, whether its completions are installed (yes/no) and the file'
+complete -c rtok -n "__fish_rtok_using_subcommand completions" -l dry-run -d 'With `--install`/`--uninstall`: show the file diff and write nothing'
 complete -c rtok -n "__fish_rtok_using_subcommand completions" -s h -l help -d 'Print help (see more with /'--help/')'
 complete -c rtok -n "__fish_rtok_using_subcommand man" -l dir -d 'Write `rtok.1` and a page for every subcommand into this directory' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand man" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
@@ -586,6 +624,7 @@ complete -c rtok -n "__fish_rtok_using_subcommand config; and not __fish_seen_su
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from init" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from init" -l force -d 'Overwrite an existing file'
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from init" -l dry-run -d 'Print the diff it would write and exit'
+complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from init" -l stat -d 'With --dry-run: stat lines and totals instead of the diff'
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from init" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from path" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from path" -s h -l help -d 'Print help'
@@ -600,6 +639,7 @@ complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcom
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from validate" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from set" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from set" -l dry-run -d 'Print the diff it would write and exit'
+complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from set" -l stat -d 'With --dry-run: stat lines and totals instead of the diff'
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from set" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from help" -f -a "init" -d 'Write the annotated reference file to `<home>/config.toml`'
 complete -c rtok -n "__fish_rtok_using_subcommand config; and __fish_seen_subcommand_from help" -f -a "path" -d 'Print the path of the config file'
@@ -643,6 +683,7 @@ complete -c rtok -n "__fish_rtok_using_subcommand memory; and __fish_seen_subcom
 complete -c rtok -n "__fish_rtok_using_subcommand memory; and __fish_seen_subcommand_from sync" -l budget -d 'Token budget; default `[plugins.memory] sync_tokens`' -r
 complete -c rtok -n "__fish_rtok_using_subcommand memory; and __fish_seen_subcommand_from sync" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand memory; and __fish_seen_subcommand_from sync" -l dry-run -d 'Print the unified diff and write nothing'
+complete -c rtok -n "__fish_rtok_using_subcommand memory; and __fish_seen_subcommand_from sync" -l stat -d 'With --dry-run: stat lines and totals instead of the diff'
 complete -c rtok -n "__fish_rtok_using_subcommand memory; and __fish_seen_subcommand_from sync" -l remove -d 'Delete the managed block and nothing else'
 complete -c rtok -n "__fish_rtok_using_subcommand memory; and __fish_seen_subcommand_from sync" -l force -d 'Overwrite a hand-edited block'
 complete -c rtok -n "__fish_rtok_using_subcommand memory; and __fish_seen_subcommand_from sync" -s h -l help -d 'Print help'
@@ -890,7 +931,10 @@ complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcomma
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from task" -f -a "release" -d 'Clear the assignee and set the task open. Only the holder, unless --force'
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from task" -f -a "dep" -d 'Record that this task waits on another. A cycle is refused and nothing is written'
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from task" -f -a "priority" -d 'Set priority from 0 (highest) to 4. 2 is the default and is not stored'
+complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from task" -f -a "conflict" -d 'Record that two tasks touch the same files, so they should not run at once. Symmetric; `ready` flags a task whose partner is in progress'
+complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from task" -f -a "parallel" -d 'Mark a task safe to run beside any other task'
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from task" -f -a "sync" -d 'Raise the id counters to the adapter/'s highest ids and report drift; never writes the adapter'
+complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from task" -f -a "export" -d 'Mirror the disk tasks one way into an issue tracker; the files stay the source of truth. A second run with nothing changed sends no write'
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from task" -f -a "init" -d 'Write `[tasks]` into this checkout/'s `.rtok.toml` and seed the counter from existing tasks'
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from batch" -f -a "submit" -d 'Create a batch from a JSONL file of provider-shaped requests; prints the batch object'
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from batch" -f -a "status" -d 'Print the provider/'s current state of a batch'

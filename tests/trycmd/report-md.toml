@@ -165,6 +165,9 @@ Every effective key with its origin — the `config show --sources` page.
 | plugins.graph.health_check_interval_s | 60 | default |
 | plugins.graph.impact_tokens | 1500 | default |
 | plugins.graph.include | [] | default |
+| plugins.graph.live_feed_rows | 200 | default |
+| plugins.graph.live_heat_window_s | 300 | default |
+| plugins.graph.live_max_events_per_s | 50 | default |
 | plugins.graph.lsp_timeout_ms | 40000 | default |
 | plugins.graph.map_rank | refs | default |
 | plugins.graph.map_tokens | 0 | default |
@@ -281,6 +284,15 @@ Every effective key with its origin — the `config show --sources` page.
 | proxy.mode | passthrough | default |
 | proxy.openai_upstream | https://api.openai.com | default |
 | proxy.port | 8790 | default |
+| proxy.routing.bulk.from | [] | default |
+| proxy.routing.bulk.gate |  | default |
+| proxy.routing.bulk.provider |  | default |
+| proxy.routing.bulk.to |  | default |
+| proxy.routing.enabled | false | default |
+| proxy.routing.internal.from | [] | default |
+| proxy.routing.internal.gate |  | default |
+| proxy.routing.internal.provider |  | default |
+| proxy.routing.internal.to |  | default |
 | proxy.timeout_s | 600 | default |
 | proxy.tools_rewrite.allow | [] | default |
 | proxy.tools_rewrite.deny | [] | default |
@@ -300,6 +312,8 @@ Every effective key with its origin — the `config show --sources` page.
 | setup.claude.settings_path | ~/.claude/settings.json | default |
 | setup.cline.hooks_path | ~/Documents/Cline/Hooks | default |
 | setup.cline.mcp_path | ~/.cline/data/settings/cline_mcp_settings.json | default |
+| setup.codebuddy.dir | ~/.codebuddy | default |
+| setup.codebuddy.workbuddy_dir | ~/.workbuddy | default |
 | setup.codewhale.dir | ~/.codewhale | default |
 | setup.codex.config_path | ~/.codex/config.toml | default |
 | setup.commandcode.dir | ~/.commandcode | default |
@@ -405,6 +419,8 @@ Every effective key with its origin — the `config show --sources` page.
 | stats.transcripts_dir | tests/trycmd/input/stats-price-tx | user |
 | tasks.adapter | disk | default |
 | tasks.disk.dir | tasks | default |
+| tasks.export.github.repo |  | default |
+| tasks.export.linear.team |  | default |
 | tasks.github.project | 0 | default |
 | tasks.github.repo |  | default |
 | tasks.gitlab.project |  | default |
@@ -419,7 +435,7 @@ Every effective key with its origin — the `config show --sources` page.
 | worktree.enabled | true | default |
 | worktree.root | ~/.rtok/worktrees | default |
 
-373 keys.
+389 keys.
 
 ## Doctor
 
@@ -431,7 +447,7 @@ hooks check none found
 duplicate hooks none found
 duplicate mcp servers none found
 mcp
-  rtok (38 tools, ~977 desc tokens) [CWD]/target/[..]
+  rtok (40 tools, ~1037 desc tokens) [CWD]/target/[..]
 proxy 
 proxy openai 
 BASH_MAX_OUTPUT_LENGTH (unset)
@@ -612,6 +628,16 @@ agents
     hooks   not installed
     mcp     not installed
     proxy   not supported: Qwen Code's model.baseUrl is written by the model picker; modelProviders entries carry their own baseUrl, which setup does not edit
+    plugin  not installed (--yes)
+  codebuddy (cli)
+    hooks   not installed
+    mcp     not installed
+    proxy   not supported: CodeBuddy Code takes its endpoint from the CODEBUDDY_BASE_URL environment variable; there is no config file to point at the proxy
+    plugin  not installed (--yes)
+  codebuddy (desktop)
+    hooks   not installed
+    mcp     not installed
+    proxy   not supported: CodeBuddy Code takes its endpoint from the CODEBUDDY_BASE_URL environment variable; there is no config file to point at the proxy
     plugin  not installed (--yes)
 skills (1 listed, 154 desc bytes ≈ 38 tokens per request)
   descriptions over 120 chars: 1 skills, ≈ 8 tokens/request recoverable

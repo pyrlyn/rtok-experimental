@@ -17,6 +17,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use jsonc_parser::ParseOptions;
 use jsonc_parser::cst::{CstInputValue, CstRootNode};
+use rtok_agent_sdk::{parse_strict_json, without_default_type};
 use serde_json::Value;
 
 use crate::spec::{Format, McpSpec};
@@ -70,7 +71,10 @@ pub fn read_servers(
 /// place instead of rebuilding it from a plain value. `Unchanged` when the file already holds
 /// exactly `entry` there.
 pub fn write_entry(fs: &mut impl Fs, spec: &McpSpec, entry: &Value) -> Result<Written> {
-    if read_entry(fs, spec)?.as_ref() == Some(entry) {
+    // Claude.app drops the default `"type": "stdio"` when it re-saves its config (T265), so an
+    // entry that differs only by that field is already ours.
+    let same = |have: &Value| without_default_type(have) == without_default_type(entry);
+    if read_entry(fs, spec)?.as_ref().is_some_and(same) {
         return Ok(Written::Unchanged);
     }
     match spec.format {
@@ -95,10 +99,9 @@ pub fn remove_entry(fs: &mut impl Fs, spec: &McpSpec) -> Result<Written> {
 // ---- JSON (strict; T79 refuses to rewrite a file that fails to parse as plain JSON) ----
 
 fn parse_json(bytes: &[u8], path: &Path) -> Result<Value> {
-    if bytes.iter().all(u8::is_ascii_whitespace) {
-        return Ok(Value::Object(Default::default()));
-    }
-    serde_json::from_slice(bytes).with_context(|| format!("{}: not strict JSON", path.display()))
+    let raw =
+        std::str::from_utf8(bytes).with_context(|| format!("{}: not UTF-8", path.display()))?;
+    parse_strict_json(path, raw)
 }
 
 fn servers_json(fs: &impl Fs, spec: &McpSpec) -> Result<Option<serde_json::Map<String, Value>>> {
@@ -418,7 +421,7 @@ mod tests {
 
     use super::*;
     use crate::registry::RTOK;
-    use crate::spec::{Client, DuplicateName, EntryShape};
+    use crate::spec::{Client, DuplicateName, EntryShape, Launch};
 
     #[derive(Default)]
     struct MemFs(HashMap<PathBuf, Vec<u8>>);
@@ -441,6 +444,7 @@ mod tests {
             format,
             key_path: McpSpec::key_path("mcpServers"),
             server: RTOK,
+            launch: Launch::default(),
             entry_shape: EntryShape::Command,
             duplicate_name: DuplicateName::ShowsBoth,
             plugin_serves: None,

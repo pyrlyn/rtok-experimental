@@ -16,8 +16,8 @@ use serde_json::Value;
 use super::junk::Report;
 use super::junk_cache::{Item, RTOK_OWN};
 use super::junk_clear::{self, Planned};
-use crate::bytes::human_bytes;
 use crate::config::Config;
+use change_preview::human_bytes;
 
 /// How many items a kind shows before "+N more" (T330: 10 largest).
 pub const DEFAULT_SHOWN: usize = 10;

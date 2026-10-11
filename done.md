@@ -1,5 +1,514 @@
 # rtok — completed tasks
 
+### T616. Audit remaining module coverage
+
+Inventory and audit remaining Rust and production non-Rust modules across `src/`, `crates/`, `web/`, `plugins/`, and project scripts, using prior T530-and-newer audit records to avoid treating a filename mention as full coverage. Work from grouped subsystem inventories, inspect uncovered call paths and invariants, and report only confirmed findings with evidence and explicit limits.
+
+Execution plan:
+
+1. Inventory Rust and tracked production non-Rust source modules by directory and compare exact path citations in T530+ plan/done records, treating these as aids rather than proof of full or absent coverage.
+2. Inspect remaining subsystem groups and their callers, then run focused real-source reproductions and controls for concrete candidates.
+3. Deduplicate reproduced cases across `plan.md`, `done.md`, `roadmap.md`, and `ideas.md`; file only distinct findings, preserving the probe and integration limits.
+4. Record exact reviewed coverage and evidence, verify task parity and the docs diff, run scoped `just check`, and prepare the PR #986 update.
+
+Check: the inventory groups Rust and production non-Rust modules, with tests, fixtures, generated files and dependencies identified or excluded; each new finding has source evidence, a distinct reproduced invariant failure, and ordered fix/check steps; the final audit record states scope and limits, and scoped `just check` passes.
+
+Result: completed the remaining module-family source pass and recorded its exact depth in [audit-coverage.md](audit-coverage.md). The earlier T616 checkpoint filed T617–T626; this continuation adds T627–T639, thirteen distinct findings with source evidence, reproduction limits and ordered fixes. It closes the checkpoint's shared agent helpers, CLI wrappers, plugin SDK, TUI, frontend page/graph rendering and packaging-source review. Large subsystems retain the targeted depth identified in the ledger; completion of this audit pass is not a claim that every function or runtime integration has been verified.
+
+Evidence revision for the final thirteen findings: `ea999781d7a48733e3a5c92e711cfad291c13536`. Reproductions used actual/extracted production functions, the real config crate, a minimal Cargo package with the real build script and linked Git worktree, synthetic shell children, fake publisher/process executables and Ratatui TestBackend. PDF findings are source/arithmetic proofs, not visual renderer tests. No product source or dependency changed. The seven existing ideas remain unimplemented.
+
+Validation: scoped `CHECK_BASE=085b49e9450de9326e7738dc441718e1bd667363 mise exec -- just check` passed and explicitly skipped Cargo tests for the documentation-only diff. Runtime boundaries are recorded in the coverage ledger and individual cards; this gate does not establish full Cargo, browser, host, release or cross-platform runtime coverage.
+
+Status: done 2026-10-12
+
+### T614. Audit remaining store retention and identity boundaries
+
+Bounded source audit only; no product code changed. Read the task-claim, message, pending-worktree, worktree-claim, hook-field, retention, and path store methods and their relevant callers, focusing on ordering, identity and cleanup. This was a targeted pass, not an exhaustive audit of the store crate.
+
+Execution plan:
+
+1. Inspect unreviewed store queries and their callers, tracing retention cutoffs, identity keys, ordering, and reference cleanup across the small store/foundation modules.
+2. Execute focused real-source reproductions and controls for any concrete boundary case, using isolated fixtures and the actual store where practical.
+3. Deduplicate exact scenarios against `plan.md`, `done.md`, `roadmap.md`, and `ideas.md`; record only confirmed findings and distinguish source inspection from executed paths.
+4. Record the reviewed scope and evidence limits, verify the documentation diff, run scoped `just check`, and prepare the PR #986 update.
+
+Result: filed T615 for `latest_task_claim` returning the lexically earlier task when multiple claims have the same second-resolution timestamp. The task-claim source test claims R1, R2, then R1 again, so its expected R1 also matches the tie-break and does not establish which equal-second claim is latest. The old T442 task-claim card defines the SessionStart/PostCompact row and claim lifecycle but does not specify or test equal-second ordering. The unrelated T442 proxy-hop card is a separate task with the same ID. No additional retention, message, pending-worktree, worktree-claim, hook-field, or path finding was confirmed in this bounded review.
+
+Evidence revision: `e8d36a0c6fdfb27f37ca97ceb33e6230bee545d1`; fetched main was `085b49e9450de9326e7738dc441718e1bd667363`. Source inspection covered `task_claims.rs`, `messages.rs`, `worktree_pending.rs`, `worktree_claims.rs`, `hook_fields.rs`, `retention.rs`, `paths.rs`, plus task runner and hook callers. The offline scratch executable used the actual `rtok-store` crate, real in-memory migrations and public APIs. Two task claims and a re-claim in one wall-clock second returned the lexically earlier task and its old title; separate-second ordering, release fallback, and project/agent isolation controls passed. Full hook dispatch, live hosts, concurrent processes, and Windows path behavior were not exercised; the injected-text effect was source-traced only. No raw SQL or mocked Store behavior was used.
+
+Validation: the actual Store probe passed the same-second reproduction and separate-second, release-fallback, project and agent controls. `git diff --check` passed, and scoped `just check` against `085b49e9` reported no code changes and skipped Cargo tests for this documentation-only diff. Active plan cards and `todo.md` contain the same 122 unique task IDs.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T612. Audit agent registration and model-parent boundaries
+
+Source audit only; no product code changed. Traced host hook identity and parent discovery through `Store::register_agent`, registry queries, and `model::agents` tree/session selection, comparing ordering and repeated-registration behavior with existing agent lifecycle coverage.
+
+Execution plan:
+
+1. Trace parent/session identity discovery, registry upserts, query ordering and the `model::agents` nesting/session-selection path. Inventory the existing lifecycle tests and the invariants they establish.
+2. Use an isolated real-store fixture to compare child-before-parent registration and re-registration with normal parent-first registration; include the model projection and controls for multiple sessions and ordinary orphan agents.
+3. Deduplicate exact scenarios against plan, done, roadmap and ideas, especially T282, T284, T324, T262.5 and the T540/T610 audits. File only a reproduced, contract-relevant defect; otherwise record the investigated boundaries and evidence limits.
+4. Keep the pass documentation-only. Verify task-table/todo parity, source links and `git diff --check`, then run scoped `just check` against the reviewed base.
+
+Result: filed T613 for a sub-agent registered before its main agent. The actual store leaves the child row's `parent_id` null after the main row appears, and repeating the child registration does not repair it. The model then selects the older orphaned child as the session's main agent. T282's relevant test is main-first; T284 covers ordinary nesting; T324 covers repeat-registration revival, not late-parent repair. No cycle or nested-grandchild issue was filed because normal registry flow only assigns direct main-agent parents. Task ID allocation/validation inspection found no additional finding.
+
+Evidence revision: `2d91199fdb507af71eedbcf1b7ed127a06b39784`; fetched main was `085b49e9450de9326e7738dc441718e1bd667363`. The offline scratch executable linked the actual `rtok-store` crate and used its in-memory migrations/public methods, imported actual agent-view types, and compiled the production pure model functions. Child-first registration, late main registration, repeated child registration, and main-first/nesting/repeat controls ran. The child-first case retained the same child ID but `parent_id` remained null, the main had zero children, and `session_views` selected the older child root. A 1.2-second ordering gap made the query order deterministic. Synthetic session totals were used; no full CLI, host integration, real agent, or concurrent process was exercised. No raw SQL or mocked store behavior was used.
+
+Validation: the in-memory Store/model probe passed its child-first reproduction and parent-first/nesting/repeat controls. `git diff --check` passed, and the scoped `just check` against `085b49e9` reported no code changes and skipped Cargo tests for this documentation-only diff. Active plan cards and `todo.md` contain the same 121 unique task IDs.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T610. Audit shared name mappings and their consumers
+
+Source audit only; no product code changed. Traced shared `cmd_stem` and `canonical_tool_name` mappings, their hook/guard/activity consumers, and Copilot argument adaptation. This sampled pass does not claim exhaustive host-schema or all-caller coverage.
+
+Execution plan:
+
+1. Trace shared name helpers from host adapters to their consumers and compare host-specific input shapes with the retained normalized fields.
+2. Probe boundary inputs with object/string and malformed controls, and inspect Copilot range arguments only where a local schema establishes applicability.
+3. Deduplicate against existing task cards before filing; document unresolved candidates and coverage limits.
+
+Result: filed T611 for the documented Copilot CLI representation of `toolArgs` as a JSON string. `HookInput::adapt_copilot` retains that string in `tool_input`, so consumers that read object fields do not see `command` or `path`. T262.5 fixed storing adapted input for ledger consumers but did not parse this representation; existing adapter tests use object-valued `toolArgs`. No separate `view_range` finding was filed because no local schema or runtime fixture established that argument's applicability. Other helper consumers were source-inspected only; this is not an exhaustive audit of `names.rs`.
+
+Evidence revision: `08f1df909f39f85079ef6e74454a438ef04ea398`; fetched main was `085b49e9450de9326e7738dc441718e1bd667363`. GitHub's [Copilot CLI hook tutorial](https://docs.github.com/en/copilot/tutorials/copilot-cli-hooks#understand-the-pretooluse-input), checked 2026-10-11, documents the string form. The offline scratch executable compiled the actual HookInput serde/adaptation, shared naming helpers, main-argument reader and Read cache-key branch. Object inputs produced `main_arg=Some(...)` and a Read cache key; equivalent serialized inputs left `tool_input` as a string, yielded no main argument and no Read cache key. Malformed strings, normalized inputs and Unicode command basenames passed controls. The Bash-only key helpers were panic-only stubs and not called. No live Copilot, full hook dispatch, persistent store or end-to-end guard denial was exercised.
+
+Validation: the isolated probe passed; `git diff --check` passed. The scoped `just check` against `085b49e9` reported no code changes and skipped Cargo tests for the docs-only diff. Active plan cards and `todo.md` contain the same 120 unique IDs.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T607. Audit prose compression and YAGNI ladder boundaries
+
+Source audit only; no product code changed. Reviewed `src/modes/compress.rs` and `src/modes/ladder.rs`, comparing code/prose boundaries and ladder precedence with existing tests and the earlier T554 source audit.
+
+Execution plan:
+
+1. Trace fenced and inline code segmentation, phrase/article stripping, whitespace cleanup and ladder rule ordering.
+2. Probe boundary cases with isolated inputs and controls, recording exactly which production functions run.
+3. Deduplicate against plan, done, roadmap and ideas; file only reproduced contract violations.
+
+Result: filed T608 for article-like suffixes removed from identifiers and paths, and T609 for shorter triple-backtick runs closing longer Markdown fences. The corrected probe passed 128 ladder combinations; no ladder precedence defect was found. T554's earlier broad compression pass found no additional issue, but its checks did not cover these exact suffix and mixed-fence cases. An initial control assertion also included whitespace outside the fence; it was corrected to isolate the fenced region rather than treating expected external whitespace cleanup as a defect.
+
+Evidence revision: `09ed28336d360fde33398de3d2b8ba9c1dfa5eff`; fetched main was `085b49e9450de9326e7738dc441718e1bd667363`. The scratch executable imported the actual compression and ladder modules by path, with no adapters. It reproduced `foo_a` → `foo_`, `/tmp/a` → `/tmp/`, `item1a` → `item1`, and loss of prose-like content inside a four-backtick fence containing an inner triple-backtick run. Lite/name and ordinary triple-fence/double-backtick controls passed. This confirms native helper behavior; it does not establish production hook compression, since these helpers are used by tests and comparisons rather than wired into the hooks.
+
+Validation: the isolated probe passed its reproduction and control assertions; `git diff --check` passed. The scoped `just check` against `085b49e9` reported no code changes and skipped Cargo tests for the docs-only diff. Active plan cards and `todo.md` contain the same 119 unique IDs.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T605. Audit injection budgets, stability, and hook paths
+
+Source audit only; no product code changed. Reviewed `src/plugins/inject` candidate loading, aggregate budget selection, measurements, and SessionStart/UserPromptSubmit placement against T2.4, T7.1, T188, T189 and the plugin invariants.
+
+Execution plan:
+
+1. Trace candidate construction, token estimation, truncation/drop reporting, measurement writes and event dispatch.
+2. Probe budget boundaries, Unicode mode-file reads, repeated output stability and mode placement with isolated fixtures and controls.
+3. Deduplicate exact scenarios against the plan, done list, roadmap and ideas; record only confirmed gaps and distinguish source tracing from executed paths.
+
+Result: filed T606 for Unicode mode text that fits the estimator budget but is truncated by a byte-count read cap before the shared budget fitter can see it. The existing T2.4 intentional 500+500 priority-selection overshoot was not filed separately. T188 introduced bounded mode reads and tested a 1 MB ASCII mode; T189 concerns PostToolUse archive references. Neither covers this Unicode byte/character mismatch.
+
+Evidence revision: `912c0a8dd8561b74ce5531cdb67e5d6f7153ca72`; fetched main was `085b49e9450de9326e7738dc441718e1bd667363`. An isolated executable compiled the production `read_mode`, budget fitter, `apply` and token estimator functions with real scratch files and minimal config/Measurement adapters. The ≤250-token small-emoji input had 1,016 characters and 4,016 bytes; the reader retained 3,360 bytes, and final context was 3,361 bytes / 201 estimated tokens after the newline, losing its distinctive tail despite its 242-token estimate. Cyrillic within the shared 800-token budget showed the same loss; same-length ASCII, repeated-output, and missing-file builtin controls passed. Full hook dispatch, checkpoint composition and persistent Measurement storage were not executed.
+
+Validation: `CHECK_BASE=085b49e9450de9326e7738dc441718e1bd667363 mise exec -- just check` reported no code changes against merged main and skipped Cargo tests for this documentation-only diff. The isolated probe passed its reproduction and control assertions; `git diff --check` passed, and active plan cards and `todo.md` contain the same 117 unique IDs.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T603. Audit JSON-tree references and MCP line caps
+
+Source audit only; no product code changed. Followed the JSON-tree reference/template pipeline and MCP fold wrapper against T475's losslessness and line-limit requirements, after T554's broader folding/rendering pass.
+
+Execution plan:
+
+1. Trace JSON value tallying, variable id assignment, `insert_field`, template generation and rendering; compare folded output with the input types.
+2. Trace MCP fold line checking through pointer assembly and compare it with normal line-cut behavior.
+3. Probe both candidates using actual folding and wrapper functions with isolated fixtures and controls; deduplicate against T475/T554.
+4. Record only confirmed contract violations; document tested boundaries when a candidate is not established.
+
+Result: filed T604 for literal JSON strings that equal generated variable references and therefore share an element template with object-valued occurrences. The separate max-lines candidate was not filed: the isolated probe's wrapper appended a pointer beyond the folded text's line count, but ordinary MCP line-cut output also appends a pointer after applying its content cap. No independent total-response cap contract violation was established. T475's `max_lines` coverage and T554's broad fold inspection are related but do not cover the reference/string collision.
+
+Evidence revision: `e06ada0852e3cc28e5dcaa04d26faa6bdc2bc5ab`; merged main `085b49e9450de9326e7738dc441718e1bd667363` did not change the candidate source files. The offline scratch executable compiled extracted production folding/template/render/hash functions, actual TOON eligibility, and the actual MCP fold wrapper using minimal config, recording and length-estimation adapters. Two equal object values and a literal equal to their generated `V-<sha1-8>` id were all rendered under one `EL-` template; an ordinary-string control templated only the object values. At `max_lines = 8`, the wrapper emitted nine lines; smaller-cap and `read` controls skipped folding. The collision fixture output was 1,075 bytes vs 1,932 original bytes. No full CLI/proxy transport, archive storage, production tokenizer or real agent was exercised.
+
+Validation: `CHECK_BASE=085b49e9450de9326e7738dc441718e1bd667363 mise exec -- just check` reported no code changes against merged main and skipped Cargo tests for this documentation-only diff; `git diff --check` passed. Active plan cards and `todo.md` contain the same 116 unique task IDs.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T602. Audit shared byte, diff and expand boundary helpers
+
+Source audit only; no product code changed. Traced `parse_bytes`/`human_bytes`, their size-reporting and `agents junk --min-size` callers, shared diff rendering, and expand range/filter helpers. Reviewed existing parser, boundary, diff and expand tasks before probing. This sampled pass does not claim every CLI, storage or display integration was executed.
+
+Execution plan:
+
+1. Inventory `parse_bytes`, `human_bytes`, `unified_diff`, `file_diff`, `paint`, `slice_lines` and `filter_lines` callers; trace values/output through CLI, MCP, TUI, read, config and cleanup surfaces.
+2. Compare byte syntax/rounding/overflow boundaries, diff handling of final newlines and equal files, and expand range/filter behavior with existing contracts and tests.
+3. Deduplicate against T330/T330.6, T67.1, T353, T534/T535, T160 and T416.3. Probe source functions with isolated inputs and controls.
+4. File only confirmed gaps; if none is confirmed, document tested boundaries and limits.
+
+Result: no new finding. Bare starting ranges intentionally run through the payload end; `src/expand.rs` already tests `10` as `(10, 20)` and `5-` as `(5, 20)` in `parse_range_bare_start_runs_to_end`. T534/T535 cover range-validation side effects and capped-read accounting. The size probe observed `parse_bytes("18446744073709551616")` returning `Ok(18446744073709551615)`; no supported operational failure or violated range contract was established, so this remains an observation rather than a bug card. T160's trailing-newline rule applies to command-output archive decisions, not a confirmed shared-diff defect.
+
+Evidence revision: `b126b66e8262f8caf51b2e7b28e924986df1a565`; main remained `ee8d66288b1d1b850ba24b7f9a9a70481695c3ca`. An offline scratch executable imported the actual `bytes.rs` and `diff.rs` modules by path and extracted the actual `slice_lines`, `filter_lines`, `strip_quotes` and `parse_range` functions. Binary-unit/decimal/space controls, formatter boundaries, malformed units and numeric strings, inclusive/bare/comma ranges, empty and filtered results, context windows, equal/changed diff output and no-final-newline rendering all passed. It did not invoke the CLI, MCP, config validator, store, or full display consumers. Local evidence: `/tmp/rtok-t602-probe/src/main.rs` and `/tmp/rtok-t602-probe.log`; no repository code was modified.
+
+Validation: `git diff --check` passed. The scoped gate reported no code changes against `ee8d6628` and skipped Cargo tests for this docs-only audit record. Active plan cards and `todo.md` retain the same 118 unique IDs.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T600. Audit disk task claim locking and lifecycle boundaries
+
+Source audit only; no product code changed. Reviewed Project create/status/claim/release and dependency handling, the shared adapter contract, disk persistence and claim locking against T441/T442 and prior disk findings. This sampled pass does not claim exhaustive allocator, remote adapter or concurrency coverage.
+
+Execution plan:
+
+1. Trace Project create/status/claim/release through adapter locks, task persistence and claim rows; compare T441/T442 contracts and earlier disk-task findings.
+2. Examine lock ownership, stale recovery and guard release under delayed writers. Separate documented remote last-write-wins behavior from local mutual-exclusion promises.
+3. Reproduce uncovered local lock cases using actual functions and scratch directories, with no real agents, tracker writes or shared task files.
+4. File confirmed defects with ordered fixes, document evidence limits, verify task-card/todo parity and scoped checks, and update PR #986.
+
+Result: filed T601 for an expired guard unlinking its successor's fresh lock and letting a third holder enter. T442's documented timeout takeover is setup for this defect, not a separate finding. Its existing stale-file test has no displaced live guard; T541's task identity mismatch remains distinct. No additional lifecycle hypothesis was confirmed.
+
+Evidence revision: `0e19cd1733d6f4fdc4b800bc860d638c63878644`; main remained `ee8d66288b1d1b850ba24b7f9a9a70481695c3ca`. A scratch executable compiled actual DiskGuard, lock_claim and lock_is_stale functions. After an actual 11-second wait B acquired while A's guard remained alive; dropping A removed B's fresh file and C acquired while B's guard remained alive. A fresh-lock contender was refused, and normal release allowed reacquisition. These were real scratch files with guards scheduled in one process, without a mocked clock. Full task mutations, multiple OS processes, real agents and remote trackers were not exercised.
+
+Validation: `CHECK_BASE=ee8d66288b1d1b850ba24b7f9a9a70481695c3ca mise exec -- just check` reported no code changes against the merged-main baseline and skipped Cargo tests for this documentation-only diff; `git diff --check` passed. The 118 unique active plan cards and 118 todo rows have equal ID sets, with no duplicates.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T598. Audit stored-body sanitation invariants
+
+Source audit only; no product code changed. Reviewed the store sanitizer, byte/JSON dispatch, character and wrapper ordering, stored-call and split-hook consumers, plus raw-storage bypass and existing T431/T432/T433 contracts. This sampled pass does not prove every terminal grammar or storage integration correct.
+
+Execution plan:
+
+1. Trace stored-body/text sanitation and its consumers, comparing wrapper removal, terminal escapes, Unicode boundaries and raw-storage bypass with T431/T432 and existing tests.
+2. Check combined transformations, repeated sanitation and unchanged-input byte preservation with actual sanitizer functions in isolated fixtures.
+3. Deduplicate failures against existing storage/sanitizer tasks, file only confirmed cases with ordered fix steps, and document untested integrations.
+4. Complete the audit record, verify plan/todo parity and the scoped documentation gate, then update PR #986.
+
+Result: filed T599 for non-idempotent cleaning when ANSI/zero-width removal forms a wrapper after the wrapper-removal stage. This extends T431's existing invariant with a deterministic composition counterexample; T432's intentional wrapper retention remains out of scope. No broader data-loss or privacy claim was established.
+
+Evidence revision: `22d0a572cb91063ee770c161e1fa30ec4751e545`; main remained `ee8d66288b1d1b850ba24b7f9a9a70481695c3ca`. An offline scratch executable imported the actual sanitizer module by path. With ANSI reset or U+200B inside an opening wrapper name, the first text pass retained the newly formed wrapper and the second removed it; both JSON body fixtures also changed on a second pass. Plain-wrapper and clean-JSON controls were stable, and the JSON numeric field remained unchanged. No real records, database, network or host application were accessed; persistence, raw bypass and full proxy behavior were source-traced, not executed.
+
+Validation: `CHECK_BASE=ee8d66288b1d1b850ba24b7f9a9a70481695c3ca mise exec -- just check` reported no code changes against the merged-main baseline and skipped Cargo tests for this documentation-only diff; `git diff --check` passed. The active task cards in plan.md and rows in todo.md contain the same 117 unique IDs; the active numeric summary table separately tracks its 87 rows.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T596. Audit demon service lifecycle and stale process state
+
+Source audit only; no product code changed or real services operated. Reviewed start/stop/restart/upgrade, supervisor state publication and locking, child logging and backoff, plus process signalling helpers and CLI dispatch. This sampled pass does not establish exhaustive coverage of every lifecycle race or platform.
+
+Execution plan:
+
+1. Trace start, stop, restart, upgrade and supervisor state publication, locking, backoff and child cleanup against their tests and completed tasks.
+2. Compare stale state and process identity checks across entrypoints. Inspect log forwarding and restart boundaries without assuming a saved PID still belongs to the service.
+3. Reproduce concrete gaps using isolated state files and a recording process adapter, never signalling real processes or invoking host applications. Deduplicate exact cases against lifecycle and platform tasks.
+4. Add only confirmed findings with ordered fix steps and checks, complete this audit entry, validate plan/todo parity and the documentation diff, then update PR #986.
+
+Result: filed T597 for stop/kill trusting stale saved PIDs without the boot/identity protection used by start and quiesce. Compared T73, T80 and platform/process tasks including T83.3: none records this stop-path omission. No additional lifecycle or log-forwarding candidate was sufficiently established to file.
+
+Evidence revision: `73b07eafb56ffa9bc5ac7b76ff06ffbbde1d31b0`; main remained `ee8d66288b1d1b850ba24b7f9a9a70481695c3ca`. An offline scratch executable compiled the actual Service/State, file/read, targets and stop functions with minimal config/style adapters and a recording process adapter. With `since=1`, normal mode sent TERM to both simulated unrelated positive PIDs; force mode sent KILL to both. Both removed the state file; missing state sent no signals. Production signal helpers were source-reviewed and perform no birth-identity check. No real process was signalled or queried by the probe, and full CLI/kernel PID reuse was not exercised.
+
+Validation: `CHECK_BASE=ee8d66288b1d1b850ba24b7f9a9a70481695c3ca mise exec -- just check` passed; the selective gate reported no code changes and skipped Cargo tests. `git diff --check` passed, and plan/todo contain 116 unique active IDs with equal sets.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T593. Audit config editing and validation boundaries
+
+Source audit only; no product code changed. Reviewed config CLI dispatch, set/init validation, comment revival, TOML mutation and persistence against the typed configuration and existing coverage. Layered environment behavior and every configuration field were not exhaustively tested.
+
+Execution plan:
+
+1. Trace CLI config commands through TOML mutation, validation, layered loading and atomic persistence; read the crate's existing tests and relevant completed tasks.
+2. Check structured keys/values and comment handling with valid TOML fixtures, comparing the requested edit with unrelated values and loader acceptance.
+3. Reproduce uncovered cases with actual config APIs in scratch files and deduplicate against T12, T328, T362–365, T381 and previous audit findings.
+4. Record only confirmed defects with ordered fix plans; move this audit to done, check plan/todo parity and scoped `just check`, then update PR #986.
+
+Result: filed T594 for structured values accepted and persisted despite failing typed Config extraction, and T595 for commented-default revival mutating unrelated multiline TOML string content. The open-map scalar and invalid array element cases share T594. Existing range/env validation and comment-padding tasks do not cover these exact failures; no other candidate was filed.
+
+Evidence revision: `286d8c85bf6deb1ad29b8d30f7697bd2a2f190af`; main remained `ee8d66288b1d1b850ba24b7f9a9a70481695c3ca`. An offline scratch executable linked the actual `rtok-config` crate. The setter accepted `stats.prices = 42` and `plugins.read.allow_paths = [1]`, and `issues` reported neither; pure Figment default-plus-file extraction into Config rejected both. Setting port 9000 also changed `# port = 12` inside an unrelated multiline literal string to `port = 12`. The ordinary commented-default control succeeded and dry-run preserved file bytes. The first probe generator had a Python quoting error before any fixture/build ran; its delimiter was repaired and the full probe passed. No user config, host application or network was used. Full CLI/environment integration was source-traced, not executed.
+
+Validation: `CHECK_BASE=ee8d66288b1d1b850ba24b7f9a9a70481695c3ca mise exec -- just check` passed; the selective gate reported no code changes and skipped Cargo tests. `git diff --check` passed, and plan/todo contain 115 unique active IDs with equal sets.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T591. Audit OpenTelemetry export cursors and cumulative metrics
+
+Source audit only; no product code changed. Reviewed OTel export selection and watermark advancement, stream failure isolation, span/log mapping, metric sums and encoding against the module design and existing tests. This was a sampled audit; retention and all transport/platform behavior were not exhaustively verified.
+
+Execution plan:
+
+1. Trace bounded session/call/log selection, stream watermarks, retries and successful/failed export advancement. Compare late session completion, tied timestamps and in-flight calls with the delivery contract.
+2. Inspect span/log mapping, metric aggregation and cumulative timestamps, including mutable calls and retention. Separate intentional compatibility limits from concrete data loss or incorrect output.
+3. Reproduce uncovered cases with actual functions or store APIs in scratch fixtures; keep any adapters and unexecuted integrations explicit. Deduplicate against T16, T106, T143, T163.2, T207/T208, T229 and T395 plus all earlier audit cards.
+4. File only confirmed findings with ordered fix steps and checks; move this audit to done, verify plan/todo parity and run the scoped documentation gate before updating PR #986.
+
+Result: filed T592 for a late lower-ID session disappearing behind the recomputed same-second rank cursor. Compared completed T36.12 and its increasing-ID test: this records the uncovered ordering case rather than duplicating its old implementation task. The broad running-MCP hypothesis was dropped because native MCP records after execution. A hypothesized monotonic metric decrease from a mutable call outcome was not filed because no production outcome update was established. No additional metric or encoding defect was confirmed.
+
+Evidence revision: `7db36a6d6e81f9f781cc67372d192f948ffe5d92`; main remained `ee8d66288b1d1b850ba24b7f9a9a70481695c3ca`. An offline scratch Rust executable linked the actual `rtok-store` crate and compiled `advance_sessions` from the exporter. With an in-memory database, exporting `z-first` and subsequently ending `a-late` in the same second returned `z-first` again, then no pending sessions. Reversing the lexical ID order correctly exported the late session. No SQL stubs, network, real collector or host data were used; full HTTP/CLI integration was source-traced, not run.
+
+Validation: `CHECK_BASE=ee8d66288b1d1b850ba24b7f9a9a70481695c3ca mise exec -- just check` passed; the selective gate reported no code changes and skipped Cargo tests. `git diff --check` passed, and plan/todo contain 113 unique active IDs with equal sets.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T588. Audit Read search/tree filters and log selection boundaries
+
+Source audit only; no product code changed. Reviewed Read search/tree path resolution, ignore and pattern rules, output boundaries and the Vfs mirror, plus log selection and rotation-follow state. Read the plugin instructions and compared existing Read/log contracts before filing reproducible gaps.
+
+Execution plan:
+
+1. Trace search/tree from tool arguments through `resolve`, root guard, `ignore::WalkBuilder`, `skip_git`, text-file loading, cap/archive recording and displayed paths. Compare hidden files, `.gitignore`/nested ignores, symlinks, invalid UTF-8, oversized files and roots outside cwd with the documented Read contract.
+2. Trace regex compilation/fallback, max/depth normalization, ordering, snippets and empty/no-hit outputs in both production code and the Vfs mirror. Compare actual WalkBuilder behavior with tests and the stated plugin description; identify only cases where the two surfaces or contract diverge.
+3. Trace logs filters and limits from CLI/config into model selection, JSON/export rendering, watch stream and logfile/store source. Compare ordering, inclusive time/level/source selection, zero/large limits, rotation and follow behavior without opening or exporting real host logs.
+4. Deduplicate exact scenarios against T4.2–T4.6, T55.5, T56.2/T56.4/T56.5, T59.2, T83.16, T127/T263/T300/T383, T15.11/T24.3/T225.1 and existing plan/done/roadmap/ideas. Use small scratch fixtures to reproduce only uncovered candidates, then record sequential fix cards with source evidence, steps and checks.
+
+Result: filed T589 for log generations being confused by repeated first lines or an empty replacement, and T590 for lexical parent normalization selecting a different file through a directory symlink. The two log fixtures share one card. No separate issue was filed for zero-result-limit clamping without a contrary contract, or the explicitly bounded search snippet. Also checked overlap with T430. This sampled pass does not establish exhaustive coverage of all Read filters, Vfs behavior or log exporters.
+
+Evidence revision: product source matches `ee8d66288b1d1b850ba24b7f9a9a70481695c3ca` after merging main. An offline Rust harness compiled actual Follow/whole-line and resolve/normalize functions. A replacement with the same first line returned no rows despite an unread old tail and two new rows; an empty replacement followed by a write replayed both old rows. A Unix symlink/parent request read different contents through rtok than through native lookup; the direct-path control matched. The resolver used a standard filesystem adapter, equivalent Unix prefix checks and inactive dynamic roots. Full CLI/MCP integration and Windows were source-traced or left untested; no real host logs, application, provider or user data were used.
+
+Validation: `CHECK_BASE=ee8d66288b1d1b850ba24b7f9a9a70481695c3ca mise exec -- just check` passed; the selective gate reported no code changes and skipped Cargo tests. `git diff --check` passed, and plan/todo contain 112 unique active IDs with equal sets.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T585. Audit CLI output, export and configuration path boundaries
+
+Source audit only; no product code changed. Sampled the filesystem/project resolver and logfile delegation, plus CLI `emit`, report flag resolution and the task/claim consumers of project identity. Checked relevant root instructions and the existing task/config/report contracts before filing only reproducible gaps.
+
+Execution plan:
+
+1. Inventory CLI output/config entrypoints and trace representative output through argument parsing, Figment precedence, shared emit/write helpers, and filesystem/project identity helpers. Inspect log append delegation without assuming every CLI export uses the same path.
+2. Compare relative and absolute local Git origins in isolated checkouts against Git's own resolution, then check whether project identity aligns with the documented task-counter and claim-scope contract.
+3. Compare omitted versus explicit report formats using actual Clap argument parsing, report flag mapping and a lower-precedence Figment configuration.
+4. Deduplicate against T441.3, T22.1/T22.2, D12/D14, CLI trycmd tasks and existing path/atomic-write findings. File only reproduced contract violations, leaving ordinary output overwrite and unproven platform concerns unfiled.
+
+Result: filed T586 for different relative local origins colliding in one project key and equivalent relative/absolute spellings of a local remote splitting identity. Filed T587 because an explicit `--format md` is indistinguishable from the Clap default and therefore fails to override configured HTML/PDF. Ordinary report output overwrite was not a new finding because no contrary contract was established; no separate logfile issue was found. This was a sampled audit, not an exhaustive review of every CLI exporter or the full configuration crate.
+
+Evidence revision: `0e99dda0932c3f926b275a61d204d1dbd7d77ea9`. An offline harness compiled the actual project resolver/normalization and report argument/flag functions with a standard filesystem adapter and Figment config. Two scratch Git checkouts with origin `../remote.git` resolved to different local bare repositories and refs, while rtok returned the same `../remote` key; changing one origin to the same remote's absolute path changed its key. For report flags, configured HTML remained effective under explicit `--format md`, while explicit PDF overrode it. An initial scratch setup failed because its ref pointed at an object not copied into the bare repository; the fixture was corrected and the passing controls were rerun. No network, real repository data, API or host config was used. Store allocation, claim lookup, full report rendering and output-file integration were source-traced, not exercised.
+
+Validation: `CHECK_BASE=1d5889ab36b485befdda0355687a394bf8380077 mise exec -- just check` passed for the documentation-only diff; the selective gate found no code changes, so no Cargo tests were selected. `git diff --check` passed, source links were reviewed, and active plan/todo IDs matched uniquely.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T582. Audit proxy Batch/Flex lifecycle and response persistence
+
+Source audit only; no product code changed. Reviewed Batch client validation, submit/status/fetch, result recording, Flex application/retry policies, OpenAI Responses usage handling and the shared streaming tee. Compared behavior with the proxy/plugin instructions, `docs/batch-flex.md`, and existing Batch/proxy tasks before recording distinct findings.
+
+Execution plan:
+
+1. Trace Batch submit/status/fetch through proxy routing, result parsing and persistence. Compare repeated downloads and partial/error results while distinguishing client output-file handling from proxy result accounting.
+2. Trace Flex request shaping, lane policy, retry/backoff, response parsing, service-tier persistence and usage/cost aggregation. Compare documented success, fallback and retry boundaries.
+3. Trace OpenAI Responses JSON/SSE usage extraction and streaming tee behavior. Use offline scratch probes for repeated result recording and incomplete UTF-8 tails; source-trace transport/capture behavior without provider calls or host writes.
+4. Deduplicate concrete scenarios against T385, T250–T255, T326, T11.3, T45.2, `docs/batch-flex.md` and plugin instructions. File only source-confirmed gaps with ordered implementation steps and checks; leave unproven platform or lifecycle assumptions unfiled.
+
+Result: filed T583 for replayed Batch result downloads adding duplicate usage rows and T584 for an incomplete UTF-8 tail erasing earlier complete SSE usage/tier events. No additional Flex defect was established. Basic Batch validation had no distinct issue, and the Windows output-cleanup concern was not filed because it was not platform-proven. This pass does not claim exhaustive coverage of every proxy provider or transport state.
+
+Evidence revision: `1713f7b34b172d24841ffb181f5d3060024dfdbb`. An offline scratch harness exercised actual Batch record/parse/usage functions with an append-only Store stub and actual wire/Anthropic extraction functions. Replaying one 100-input/20-output result under another call ID changed the aggregate from 120 to 240. A complete `message_start` with 100 input tokens and `standard` tier survived the full and ASCII-safe controls, but both usage and tier disappeared when a later UTF-8 character was split. The probe did not use a real store, provider, server, or 256 MiB allocation; transport cancellation and persistence details were source-traced. No host app or API key was used.
+
+Validation: `CHECK_BASE=1d5889ab36b485befdda0355687a394bf8380077 mise exec -- just check` passed for the documentation-only diff; the selective gate found no code changes, so no Cargo tests were selected. `git diff --check` passed, source links were reviewed, and active plan/todo IDs matched uniquely.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T578. Audit report scopes and transcript usage accounting
+
+Source audit only; do not change product code. Trace `rtok report` aggregation from CLI/model through measurement and usage readers into output renderers, including time/project boundaries and transcript-cache freshness. Read applicable module instructions and compare exact behavior with existing plan, done, roadmap and idea entries before filing fixes. Use synthetic scratch data only; do not inspect or mutate real host transcripts.
+
+Execution plan:
+
+1. Read root instructions and `src/plugins/measure/AGENTS.md`; inventory the `report`, `measure` and CLI entry points. Trace report argument/config defaults (`since`, project/session scope), the model's aggregation sources, and markdown/HTML/PDF/advice/AI rendering. Record where estimates, proxy usage and `Measurement` rows enter or are intentionally excluded.
+2. Trace stats/transcript parsing and `transcript_cache` path enumeration, cache key/freshness checks, invalidation, deletion handling and aggregation. Use tiny scratch transcripts and filesystem aliases to compare logical files, duplicate paths, edits, removals and reappearance without reading real host data.
+3. Probe time boundaries, multiple projects/sessions, empty and malformed input, report output formats and cached-versus-fresh results with isolated fixtures. Separate documented estimates and sampling from actual accounting bugs; do not claim accuracy without a `Measurement`.
+4. Deduplicate concrete scenarios against T105, T167, T207, T219, T239, T379, T128, T135–T137, T163.7, T227, T414.13, T326 and relevant roadmap/idea entries. Add only source-confirmed gaps as sequential cards with evidence, ordered fixes and checks; leave uncertain candidates unfiled.
+
+Check: all fixtures stay in scratch, existing report output contracts and intentional estimates remain explicit, any filed issue has a reproducible trigger and no duplicate card, plan/todo ids match, `git diff --check` and the scoped `just check` pass. No real host transcript or application is used.
+
+
+Result: reviewed report ledgers and advice/AI serialization, transcript-cache and shared path walkers, and the usage source flow. Filed T579 for one physical transcript being discovered twice through a directory alias, T580 for AI report metadata/anchors exceeding its configured cap, and T581 for non-actionable archive rows displacing eligible top-sink recommendations before the advice layer filters them. Did not file out-of-catalogue top-sink rows as a separate issue because the recommendation rule is intentionally limited to actionable read/cmd/MCP classes; timestamp-only cache freshness concerns were not established as a concrete defect. Compared exact overlap with T59.8, T105, T128, T135–T137, T167, T207, T219, T239, T302, T379, T163.7, T227, T414.13 and T565. This pass does not claim exhaustive coverage of all renderers, host parsers or usage providers.
+
+Evidence revision: `11a6aacb79cea9f896aa965d2234a8845095f01e`. An isolated Rust harness compiled actual `paths_with_ext`/`jsonl_paths`, AI render/admission and token estimator, report sink aggregation/classification and top-sink recommendation functions with controlled filesystem, document, config and Store stubs. The alias fixture discovered two paths canonicalizing to one physical transcript; downstream parser/CLI aggregation was source-traced, not executed. AI section bodies admitted under 808 estimated tokens, but metadata/anchors produced an 840-token final estimate. Ten valid `archive`/`skill` measurements with positive `before_bytes` and distinct refs displaced a smaller Read sink; the Read-only control emitted one recommendation. No full Diesel/CLI, complete renderer suite, real host transcript or application integration ran.
+
+Validation: `CHECK_BASE=1d5889ab36b485befdda0355687a394bf8380077 mise exec -- just check` passed; the selective gate found no code changes, so no Cargo tests were selected. `git diff --check` passed, source files/links exist, and active plan/todo IDs matched at 107 unique entries.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T575. Audit Doctor confirmation and junk protected-path rechecks
+
+Source audit only; do not change product code. Trace Doctor web plan/apply selection and junk clear's item planning, protected-path recheck and removal together with their CLI/TUI callers. Check the existing T331 and T330 safety promises before recording any defect.
+
+Execution plan:
+
+1. Trace `doctor::web::{plan,apply}`, `prepare`, `fix::candidates`, `fix_found` and `fix_file`. In a scratch-only machine fixture, plan one fixable broken hook, add a different fixable broken hook before submitting the prior selection, and observe whether the new finding is selected despite not appearing in the confirmed diff; source-trace whether that fresh selection reaches the writer. Compare same-file content re-read protections, changed-file behavior, default toggles and explicit confirmation in T331.6/.7/.12; distinguish fresh discovery from an edit to an already-planned file.
+2. Trace junk scan → plan → confirm → `protected`/`recheck` → `remove` for eligible cache/build/extra directories. In an isolated tree, place a package-manager lockfile below an explicitly configured extra cache root; observe whether the root is protected before recursive removal. Source-trace the separate tagged-cache route. Compare direct lockfile, nested lockfile, settings/store descendants, `CACHEDIR.TAG`, and `[agents.junk].exclude` cases.
+3. Deduplicate exact behavior against T331's web/terminal selection and file re-read guarantees, plus T330.4/.5.1/.6/.7 and T479. Record that T330.4 says a path that “is or holds” a package-manager lockfile is refused and that T330.5.1 exclusions protect items that match or hold a match; check whether existing tests cover nested locks or a new finding appearing between web plan and apply.
+4. For each source-confirmed gap, preserve a minimal fixture and evidence, then add a separate sequential fix card with the protected-data boundary, expected preview/confirmation behavior, implementation steps and acceptance checks. Leave unresolved hypotheses as audit notes.
+
+Check: fixtures remain in scratch only, existing positive/negative selection and cleanup cases remain explicit, plan/todo IDs match, `git diff --check` and scoped `just check` pass. No host app, real home directory or product source is touched.
+
+Result: reviewed Doctor web candidate/default selection and the immediate fix-file reread, plus junk extra-cache planning, recheck and recursive removal. Filed T576 for a newly discovered fix becoming selected after the prior preview and T577 for nested package-lock deletion. Compared against T331.12 and T330.4/.5.1; the latter promises protection for paths that hold a lockfile, while existing direct-lock coverage does not cover a recursively removed parent.
+
+Evidence revision: `5a239604c220da9bef68ad9146d2e8d3315279ae` (the audited product source is unchanged from the pre-merge revision). An isolated Rust probe compiled extracted `prepare`/shared/default-selection functions with fixture discovery/removability stubs; it selected A before rescan and A+B after rescan. The junk probe used actual recheck/newest/usage-walk/remove functions and the permanent-discard branch, with a held-reason stub unreachable and a synthetic timestamp outside the settle window. It showed a direct Cargo.lock protected, an eligible extra cache root retained, and its nested Cargo.lock deleted. This did not exercise host parsing/writes, CLI or trash integration; no real home or host app was touched.
+
+Validation: `CHECK_BASE=1d5889ab36b485befdda0355687a394bf8380077 mise exec -- just check` passed; the selective gate found no code changes, so no Cargo tests were selected. `git diff --check` passed, and active plan/todo IDs matched at 104 unique entries.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T572. Audit live-call state and SPA/protocol boundaries
+
+Trace the live graph-call event path from store polling through coalescing, Rust state folding, WebSocket protocol and SPA rendering. Separately trace `RTOK_WEB_DIST` selection and asset reads, including lexical path validation and filesystem links. Check the applicable root/web instructions and existing tasks before recording any concrete regression; this is an audit-only claim with no product edits.
+
+Execution plan:
+
+1. Follow `graph_events` polling, `live::coalesce`, `CallsStore::fold`, replay and frame delivery. Use isolated fixtures to compare a capped burst containing multiple End events with a sequential delivery, and compare the frame summary, running/interrupted state, feed and tool/backend/time totals. Check T329's documented burst cap and exact-total promises to distinguish permitted display omission from state loss.
+2. Trace `RTOK_WEB_DIST` root selection, raw URI path handling, `safe_join`, asset read and SPA fallback behavior. Use an isolated dist containing filenames with spaces, Unicode, percent signs and `#`; compare literal lookup with the browser's percent-encoded request path. Search T310.9 and later serving tasks for an explicit URL-decoding contract. Treat symlink escape as a finding only if a task or documented boundary promises filesystem confinement within the selected dist root.
+3. Trace inbound `/ws` message parsing, origin checks, allowed message variants, payload bounds and outbound frame serialization. Compare malformed/oversized inputs and disconnect/reconnect behavior with T193, T310 and later protocol tasks; do not restate already-documented cross-origin policy as a new issue.
+4. For each source-confirmed gap, preserve a minimal scratch-only reproduction, identify the exact existing task overlap (or its absence), and add sequential fix cards with source links, implementation steps and acceptance checks. Keep inconclusive behaviors as audit notes, not findings.
+
+Check: focused fixtures stay outside the repository; task IDs/source links and plan-to-todo entries are consistent; `git diff --check` and scoped `just check` pass. No real host app, live server or product source is touched.
+
+Result: reviewed web live polling/coalescing/replay, shared call state and views, TUI consumption, WebSocket message/origin and snapshot paths, and SPA routing/asset negotiation/lookup. Filed T573 for lost terminal state under event-list truncation and T574 for missing URL-path decoding in both asset sources. T329.15/T329.26 intentionally sample per-tool/backend/latency details under bursts; that was excluded from new findings. T310.9/T310.10 contain no encoded-filename fix. Filesystem symlink serving had no established contrary contract and was not filed; the in-process router's HEAD controls passed. No additional distinct protocol failure was established in this pass, and no frontend-wide or network integration coverage is claimed.
+
+Evidence revision: `babfd24b470f7f374ac5985dae458cecc894d8fe` (product source unchanged from `0b14b88e`). An offline Rust harness compiled verbatim coalesce and CallsStore logic plus the event types (schema/Diesel derives omitted), and the complete actual spa.rs with Axum, rust-embed and a scratch dist. The capped End fixture left successful A running and later interrupted while its uncapped control cleared A. Both directory and embedded routers returned 404 for existing space/hash/percent/Unicode filenames requested through encoded URLs, 200 for the ordinary filename, and empty bodies for HEAD. An initial extraction included an orphan test-fixture doc comment and failed compilation; correcting only that excerpt boundary made the probes pass. No product source, live server, real host data or agents were involved.
+
+Validation: `CHECK_BASE=0b14b88eb56469625eebc7e1df92ae1b77bcf2b2 mise exec -- just check` and `git diff --check` pass for the documentation-only diff; no repository Cargo tests are selected. New source links and matching unique plan/todo identities were checked. No ideas or dependencies were added.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T568. Audit plugin boundaries, backups, graph export and read search
+
+Audit the remaining SDK and data-boundary edges before filing concrete fix cards: `rtok_agent_sdk` backup/write and per-file retention; the native/WASM plugin boundary documented by `crates/rtok-plugin-sdk/PLAN.md`; graph export parsing/rendering and project scope; and read search plus injection handoff. Trace each path against the applicable AGENTS.md and architecture invariants, then check existing plan/done/roadmap/ideas entries for the exact behavior.
+
+Execution plan:
+
+1. Trace backup creation, cross-file content deduplication, retention/pruning, and shared SDK write entrypoints. Reproduce whether byte-identical content under a different host-config basename can suppress that file's only undo copy, then determine whether T249's per-file cap and T72's intentional basename-agnostic dedup already cover the lifecycle consequence.
+2. Compare the plugin SDK's actual loader/dispatch implementation and feature boundary with the WASM host design; verify declared surfaces, especially Hook exclusion, and identify whether the planned host exists in source or is still only a plan.
+3. Trace graph export parse/read/render and project selection through CLI/MCP/page entry points. Check scope confinement, redaction defaults, malformed/imported data handling, and schema/measurement contracts against T329 entries.
+4. Trace read search path resolution, ignore rules, output caps/archive references, and any read-result injection/advice caller. Check root guard ordering, fail-open behavior, and that no search/injection edge bypasses the documented Read constraints.
+5. For each confirmed gap, record source evidence and a minimal isolated reproduction, deduplicate the exact scenario against plan/done/roadmap/ideas, and add a separate sequential fix card with scope, migration/test needs, and acceptance checks. Leave uncertain hypotheses unfiled.
+
+Check: scoped `just check` and `git diff --check` pass; the audit card remains in progress until each finding has source evidence and a deduplicated fix card or an explicit no-finding rationale.
+
+Result: reviewed the agent SDK's backup/dedup/generation pruning, JSON read/edit and atomic/symlink write helpers; graph export collection/redaction/parsing/rendering and CLI/MCP/page paths plus scope resolution/fan-out; the WASM loader in src/plugins/wasm.rs and its registry integration; read search/tree/walk and injection mode/budget handling. Filed T569–T571 for backup ownership lost across pruning, cyclic symlink replacement, and unredacted scope/download identities. T72/T249 intentionally describe the two backup mechanisms separately but do not cover their combined recovery failure; T329.16/T329.40 do not cover the remaining identity copies. Existing read/archive findings and documented injection overshoot were not repeated. The WASM loader exists in the application, not the SDK crate; its invoke_mcp comment explicitly marks dispatch wiring as pending, so that incompleteness was not filed as a newly discovered regression. No further distinct source-confirmed issue was established in these inspected paths. No product source, dependencies or ideas were changed.
+
+Evidence revision: `424e489d085fef9bb15ecced8734305d3ddc693a` (product source unchanged from `0b14b88e`). An offline Rust harness compiled verbatim SDK backup/write helpers and graph-export types/redaction (only schema-generation derives omitted). Three probes passed: two files sharing original bytes lose B's recovery copy after A's per-file pruning; a two-link Unix cycle is replaced with a regular file by an SDK write with backup enabled; and a redacted export still contains the username alias in meta.scope. The suggested download filename uses the same original alias by source inspection; the subsequently authored filename probe was not run and is not claimed as execution evidence. Fixtures and build output stayed under /tmp/rtok-t568-probe; no real host files, live agents, WASM guests or full application integration were exercised.
+
+Validation: scoped `CHECK_BASE=0b14b88eb56469625eebc7e1df92ae1b77bcf2b2 mise exec -- just check` and `git diff --check` pass for this documentation-only change; no repository Cargo tests are selected. Source links and matching unique plan/todo identities were checked. The broader platform and end-to-end regressions remain in the fix cards.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T561. Audit project references, memory packing/sync/files, and CLI data boundaries
+
+Review `src/project/refs.rs` and its language-specific resolvers; `src/plugins/memory/{pack,sync,files}.rs`; and the CLI entrypoints that accept or emit project, reference, note, and file data. Read `src/plugins/memory/AGENTS.md` and its `PLAN.md` first. T538/T539 already cover import hash reservation and revise project scope; do not repeat the previously reviewed save/import/revise paths. This is a source audit and docs-only claim: do not change product code or copy real user/host data.
+
+Execution plan:
+
+1. Trace reference discovery and resolution across Cargo, Go, npm and Python, including relative paths, project roots, malformed inputs and missing-file behavior.
+2. Trace `memory pack`, sync and note-file linking through their CLI/MCP/store boundaries; check project scoping, path normalization, size/budget limits, stale state and error/fail-open behavior.
+3. Review CLI parsing and serialization for these data paths, compare each concrete candidate against active, roadmap, done and idea entries, then file only distinct source-confirmed fixes with reproduction, implementation steps and checks; sync `todo.md`.
+
+Check: every filed issue has a source-backed trigger and deterministic fixture; no duplicate is added; no product files or real host data are changed; plan/todo stay synchronized; `git diff --check` and scoped `just check` pass.
+
+Result: reviewed Cargo/npm/pnpm/Go/Python reference resolvers, graph-follow consumption, memory packing and its MCP boundary, memory sync and its CLI/SDK write path, and note-file mention normalization. Filed six distinct defects T562–T567 with ordered fixes and acceptance checks. Compared related T69.6/T460/T374/T452/T329.7 and active/roadmap/idea entries. A recursive-glob fixture also reproduced the one-level limitation already acknowledged by completed T329.7; it was deliberately not filed as a new finding. No product code, dependencies or ideas were changed.
+
+Evidence revision: `c1f6ac06b5891f592f7da29449be3877a5d38305` (product source unchanged from `0b14b88e`). An offline Rust harness compiled the actual pack module and reference resolvers, plus verbatim sync and path helpers. It reproduced the basename digest collision, marker-title round-trip failure, a budget-2 pack costing 4 tokens after rendering, hidden/dot-relative path loss and wrong-sibling association, and external references contributed by an excluded pnpm member. An invalid-UTF-8 read/splice fixture demonstrated preparation of replacement text without the original outside bytes; inspection of SDK backup/write established that existing file UTF-8 is not validated there. No live CLI overwrite, store integration, real agent or graph-registration run was performed; those regressions belong to the fix cards. Initial harness compilation failed on module resolution and a scratch SHA formatter; after fixing only that harness plumbing, all seven probes passed.
+
+Validation: `CHECK_BASE=0b14b88eb56469625eebc7e1df92ae1b77bcf2b2 mise exec -- just check` passed for the documentation-only diff (no repository Cargo tests selected); `git diff --check` passed. New source links resolve; the active table and todo have matching unique identities. This pass extends audit coverage without claiming exhaustive verification of every module or platform.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T554. Audit archive, compression, JSON and guard edges
+
+Review source paths not yet covered in `archive`, `compress`, `json_tree`, `toon` and `guard`. Read each plugin's local `AGENTS.md` and `PLAN.md` first (the compression module has no `AGENTS.md`); compare concrete candidates with active, roadmap, done and idea entries before filing. Preserve the shared main checkout's dirty T522–T527 changes. This is a source audit and docs-only task.
+
+Execution plan:
+
+1. Trace archive identity/decision persistence and expansion, compression eligibility and byte preservation, JSON folding and TOON round trips, and guard match/deny paths against each module's invariants.
+2. Use focused source probes or fixtures for candidate edge cases; avoid real agents and do not modify product source.
+3. Deduplicate findings against existing cards and error evidence; add only distinct, source-confirmed fixes with implementation steps and checks, syncing `todo.md`.
+
+Check: each filed finding has a source-backed trigger and concrete reproduction; no duplicate is added; plan/todo stay synchronized; `git diff --check` and `just check` pass.
+
+Result: inspected archive block/blob/skill decisions and the pi carrier, extractive compression, JSON tree folding/rendering, TOON encoding and its test oracle, and guard read/Bash keys, mutation invalidation and skill resolution/frontmatter exemptions. Filed T555–T559 for five guard behavior defects and T560 for the test-only TOON decoder. Compared the exact triggers with T55.8/T55.9/T57.1/T322/T445/T62.1/T468 and active/roadmap/idea entries. No additional distinct archive/compress/json_tree failure was established in this pass. No product source, dependencies or ideas were changed.
+
+Evidence revision: `eb13dd7f017e96547c9498555ea9e080814cad21` (product source unchanged from `0b14b88e`). An offline Rust harness compiled actual guard key/classification helpers, skill selection/frontmatter functions, and TOON encoder/test decoder. It reproduced quoted-path and Read-cwd key collisions, three writer variants classified as cacheable, selection of a sole foreign-project skill, failure to recognize valid YAML-quoted host keys, and the quoted-comma round-trip oracle failure. The repository's serde-saphyr version parsed the quoted YAML keys successfully. A separate system sed fixture created its output file in scratch; find/git mutations, real agents and live hook integration were not run. Full guard integration tests belong to the fix cards. The harness-created manifest fixture was removed after exact-content verification.
+
+Validation: `CHECK_BASE=0b14b88eb56469625eebc7e1df92ae1b77bcf2b2 mise exec -- just check` passed for the documentation-only diff (no Cargo tests selected); `git diff --check` passed. Source links and active task/todo identities were verified. An additional docs-check was stopped during compilation and is not claimed as a completed test; its worktree build cache was cleaned.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T547. Audit plugin docs, privacy and snapshot lifecycle edges
+
+Review previously unexamined plugin documentation ingestion/query paths, privacy and redaction boundaries, and snapshot/checkpoint/retention behavior. Compare each source-backed candidate with active, roadmap, done and idea cards before proposing a fix; preserve the shared main checkout's dirty T522–T527 changes. This task is an audit and documentation claim only.
+
+Execution plan:
+
+1. Read the relevant `src/plugins/<id>/AGENTS.md`, architecture, research and existing task cards before tracing each path.
+2. Inspect documentation ingest and retrieval identity/scope, measurement accounting, checkpoint project identity, redaction, and retention invalidation; use isolated fixtures or source-level probes where practical.
+3. Deduplicate candidates against plan, roadmap, done and ideas; file only distinct, source-confirmed findings as sequential tasks with triggers, steps and checks. Do not change product code.
+
+Check: findings have source references and concrete reproductions; no duplicate task is added; `plan.md` and `todo.md` remain synchronized; `git diff --check` and `just check` pass.
+
+Result: reviewed docs-plugin lock resolution, fetch/index/query/get and local-document ingestion, the associated store/schema and query accounting, checkpoint extraction/prefilter/render/store/restore, and project identity for session handoff. Filed T548–T553: private-text persistence, cross-workspace local docs, invalidated ids on unchanged ingestion, inconsistent token-accounting baseline, checkpoint prefilter false negatives, and the handoff project-resolver bypass. Compared exact triggers with T455, T417, T133, T154, T71.2 and I-105; their broader feature/privacy proposals do not track these failures. This pass did not claim exhaustive archive, retention, host or platform coverage.
+
+Evidence revision: `99b6753d44f8da9a8fc0dc9e22113e520cb89d7d`; product source remains unchanged from `0b14b88e`. An offline Rust harness compiled verbatim checkpoint extraction/rendering code with serde_json and the repository's shlex version, omitting only the unused SDK import. It reproduced spaced-JSON and mixed-content prompt loss by comparing filtered/unfiltered extraction, and retained a private-tagged sentinel in rendered output. The initial harness lacked shlex and failed to compile; after adding that scratch-only dependency all three probes passed. Storage, docs and project-identity effects are source-confirmed, with integration regressions assigned to each fix card. No live agent, network fetch or product code edit was involved.
+
+Validation: `CHECK_BASE=0b14b88eb56469625eebc7e1df92ae1b77bcf2b2 mise exec -- just check` passed for the documentation-only diff (no Cargo tests selected), as did `git diff --check`. New source links resolve and the active table/todo ids were checked for equality and duplicates. No new ideas or product dependencies were added.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T540. Audit task, worktree, config, measure and graph edge cases
+
+Review previously unreviewed lifecycle and data-boundary paths in `src/tasks`, `src/worktree`, `crates/rtok-config`, `src/measure` and `src/plugins/graph`. Confirm each candidate in source and compare it with active, roadmap, completed and idea entries before filing sequential fix cards. Preserve the shared main checkout's dirty T522–T527 changes.
+
+Execution plan:
+
+1. Inspect task storage/parent completion, worktree lock and removal paths, configuration parsing, measurement ingestion, and graph project/index behavior.
+2. Check candidate failures against existing cards and recent error evidence; assign reserved sequential IDs only to distinct source-confirmed defects.
+3. Add ordered fix cards and `todo.md` rows; place broader unapproved proposals in `ideas.md`.
+
+Check: every card has a source-backed trigger, implementation steps and acceptance criteria; plan and todo stay synchronized; `just check`.
+
+Result: continued the bounded source audit across disk task identity/storage, task creation/status guards and remote pagination, worktree removal/cleanup/ownership paths, configuration layering and lenient loading, measurement transcript/cache analysis, and graph walk/watch/index/rank freshness. Filed six distinct defects as T541–T546, each with a source-backed trigger, ordered implementation steps and acceptance criteria. Existing T441.4, T35.5, T68.10, T35.4, T370 and T324 were checked for overlap; related feature cards are cross-referenced instead of duplicated. No additional sufficiently established worktree/config/measurement defect was filed in this pass. No product code, dependencies or ideas were changed.
+
+Evidence revision: `efbb220bb5826dffeef36afd88910ac3d7424aa8` (product source still matches `0b14b88e`). An offline Rust probe compiled actual `walk.rs` and verbatim watcher event functions with the real ignore crate and minimal config/extension stubs. It reproduced unrelated gitignored files entering the full walk, explicitly included files being rejected by event filtering, and glob-excluded files being accepted by event filtering. T541–T543/T546 are source-confirmed with explicit reproduction steps; their full integration regressions remain work for the fix cards. No live watcher, real agent, remote task mutation or full application index run was used.
+
+Validation: `CHECK_BASE=0b14b88eb56469625eebc7e1df92ae1b77bcf2b2 mise exec -- just check` and `git diff --check` passed for the documentation-only change; no Cargo tests were selected. Task table/todo identities and new source link targets were checked. This is further audit coverage, not a guarantee that every module or platform is bug-free.
+
+Status: done 2026-10-11
+Model: OpenAI / GPT-6
+
+### T530. Audit remaining bug backlog across subsystems
+
+Review the repository and available failure evidence for confirmed bug classes that do not already have active, roadmap, or completed coverage. Compare findings against existing cards before assigning sequential IDs; record confirmed fixes as ordered plan cards and unresolved, unapproved propositions in `ideas.md`. Keep the main checkout's dirty T522–T527 changes intact and work from this isolated checkout.
+
+Execution plan: review subsystem boundaries and recent error evidence; verify each candidate against source and existing plan/roadmap/done/ideas entries; add distinct fix cards in severity order and reserve sequential IDs; sync the task table and `todo.md`; put uncertain candidates in `ideas.md`.
+
+Check: audit cards are deduplicated, ordered and synced; `just check`.
+
+Result: reviewed hook dispatch/resident handling, proxy shaping/routing/cache/wire parsing, archive retrieval/decisions, read rendering/dedup/search, command capture/fallback, MCP framing/expansion, memory save/revision/import, and store retention. Filed nine distinct source-confirmed defects as T531–T539, each with a concrete trigger, source locations, ordered implementation steps and acceptance checks. Added seven optional improvement proposals I-120–I-125 and I-129. No product fixes or dependency changes were made.
+
+Evidence revision: `0b14b88eb56469625eebc7e1df92ae1b77bcf2b2`. An offline Rust harness compiled verbatim functions from this tree and confirmed four direct-cache normalization collisions plus the reverse-request MCP id collision. Other findings have explicit source-derived reproduction steps; their end-to-end regression tests belong to the fix cards. The installed rtok 0.15.1 was not used as proof for the 0.17.0 source. Neither codebase-memory nor CodeGraph tooling was available, and this repository has no `.codegraph` index; discovery used the available rtok explorer/read tools and targeted source reads. This audit is not an exhaustive proof of all host/platform behavior.
+
+Validation: `CHECK_BASE=0b14b88eb56469625eebc7e1df92ae1b77bcf2b2 mise exec -- just check` passed for the actual documentation-only diff (no Cargo tests selected); `git diff --check` passed. The initial default-base run selected unrelated upstream changes and was stopped during the full gate, so it is not claimed as a completed test run. The active task table and `todo.md` match at 72 ids. Removed four stale todo entries (T372, T373, T413.1, T413.2) only after verifying their completed cards in this file.
+
+Status: done
+Model: OpenAI / GPT-6
+
 ### T455. Local dependency docs from Cargo.lock + cached docs.rs rustdoc JSON
 
 MCP-only `docs` plugin (default off): resolve exact crate versions from `Cargo.lock`, search a local FTS index of cached rustdoc JSON, fetch from docs.rs only via `rtok docs fetch`. No Context7 client, no OAuth, no embeddings, no rustdoc-types.
@@ -83,6 +592,14 @@ Cloud review finding (2026-10-08): `crates/rtok-mcp/src/ops.rs` carried `runs_rt
 Callers: none outside `ops.rs` tests (`apply` is unused until T277 wires hosts); the tests pass a test-local `is_rtok_bin`. Their expectations did not change.
 
 Check: grep for `runs_rtok` over the repo found only `ops.rs`; `just fmt-check`, `just lint`, `cargo nextest run -p rtok-mcp -p rtok-agent-sdk` and `-p rtok -E "test(plan)"`.
+
+### T277.1. Claude Code and Claude Desktop write and remove rtok's MCP entry through `rtok_mcp::ops`
+
+Epic PR 2. `Claude::apply` for both clients (`~/.claude.json`, `claude_desktop_config.json`) called `rtok_agent_sdk::register_mcp` / `unregister_mcp_ours`, so `rtok_mcp::ops::apply` had no caller. Both now build an `McpSpec` (`claude::mcp_spec_at`) and call `agents::mcp::run`, which runs `ops::apply` on a disk `Fs` over `rtok_agent_sdk::write` (atomic swap, `_backup`, dry run).
+
+Crate changes: `McpSpec` gains `launch` (absolute command, `--host <id>` pair); `ops::apply` takes the SDK `Apply` and judges removal with `rtok_agent_sdk::judge_owned` (the crate's own smaller copy is gone); `write_entry` treats a difference in the default `"type": "stdio"` alone as unchanged (T265); the strict-JSON refusal message is the SDK's (`parse_strict_json`). Report lines are the ones the hosts printed before. Other hosts and the status surface are unchanged.
+
+Check: crate table tests (launch and type tolerance; ownership x `--yes` x dry run), Claude table over both clients x install, update, remove with foreign keys kept, and a dry run that creates no file; `just check`.
 
 ### T461. Windows resident exit condition matches Unix
 
@@ -1017,6 +1534,33 @@ Do (2026-09-22): verified against the Copilot docs first (plugins-creating + cli
 
 Check result (2026-09-22): `tests/copilot_plugin.rs` — manifest/component-path parity, hooks doc equality with `hooks_doc("rtok", 5)`, exact `.mcp.json`, and the fake-`copilot` e2e (dry-run names the command and runs nothing, `--yes` installs and strips the own-files pair, a repeat is `already installed` with no second CLI call, remove uninstalls); units for the offer/marker decision and the D21 singleton; `just check` green.
 
+### T560. CodeBuddy Code and WorkBuddy host (`codebuddy`)
+
+Creator request (2026-10-11): rtok plugin support for Tencent WorkBuddy. WorkBuddy shares CodeBuddy Code's plugin system, so this is one host `codebuddy` with two variants, CodeBuddy Code CLI and WorkBuddy Desktop (the `devin` CLI + Desktop shape), served by one plugin tree under the D21 singleton.
+
+Facts (primary unless marked; checked 2026-10-11):
+- Plugin manifest dirs: `.codebuddy-plugin/` (priority), `.workbuddy-plugin/`, `.claude-plugin/`; hooks in `hooks/hooks.json`, MCP in `.mcp.json`; `${CODEBUDDY_PLUGIN_ROOT}`, alias `${CLAUDE_PLUGIN_ROOT}`; cache `~/.codebuddy/plugins/cache/<marketplace>/<plugin>/<version>` — https://www.codebuddy.ai/docs/cli/plugins-reference
+- CLI: `codebuddy plugin marketplace add <local dir> [--name <name>]`, `codebuddy plugin install <plugin>@<marketplace> [-s user]`, `codebuddy plugin uninstall <plugin> -y`, `codebuddy plugin list --json`; install records `installed_plugins.json` — same page and https://www.codebuddy.ai/docs/cli/plugin-marketplaces
+- Hooks: settings `~/.codebuddy/settings.json` `hooks` key; stdin `session_id`, `transcript_path`, `cwd`, `hook_event_name`, `tool_name`, `tool_input`, `tool_response`; PreToolUse output `hookSpecificOutput.{permissionDecision, permissionDecisionReason, modifiedInput}` (no `updatedInput`); PostToolUse `additionalContext`; tools `Bash`, `Read`, `Edit`, `Write`, `Grep`, `Glob` — https://www.codebuddy.ai/docs/cli/hooks
+- MCP: user file is the first existing of `~/.codebuddy/.mcp.json`, `~/.codebuddy/mcp.json`, `~/.codebuddy.json` (created as `.mcp.json`), `mcpServers.<name>.{type, command, args}` — https://www.codebuddy.ai/docs/cli/mcp
+- `CODEBUDDY_CONFIG_DIR` moves the config and data dir — https://www.codebuddy.ai/docs/cli/env-vars
+- **unverified** (https://github.com/lorelum/lorelum/issues/205, WorkBuddy 5.5.6 on Windows): the WorkBuddy app embeds the CodeBuddy Code CLI and keeps its registry in `~/.workbuddy`, so `CODEBUDDY_CONFIG_DIR=~/.workbuddy codebuddy plugin …` installs into WorkBuddy. WorkBuddy's own docs (https://www.codebuddy.ai/docs/workbuddy/Changelog, 5.7.6) do not mention plugins or hooks.
+
+
+### T560.1. `--host codebuddy` hook dialect and `plugins/codebuddy/` tree
+
+Part of T560 (CodeBuddy Code and WorkBuddy host; the parent card remains in `plan.md`, and T560.2 is completed below). CodeBuddy Code sends Claude's stdin and reads Claude's output envelope, except that a PreToolUse rewrite travels as `hookSpecificOutput.modifiedInput` (https://www.codebuddy.ai/docs/cli/hooks, checked 2026-10-11).
+
+Do (2026-10-11): `dispatch_owned_strict` gets a `codebuddy` branch; `codebuddy_output` renames `updatedInput` to `modifiedInput` and passes decisions, context and `{}` through. No input adapter (stdin is already Claude's shape). `plugins/codebuddy/`: `.codebuddy-plugin/plugin.json` (version kept by `tools/plugin-versions.sh`) and `marketplace.json` (marketplace `rtok`, plugin `rtok`, source `./`), `hooks/hooks.json` with the `rtok-hook` → `rtok hook` → `scripts/hook.sh` chain, all with `--host codebuddy` and `${CODEBUDDY_PLUGIN_ROOT}`, `.mcp.json` → `rtok mcp --host codebuddy`, README with `## Docs`. The events are `codebuddy` rows in `HOOK_EVENTS` that mirror Claude's: PreToolUse `Bash`/`Read`/`Skill`, PostToolUse `*`, UserPromptSubmit, SessionStart, PreCompact, PostCompact, SessionEnd. SubagentStart is left out because the hooks page names it without an input/output section. T560.2 completed the installer: those rows now set `installer = true`.
+
+Check result (2026-10-11): unit tests for the output rename and an end-to-end PreToolUse dispatch; `tests/codebuddy_plugin.rs` pins the manifest, marketplace, exact `.mcp.json`, hook commands, and runs the commands against `rtok-hook`/`rtok` shims and the missing-rtok fail-open; `hook_manifests`, `host_docs`, `plugin_versions` green; `just check`.
+
+### T560.2. `codebuddy` host installer (CodeBuddy Code CLI + WorkBuddy Desktop)
+
+Do (2026-10-11): `src/agents/codebuddy/{mod.rs,README.md}`, registered in `HOSTS`, `agent_by_id`, MCP surfaces, `junk_map`, `restart`; `[setup.codebuddy] dir` (`~/.codebuddy`) and `workbuddy_dir` (`~/.workbuddy`) through the one config module. Variants: CLI (`codebuddy` on PATH) and Desktop (WorkBuddy app). `--yes` runs `codebuddy plugin marketplace add <resolved plugins/codebuddy> --name rtok` then `codebuddy plugin install rtok@rtok -s user`, with `CODEBUDDY_CONFIG_DIR` for WorkBuddy or a relocated CLI dir (**unverified** that WorkBuddy shares the registry); remove runs `codebuddy plugin uninstall rtok@rtok -s user -y`; `installed()` looks for `"rtok@rtok"` in `plugins/installed_plugins.json` (schema undocumented), no spawn. Own files: `hooks` in `settings.json` from the `codebuddy` rows of `HOOK_EVENTS` (now `installer = true`), `mcpServers.rtok` in the first existing of `.mcp.json`, `mcp.json`, `~/.codebuddy.json` (JSONC, rest byte-for-byte). D21: while the plugin is installed the settings.json hooks are taken back. D33: MCP is always the host-file entry, so `plugins/codebuddy/.mcp.json` from T560.1 was removed (it would have started a second rtok server). `claude::command_for`/`is_ours_for` shared with Devin; `codex_probe` generalised to `cache_probe` with a codebuddy probe. Not done: `update` does not reinstall the plugin, `remove` leaves the `rtok` marketplace registered, no skill sync, the fake-CLI e2e is unix-only.
+
+Check result (2026-10-11): `agents::codebuddy` units (detection, MCP file choice, foreign content byte-identical, singleton, offer text), `tests/codebuddy_host.rs` fake-CLI e2e, `codebuddy_plugin`, `hook_manifests`, `singleton`, `surface_parity`, `config_coverage`, `host_docs`, `cli_trycmd`; full suite green in CI on PR #987 (local disk was full).
+
 ### T100. `rtok agents install grok` and the Read path under Grok
 
 Do (2026-09-22): a `grok` host in `src/agents/grok/` (Kimi's "the host's own installer owns the state" shape, T86). Detection: `grok` on PATH plus `~/.grok/bin/grok` / `$GROK_HOME/bin/grok`. `support("plugin")` is an `Offer("--yes")` whose line prints `grok plugin install <resolved plugins/grok> --trust`; `installed()` reports `plugin` from the `~/.grok/plugins/rtok` marker (the copy `grok plugin install --trust` writes — `grok plugin list --json` reports the same state, the marker answers without spawning). While the plugin is absent, `[mcp_servers.rtok]` lands in `~/.grok/config.toml` via `toml_edit` (`[setup.grok] config_path`). D21 singleton, both halves: the plugin is the unit (its hooks + `.mcp.json` — an earlier `[mcp_servers.rtok]` is taken back, never added beside it), and while Grok's `[compat.claude]` import (default on) already fires rtok's Claude hooks/MCP — the FILES `~/.claude/settings.json` / `~/.claude.json`, never Claude's plugin (`claude::files_serve_rtok`, extracted so both sides read one helper) — setup says so instead of adding a second set. `docs/agents.md` blessed; `src/agents/grok/README.md` with `## Docs`.
@@ -1633,6 +2177,76 @@ Plan: one `READY = { timeout: 10_000 }` in the story file; pass it to every `fin
 Check: `npx vitest run --project storybook src/pages/GraphOverview.stories.tsx` (from `web/`) several times under load; `just check`, `just spa-stories`, `just spa-e2e`.
 
 Result (2026-10-05, Claude Code / opus-5.5): one `READY = { timeout: 10_000 }` in `web/src/pages/GraphOverview.stories.tsx`, passed to every `findBy*`/`waitFor` in both play functions (the canvas-drawn wait drops its own 8 s). Before the click, "Webgl Draws And Click Selects" waits until `screenOf(2)` reads the same rounded pixel twice in a row, so the click lands on the sphere the layout and the camera fit already placed. Reproduced first: the full story suite failed 3 of 3 runs at load average 106-135 (both stories, 1013-1058 ms, `node-2d` and `graph-3d` not found); after the change the full suite passed 5 of 5 and the file alone 5 of 5 at load average 47-78 (lower than the failing runs, but inside the 15-250 band the flake was reported in). Fail-fast kept: with a wrong node count and a missing name the two stories fail at 10.0 s and 12.5 s instead of hanging. `just check`, `just spa-stories` and `just spa-e2e` green.
+
+### T416.1. rtok renders previews through `change-preview`
+
+Replace `render::unified_diff`, `render::file_diff`, `render::paint` and `info::human_bytes` with the crate (call sites: `config/mod.rs`, `config/validate.rs`, `plugins/memory/sync.rs`, `plugins/read/cache.rs`, `doctor/fix.rs`, `agents/mod.rs`, `agents/junk.rs`, `worktree/list.rs`, `worktree/clean.rs`). No output changes: the trycmd and installer tests stay byte-identical. Drop `similar` from `Cargo.toml` if nothing else uses it.
+
+Check: `just check` green with no expected-output file touched.
+
+Result: `src/diff.rs` and `bytes::human_bytes` are gone; `change_preview::{paint, unified_diff, human_bytes}` are called directly (config crate's private diff copy dropped too), `similar` left every `Cargo.toml`. `render::file_diff` stays as a three-line `paint(unified_diff(..))` because the crate has no one-call form. No expected-output file changed.
+
+### T416.2. Deletion commands: `--dry-run`, `--stat`, sizes and file counts
+
+`worktree clean`, `worktree gc` and `agents junk clear` keep dry run as the default and gain `--dry-run` (the same thing, said explicitly; conflicts with `--yes`) and `--stat`. Both modes print one `- path  size  N files` line per path plus the totals line, because a removal's line already is its stat; `--stat` is accepted so every preview command takes the same flags. `junk::disk_usage_until` counts files next to bytes; `--json` gains `files`.
+
+Check: trycmd cases for each command in default, `--stat`, `--dry-run --yes` (rejected) and `--json`; `just check` green.
+
+Result: `worktree clean`, `worktree gc` and `agents junk clear` take `--dry-run` (conflicts with `--yes`) and `--stat`; both print one `- path  size  N files` line per path and the totals line through `change_preview` (`src/removal_preview.rs`). `junk::Usage` counts `files` next to `bytes`; `--json` gains `files` (and `bytes` on `worktree gc`). trycmd covers the `--dry-run --yes` rejection and the `junk clear` cases; default, `--stat` and the git-backed clean/gc output are asserted in `tests/worktree.rs`.
+
+
+### T416.3. `--stat` on the commands that show a diff
+
+`config init`, `config set`, `memory sync`, `agents install`, `agents uninstall`, `agents update` and `doctor --fix` gain `--stat`: the per-file stat lines and the totals line instead of the diff. The default `--dry-run` diff ends with the same totals line.
+
+Check: trycmd cases for `--dry-run` and `--dry-run --stat` on `config set` and one installer; `surface_parity` and `config_coverage` green; `just check` green.
+
+Result: `config init`, `config set`, `memory sync`, `agents install/uninstall/update` and `doctor --fix` take `--stat` (requires `--dry-run`, or `--fix` on `doctor`); every default `--dry-run` diff now ends with the totals line. `src/stat_preview.rs` counts the diff lines for `change_preview`. Installers show one stat row per host (the step lines carry no path). trycmd: `config-set-stat`; `tests/agents_install.rs` covers the installer case.
+
+
+### T416.4. `--dry-run` for the destructive commands without a preview
+
+`worktree remove` (the worktree path, its branch and its size and file count), `completions install` and `completions uninstall` (the file diff), `graph projects remove` and `graph projects unlink` (the rows that would go). Out of scope, because they are easy to undo or change no files: `memory pin/unpin/retire/revise`, `agents send/status`, `graph projects add/select/link`, `demon *`, `otel flush`.
+
+Check: a test per command that the dry run changes nothing and prints the preview; `just check` green.
+
+Result: `worktree remove --dry-run` (path, size, files, branch fate; every refusal still applies; `--json` gains `bytes`/`files`), `completions <shell> --install|--uninstall --dry-run` (file diff), `graph projects remove --dry-run` (root, index rows, indexed files, link counts) and `graph projects unlink --dry-run`. Tests in `tests/worktree.rs`, `tests/completions.rs`, `tests/graph_projects.rs` plus five trycmd cases.
+
+### T404. Evaluate a local draft model that the cloud model only verifies
+
+Promoted from I-111 (Ivan, 2026-10-04). From `research.md` §16.3 #10: a local model drafts output and the cloud model verifies it, cutting cloud output tokens, which dominate cost on Fable (§2).
+
+Done means: a research pass first — which hosts and APIs allow a pre-filled assistant draft, which local models are fast enough on Apple Silicon, how verification is prompted — recorded in `research.md` with primary sources. Build only if the bench shows cost per passed task falls with the pass rate held; otherwise close with the finding.
+
+Check: the dated `research.md` section; the go/no-go recorded in this card's done entry.
+
+Result: closed with the finding, nothing built (`research.md` §38, sources checked 2026-10-11). Claude 4.6+ rejects a prefilled assistant message; OpenAI Predicted Outputs is unsupported with `tools`; 96 % of output is tool-call input, which a text draft cannot carry; the break-even needs an accept rate above 0.2 plus the verdict cost. Reopen only if a bench can show cost per passed task falling with the pass rate held. Not covered: Claude Code and Codex request paths, Ollama, any measured local-model pass rate.
+
+### T329.51. Graph page: maximise buttons for the two parts
+
+Left over from T329.32. A button on each part of the graph page (the explorer and the live canvas) maximises it to fill the page and restores; the choice follows the existing splitter and hide-toggle conventions (keyboard reachable, remembered or not as the splitter is). Web-only: the TUI has one pane per screen already.
+
+Check: maximising either part fills the page and restores; Escape restores; Vitest, stories (axe) and Playwright; `just check`.
+
+### T329.52. Graph page: metrics collapsed to a strip under 900 px
+
+Left over from T329.32. On screens narrower than 900 px the live part stacks below the explorer and its metrics collapse to a one-line strip (running, calls, saved) that expands to the full cards. Web-only.
+
+Check: under 900 px the metrics show as a strip that expands and collapses; at 900 px and above nothing changes; Vitest, stories (axe) and Playwright at 375 px; `just check`.
+
+### T329.53. Graph page: count-up animation of the live numbers
+
+Left over from T329.32. The numbers of the live cards count up to their new value over a short time and jump straight to it under `prefers-reduced-motion`; the final value is always the server's total, and an assistive-technology reader sees the final value only. Web-only.
+
+Check: a number counts up on a new frame and lands on the server's value; with `prefers-reduced-motion` it jumps; Vitest, stories (axe); `just check`.
+
+### T500. TUI: live calls extras (sparklines, outside-scope mark; folded-target counter moved to T561)
+
+D27 counterpart of T329.32 (creator 2026-10-10). The `rtok tui` live calls pane (`src/tui/live_calls.rs`) gains what fits a terminal: sparklines of the store buckets for the selected window, the "outside scope" mark on a call that crosses out of the scope, and, where the pane names call targets, the nearest-visible-ancestor counter for targets folded into a "+N more" group. Maximise, the collapsed strip and count-up stay web-only. Depends on T329.32 for the data and the wording.
+
+Depends on the T329.32 slice (done): the series is `CallsStore::spark(window, now)` in `src/web/calls_store.rs` (a `Spark { span_ms, calls, saved }` of `SPARK_SLOTS` = 30 slots, oldest first; "since open" covers the last 15 minutes, all the buckets keep). The page names the sparklines "calls over the last N min" and "tokens saved over the last N min" (N = `span_ms` in minutes) and puts them on its "calls" and "saved" cards. The "outside scope" mark is the text `outside scope` beside the project of a feed row whose project is not among the scope's project names; the scope is the project the page is drilled into, else the selected one, plus everything its links reach, and with no such project nothing is outside; a call with no project is never outside (the page's rule is `web/src/pages/graph3d/live/scope.ts`; the TUI needs its Rust equivalent over the registry rows, reusing `scopeOf` logic if one exists in Rust). The folded counter applies only in the one-project view when the cap left nodes out (`more` > 0): a call of the last 5 minutes (running or finished, not interrupted, in scope) whose target matches no drawn node counts on the drawn node whose path equals or is a directory prefix of the target (longest first), else on the "+N more" group; the page lists these as `{label} · {n} folded` under "folded calls". `tests/surface_parity.rs::live_extras_are_on_the_page_and_wait_for_the_tui` records the gap: it asserts the TUI pane lacks the wording, so T500 must turn it into a both-surface check.
+
+Check: the sparklines match the store buckets; an outside-scope call is marked; folded targets count on their nearest visible ancestor; `tests/surface_parity.rs` lists each item on both surfaces; `just check`.
 
 ### T427. The brand-copy test hashes only files whose size matches a brand file
 
@@ -8588,6 +9202,17 @@ Status: done 2026-10-08
 
 Model: Claude Code / claude-sonnet-5-5
 
+### T385.11. Deferred tool schemas and thinking replay
+
+optimization.md §5 (I-85, I-86). Per-wire handling for deferred tool schemas and replayed thinking blocks, only where the measurement in each idea shows a saving (I-86 was rejected at 0.03 % — re-measure before building).
+
+Check: per-wire tests and a dated bench row; `just check`.
+
+Result: dropped, nothing built. Measured 2026-10-11 on 1,722 Claude Code transcripts (window 2026-09-11 to 2026-10-11, 153,539 requests, 22.92 G input tokens; `research.md` §37). I-85: 1,491 of 1,495 sessions (99.7 %) already defer MCP tools natively (404 `ToolSearch` calls against 4,631 MCP calls), and Anthropic and OpenAI both offer `defer_loading` server side; other hosts have no request bodies here, so no saving is claimed. I-86: the 0.0297 % of T125 was a measurement error (it counted the empty `thinking` text of omitted blocks, once per block). Replayed thinking is 11.5 % of input tokens (10.8 % to 12.4 %), 3.4 % of it from earlier turns, but dropping those nets only 1.1 % to 1.6 % of input cost after the cache re-creation each new turn causes (1.2 % of input plus output), against an unmeasured quality risk; a client-side edit is unsafe on accounts from 2026-08-31 (prefix check, 338 `thinking_drop` events in the window). If it is ever revisited, the only safe route is the server-side beta `clear_thinking_20251015` edit. `ideas.md` I-85 and I-86 are Rejected; the archive prefix-mismatch side finding is I-119.
+Status: done 2026-10-11
+
+Model: Claude Code / claude-sonnet-5-5
+
 ### T385.8. P28 Phase 1: measure what LLM compression could save
 
 optimization.md §3 (P28, I-21). Dated `research.md` rows: share of input that is archived tool output old enough to compress, and a must-keep fixture (identifiers, paths, numbers, errors that a compressor must not drop). No compressor yet.
@@ -8619,6 +9244,18 @@ optimization.md §2.2 L4 (roadmap S4). Inject `service_tier = "flex"` only on `b
 Check: mock upstream — omit/force/respect matrix and each 429 policy; `just check`.
 Result: `flex` is a column of `LanePolicy` (`[proxy.lanes.<lane>] flex`, `agent` always false) and `[proxy.flex]` has `force`, `on_429` (`none`/`backoff`/`default`), `retries` and `backoff_ms`. `src/proxy/flex.rs` splices an omitted `service_tier` in after the opening brace on the OpenAI wires only, respects any client value unless `force`, and `flex::send` retries a Flex 429 that rtok itself set, within bounds (at most 5 retries, delay capped at 30 s; `Retry-After` is not read). OpenAI Flex guide (https://developers.openai.com/api/docs/guides/flex-processing) checked 2026-10-08; it names no 429 error code, so the status alone identifies the capacity miss. 7 mock-upstream tests plus unit tests; `just check`: 2735 passed, 8 skipped. #836.
 Status: done 2026-10-08
+
+Model: Claude Code / claude-sonnet-5-5
+
+### T385.10. Routing for `internal` and `bulk` calls
+
+optimization.md §4.2 (D9, I-101). Route `internal` and opted-in `bulk` calls to a cheaper model or provider per the policy table; the `agent` lane is not routed.
+
+Check: dollars per lane before/after from `stats --price` on fixtures; `just check`.
+
+Result: `[proxy.routing]` (`enabled`, default `false`) holds one rule per lane, `[proxy.routing.bulk]` and `[proxy.routing.internal]`, with `from` (exact ids or a `prefix*`), `to`, `provider` and `gate`. A rule acts only with `from`, `to` and `gate` all set; `gate` names the operator's I-101 quality bench, which rtok cannot run or judge, so no rule ships and rtok claims nothing about quality. `Lane::route` returns a rule for `bulk` and `internal` only (never `agent`, `batch`, `files`, `embeddings`, `meta`). `src/proxy/route.rs` swaps the JSON `model` first in `shape_request`, before `record`, so `calls.model_id`, `usage.model` and (via `provider`) the provider slug name the serving model; a log row keeps `<from> -> <to>` and a `model_route` measurement row marks the call without claiming a token saving. Gemini names its model in the path and is not routed; a cross-provider rule pairs with `[proxy.lanes.<lane>] upstream`. `rtok stats --price` gains `cost by lane` (`cost.lanes` in JSON, from `Store::usage_by_lane_model_tier`; absent while all traffic is the agent lane). Fixture run (`tests/proxy_routing.rs`, mock upstream, one call per lane of 1 MTok in and 0.1 MTok out, shipped prices): agent $2.25 -> $2.25, bulk $2.25 -> $0.45, internal $2.25 -> $0.45 for `gpt-5` -> `gpt-5-mini`. Not done: the quality bench itself (needs real models and workload; the operator runs it and names it in `gate`). Config template, `docs/config.md`, `docs/model-routing.md`, `docs/batch-flex.md` (en, ru, uk) and trycmd snapshots updated. `just check`: 3337 tests run, 3336 passed on a full `cargo nextest run --workspace --no-fail-fast`; the one failure (`no_plan_ids`, plan ids in the config template comment) was fixed and re-run.
+
+Status: done 2026-10-11
 
 Model: Claude Code / claude-sonnet-5-5
 
@@ -8696,6 +9333,15 @@ Result (2026-10-07, creator decision): D33/T275 wins. Install and update keep wr
 
 Status: done 2026-10-07
 Model: Claude Code / claude-opus-5-5
+
+### T275.2. Command Code writes rtok's MCP entry on every install and update
+
+The last host that still applied the old D21 singleton to MCP (found by scanning every host's `apply` / `installed` after PRs A-E and Command Code's later arrival): `commandcode/mod.rs` skipped `register_mcp` while the plugin was linked (`plugin_is_mcp`), `offer_plugin` stripped `mcpServers.rtok` on the run that linked the plugin, and `installed()` reported `mcp` whenever the plugin was ours. D33 says install and update always write the entry and only `remove` takes it out. Command Code was also missing from `src/agents/mcp.rs` `surfaces()`, so `agents info` and `rtok doctor` never checked its `mcp.json`.
+
+Result: install and update write `mcpServers.rtok` in `~/.commandcode/mcp.json` behind `[setup] mcp`, plugin linked or not; remove takes it out; a linked plugin no longer strips it; `installed()` reports `mcp` only from the config entry (`mcp::has_entry`); `surfaces()` has a `commandcode` row; the README plugin row and the plugin tree README no longer claim the singleton, and `plugin_surfaces` drops `Mcp` (the linked tree registers no server; `scripts/mcp.sh` is a by-hand command), so `tests/singleton.rs` stops counting it as a second server. `plugin_is_mcp` and the stripping `offer_plugin` are deleted. Tests: plugin linked plus install and update keep the entry next to a foreign server, remove takes it out with the plugin linked, the plugin alone does not read as `mcp`, a user-edited entry is left by remove, and the surface row exists.
+
+Status: done 2026-10-11
+Model: Claude Code / sonnet-5.5
 
 ### T332. Investigate: rtok's own MCP duplicate: T331 keep rule vs D33/T275
 
@@ -8917,6 +9563,21 @@ Check run: `just check` (full gate, `.config/nextest.toml` is a shared input) gr
 
 Status: done 2026-10-10
 Model: Claude Code / sonnet-5.5
+
+### T528. Codex runs rtok's read-only MCP tools without an approval prompt
+
+Found 2026-10-11 in the Codex Desktop rollout `~/.codex/sessions/2026/10/11/rollout-2026-10-11T14-41-07-01a12ac4-….jsonl` (cwd `apps/cox`, approval policy `on-request`): all three `mcp__rtok__read` calls the main thread made from code mode failed with `MCP tool call requires approval, but approval policy is never`, and the agent fell back to native reads. After the failure `~/.codex/config.toml` got per-tool `approval_mode = "approve"` for `tree`, `read` and `search` only; every other rtok tool still needed a prompt.
+
+Codex reads a server-wide `default_tools_approval_mode` in `[mcp_servers.<name>]`; codex-cli 0.162.1 accepts `auto`, `prompt`, `writes` or `approve` and refuses to load the whole config on any other value (checked 2026-10-11 in a scratch `CODEX_HOME`). `writes` asks unless the tool's `readOnlyHint` is true, `approve` never asks (openai/codex `codex-rs/core/src/mcp_tool_call.rs` `requires_mcp_tool_approval_for_mode`, commit 78a19f5, 2026-10-08). The creator wanted writing tools to keep asking, so `writes`, which needs the annotations.
+
+Done when: every rtok MCP tool that changes nothing a user or another agent sees carries `readOnlyHint = true`; the install (`rtok agents install codex`, also run by the plugin install and update) writes `default_tools_approval_mode = "writes"` in a new `[mcp_servers.rtok]` and adds it to an existing rtok-owned table that lacks the key. A value the user set is left alone. Remove still treats an entry carrying `"writes"`, or none, as rtok's own. The rest of the file stays byte-for-byte.
+
+Result: `to_tool` (`src/mcp.rs`) annotates the 28 tools in `READ_ONLY_TOOLS` (`agent_inbox` counts: it marks only the session's own messages read); the 13 writing ones (worktree add/remove/adopt, `agent_send`, `agent_status_set`, task writes, `mem_save`, `mem_update`) carry none, and a test fails when a built-in tool is in neither list. `insert_ours` (`src/agents/codex/mod.rs`) writes the key in a new entry and adds only that key to an owned entry without it (per-tool `[mcp_servers.rtok.tools.*]` tables survive); a user value is `no changes`. `strip_ours` drops our `"writes"` before `judge_owned`, so entries from before and after T528 are both removed as rtok's. `plugins/codex/README.md` says so; `tests/trycmd/mcp.toml` shows the annotations.
+
+Check: `every_tool_is_read_only_or_writing_and_only_read_only_ones_say_so` plus `agents::codex` 21/21; `tests/trycmd/mcp.toml` differs only by 25 `"annotations":{"readOnlyHint":true}`; `just check` green except one `deps` test that timed out at load average 50 and passed alone, then `just test` 3330 passed, 8 skipped.
+
+Status: done 2026-10-11
+Model: Claude Code / claude-opus-5-5
 
 ### T245. One tool call is processed once
 
@@ -9256,6 +9917,18 @@ Done: the page asks and the server answers, so the CLI and the page share one dr
 Result: `just fmt-check` and `just lint` pass; cargo nextest for `web::`, `plugins::graph::export`, `tui::exporter`, `surface_parity` and `cli_trycmd`: 81 passed; `just spa-typecheck`; `just spa-test` 423 passed; `just js`; `just spa-stories` 230 passed; `just spa-e2e` 33 passed.
 
 Deviations: the image of the live frame is not here (the card says part 2 only); the TUI half of D27 is T329.41, and `tests/surface_parity.rs` pins both halves.
+
+### T329.34. Graph page: caller names, store-wide totals and `live_*` config keys
+
+What is left of T329 §8b after T329.28 that needs the store or the config: a caller column that names the agent and host instead of the session id (the events carry only the session), "since `rtok web` started" read from the store instead of "since the page opened", and the `[plugins.graph] live_*` config keys read by the live part and documented in `docs/config.md` (en, ru, uk), through the one config module and types (T238).
+
+Check: the caller column shows the agent and host for a session of each known host and the session id otherwise; the "since `rtok web` started" totals equal the store's sums after a page reload; the config keys are read, validated and documented; Vitest, stories (axe), Playwright, Rust tests; `just check`.
+
+Done: the live reader (`web::live::Reader`, shared by the page and the TUI pane) resolves each session to `<host> <agent short id>` through `Store::agents_of_sessions`, falling back to `<host> <session>` from the `sessions` row and then to the bare session id; the caller column and its filter use that name. `LiveCalls` notes the newest `graph_events` id when the server starts and every new poller replays the stored events above it into the `CallsStore` (windows and feed included) before streaming, so a reload shows the same totals and the label reads "since start". `[plugins.graph]` gained `live_heat_window_s` (300), `live_max_events_per_s` (50) and `live_feed_rows` (200) in `rtok-config` (types, `default.toml`, range checks in `validate.rs`), documented in `docs/config.md` (en, ru, uk) with the command pages. The TUI live calls pane mirrors this from its own start (D27), so `tests/surface_parity.rs` checks both surfaces for replay and caller instead of recording a gap.
+
+Result: `just check` on the final tree passed (fmt, clippy `-D warnings`, jscpd, cargo nextest 3307 passed and 8 skipped, min-feature build); the first run failed in the min-feature build (`Store::session_row` was test-only) and `session_row` and `SessionRow` are now public. `just spa-typecheck`, `just js` and `just spa-stories` (230 passed) pass; `just spa-test` 425 passed with `--maxWorkers=2` (a default-parallel run had 5 timeouts at load average 38). `just spa-e2e`: 26 to 31 passed and 2 to 7 failed per run at load average 30 to 40, always among the hosts page, clear safe junk, 500-call burst, Compare and Export tests (the 500-call burst fails when its `rtok mcp` helper is killed by its own timeout); the same five fail with the main checkout's `rtok` binary (`RTOK_BIN`), so they are load, not this change; the graph live-call tests that read the caller column and the totals passed in every run.
+
+Status: done 2026-10-10 · Model: Claude Code / sonnet-5.5
 
 ### T329.41. TUI: graph export action
 
@@ -10415,6 +11088,17 @@ Result (2026-10-03, Claude Code / sonnet-5): 19 hosts write `rtok mcp --host <id
 Status: done 2026-10-03
 Model: Claude Code / claude-sonnet-5
 
+### T283. An agent learns its own rtok agent id
+
+An agent must know its id to report it, to claim worktrees and to message others. Epic; shipped in four PRs.
+
+Done: PR 1 (#449, 2026-09-28): the SessionStart/SubagentStart line `rtok agent id: <short> (full: <uuid>). ...` as a priority-10 offering inside the injection budget (none when `[agents] enabled = false`), `RTOK_AGENT_ID` exported through Claude Code's `CLAUDE_ENV_FILE` (cited in the `src/hooks/mod.rs` doc comment and `research.md` §26), and `rtok agents whoami [--json]`; T473 later made the CLI fall back to the host-session rule when `RTOK_AGENT_ID` is unset. PR 2 was split: T283.1 (MCP agent link at `initialize`, `rtok mcp --host`, MCP `whoami`, hook-less hosts register their own row), T283.2 (`--host <id>` in every host's MCP entry), T283.3 (the nearest-common-ancestor pid rule). The hook fixtures (line byte-stable but for the id, none when agents are disabled), the MCP e2e `whoami` tests and `tests/agents_whoami.rs` plus `tests/trycmd/agents-whoami.trycmd` cover the Check.
+
+Result: every step of the card is on main. The one open item, the creator's live probe that only confirms the doc-derived link rule per host, belongs to T281 (still in progress), which writes that table into `research.md` §26.
+
+Status: done 2026-10-11
+Model: Claude Code / claude-sonnet-5.5
+
 ### T285. Worktree claims: `rtok worktree add` hands the worktree to the calling agent; MCP `worktree_add`
 
 Depends on T282, T283. `rtok worktree add <task> [slug] --owner` exists (T158, `src/worktree/add.rs`) and prints the path, but the owner is free text and nothing links the worktree to an agent; `list` guesses the session from the last cwd seen (T154, `src/worktree/list.rs:174`).
@@ -11048,6 +11732,29 @@ Result: `render::with_loader` now wraps the pending-migration apply in `Store::m
 Status: done 2026-10-08
 Model: Claude Code / claude-sonnet-5-5
 
+### T276.1. `proc::ProgressRunner` core in `crates/rtok-sys`, first call sites in `worktree/git.rs`
+
+Split from T276 (migration plan step 1, 2026-10-11, D16): the `proc` module (`mod.rs` runner, `indicator.rs`, `parse.rs`) in `crates/rtok-sys` with `ProgressRunner` (`Capture`, `Stream`, `Inherit`, `Detached`; `.cwd()`, `.env()`, `.stdin()`, `.timeout()`, `.progress()`; `.run()` returns `std::process::Output`, `.spawn()` returns `std::process::Child`), `Progress::{Off, Unknown, Parse}`, the `Indicator` trait with `TtyIndicator` (indicatif, one shared `MultiProgress` on stderr) and `Hidden` (non-TTY stderr, `RTOK_NO_PROGRESS=1`, `proc::disable_progress()`), `proc::suspend`, and the `GitProgress` and `Percent` parsers. First migrated site: the shared `git` helper in `src/worktree/git.rs` (quick reads `Progress::Off`; `fetch`, `worktree add` and `worktree remove` get `fetching <branch>…`, `creating worktree…`, `removing worktree…`), which replaces the two outer `with_loader` calls of `worktree add/remove`. `indicatif` moves to `rtok-sys` (the root crate keeps it until T276.6). Not here: `Batch`/`Callback`, `CargoProgress`, `JsonLines`, the Windows shim (T276.2); `agents`/`doctor` helpers (T276.3), so nothing under `src/agents` changes.
+
+Check: parser tests on recorded `git` stderr; `Hidden` writes no bytes and a non-TTY run returns the same `Output` as `Command::output`; `TtyIndicator` switches from spinner to bar on the first measurable update; `suspend` runs its closure; timeout kills the child; `just check`.
+
+Result: `crates/rtok-sys/src/proc/` holds `ProgressRunner` (`Capture`, `Stream`, `Inherit`, `Detached`; `.cwd()`, `.env()`, `.stdin()`, `.timeout()`, `.progress()`; `.run()` returns `std::process::Output`, `.spawn()` returns `std::process::Child`), `Progress::{Off, Unknown, Parse}`, `TtyIndicator` over one shared `MultiProgress` on stderr and `Hidden`, `proc::suspend` and `proc::disable_progress`, and the `GitProgress` and `Percent` parsers. Nothing is drawn unless stderr is a terminal, `RTOK_NO_PROGRESS` is not `1` and `disable_progress` was not called (a pure function, tested). `rtok mcp` serving, `--call` and `--http` call `disable_progress`; `rtok mcp ping` does not. `src/worktree/git.rs` runs git through the runner: quick reads are `Progress::Off`; `fetch`, `worktree add` and `worktree remove` show `fetching <branch>…`, `creating worktree…` and `removing worktree <name>…`, replacing the outer `with_loader` calls of `rtok worktree add/remove`. `indicatif` is now also a dependency of `rtok-sys` (the root crate keeps its own until T276.6; the `rust.md` row already existed). Deviations from the epic card: the runner returns `std::process::Output` instead of a `Captured` struct; `git fetch` stays `--quiet` (no `--progress` yet, because its stderr feeds the error text), so the parsers are tested on recorded git lines and wait for T276.2 and later slices. A `.timeout()` kills only the child, not a grandchild that keeps the pipes open. `just check`: 3421 tests passed, 8 skipped (after one load-related flake in `agents_install::the_agent_alias_prints_what_agents_prints`, which passes alone and on the rerun); the min-feature build shows the two unused-import warnings of T487 that exist on `main`.
+
+Status: done 2026-10-11
+Model: Claude Code / sonnet-5.5
+
+
+### T276.2. `Batch`, `Progress::Callback`, `CargoProgress`, `JsonLines`, Windows shim in `proc`
+
+Split from T276 (migration plan step 1, 2026-10-11, D16): the rest of the runner API from the epic card. `ProgressRunner::batch(label, total, Unit)` and `Batch::step(msg)` (a bar over items with each command's spinner under it), `Progress::Callback`, the `CargoProgress` and `JsonLines` parsers, and the Windows `cmd /C` shim for npm-installed CLIs as a runner option (moved from `spawn_cli` and `mcp_command` when T276.3 uses it). First user: the `rtok worktree gc/clean` bar over worktrees. Depends on T276.1.
+
+Check: batch position/total tests on a hidden target; parser tests on recorded `cargo` output and JSON lines; `just check`.
+
+Result: `crates/rtok-sys/src/proc/` gains `ProgressRunner::batch(label, total, unit)` returning a `Batch` (`step(msg)` finishes the previous item and names the next, so the bar counts finished items and never passes its total; `finish()` clears it; `position()` and `total()` are readable). The bar is a `TtyIndicator::bar` on the shared `MultiProgress`, added before any command's spinner, so each command run for an item draws under it; off a terminal, or with `RTOK_NO_PROGRESS=1` or `disable_progress()`, it is `Hidden`. `Progress::Callback` takes a closure with the `ProgressParser` signature. `CargoProgress` reads cargo's `Building [==>   ] 120/300: crate` line (format recorded from cargo 1.98 with `CARGO_TERM_PROGRESS_WHEN=always`; `CargoProgress::ENV` carries the two env pairs that make cargo draw it into a pipe, since cargo draws it only on a terminal) and `JsonLines` reads `{"progress":{"pos","total","unit","msg"}}` through `serde_json` (new `rtok-sys` dependency, already in the workspace). `ProgressRunner::windows_shim()` runs a bare name or `.cmd`/`.bat` through `cmd.exe /D /C` on Windows only; `needs_cmd_host` moved from `src/doctor.rs`, which now calls it (`stdin` is stored and applied at run time so the shim can rebuild the command). First users: `rtok worktree gc --yes` shows a bar over the worktrees it removes and `rtok worktree clean --yes` over the caches it deletes, each only when more than one item goes (one keeps its single spinner); stdout and non-TTY stderr are unchanged (an integration test asserts empty stderr). Not here: `spawn_cli` and `mcp_command` still build their own commands (T276.3).
+
+Status: done 2026-10-11
+Model: Claude Code / sonnet-5.5
+
 ### T436.1. Web: a spinner on every action the user waits for, and operation icons like ketch's
 
 Creator request 2026-10-07: the same as T436, in the `rtok web` SPA. Only page loads showed a spinner; the plugin switch, project select/link, doctor plan/apply and Calls expand only disabled their buttons.
@@ -11257,6 +11964,266 @@ Result: the rule line is a new skill, `skills/rtok-tasks/SKILL.md`, added to `SK
 Status: done 2026-10-08
 Model: Claude Code / claude-sonnet-5-5
 
+### T441.13.1. Task field on agent messages (F8)
+
+First item of T441.13 (`research.md` §28.4 F8): `rtok agents send --task <id>` and MCP `agent_send {task}` tag a message with a task id, so a thread about one task can be read apart from the rest. `agents inbox --task <id>` and `agent_inbox {task}` read only that task's messages. The frame names the task. A message without a task is byte-for-byte what it is today.
+
+Check: store, frame, CLI and MCP tests below pass; the trycmd help and completion goldens, `surface_parity` and `config_coverage` pass; `just check` green.
+
+Result: migration `0046_message_task` adds the nullable `messages.task`. `Store::send_message_on` takes the task and `Store::inbox_limited` filters by it; both parse it as a `TaskId` and keep the canonical upper-case text (`a12` and ` A12 ` become `A12`), and refuse anything that is not an id, so a task line in a frame cannot be forged. `send_message` and `inbox` keep their signatures. The frame gains a `Task: A12` line after the fixed note only when a task is set, and `Message` JSON skips an absent task, so existing output and `agents inbox --json` are unchanged. A filtered read marks only the messages it returned. The hook push (T288) frames through the same function and shows the task with no change of its own. Tests: `messages::tests` (canonical tag, filter marks only its thread, bad ids refused on both sides), `render` frame test, `tests/agents_messages.rs` and `tests/mcp_agent_messages.rs` cases; `--task` is exempt in `config_coverage` as a per-call selector like `--all-live`. Docs: `docs/agents-and-worktrees.md` with `docs/ru` and `docs/uk`.
+
+Status: done 2026-10-11
+Model: Claude Code / sonnet-5.5
+
+### T441.13.2. Conflict and parallel markers between tasks, disk adapter (F9)
+
+Second item of T441.13 (`research.md` §28.4 F9, CCPM semantics; creator decision 2026-10-11: disk adapter first, GitHub and GitLab later as T441.13.4). A task can name tasks it `conflicts_with` (they touch the same files, so two agents should not work on them at once) and carry a `parallel` flag (safe to run beside any other task). Conflicts are symmetric: marking A1 against A2 writes both files. `task list`, `task show` and `task ready` show both markers, and `ready` flags a task whose conflict partner is in progress without hiding it or refusing a claim.
+
+Check: `tests/task_cli.rs` (`conflict_and_parallel_markers_are_symmetric_and_flag_ready`), `tasks::ready::tests::a_conflict_with_a_task_in_progress_flags_the_ready_task_from_either_side`, `tasks::run::claim_tests::markers_are_symmetric_idempotent_and_refused_where_they_cannot_be_kept`, the disk round trip in `src/tasks/disk.rs`, the trycmd help cases, `surface_parity`, `config_coverage`, and `just check`.
+
+Result: `Task.conflicts_with` and `Task.parallel` (both left out of JSON when empty or false) are stored as front-matter keys on the disk adapter, sorted and deduplicated like `blocked_by`. `Project::conflict` writes both sides of the edge (peer first, then the task, only when something changed) and refuses a self-edge or a missing task; `Project::set_parallel` is the flag. `TaskAdapter::stores_markers` is false by default and true on disk, so a GitHub or GitLab project refuses the two commands by name instead of dropping the marker (T441.13.4 lifts that). `ready` finds in-progress partners from either side of the edge and reports them in `ReadyItem.conflicts_in_progress`; the task stays in the list and a claim is not refused. CLI `task conflict <id> <other> [--remove]` and `task parallel <id> [--off]`, MCP `task_conflict` and `task_parallel` call the same functions; `skills/rtok-tasks/SKILL.md` names both tools. Docs in `docs/tasks.md`, `docs/ru/tasks.md` and `docs/uk/tasks.md`.
+
+### T441.13.3. Task list id for the Claude Code session in a new worktree (F19)
+
+Third item of T441.13 (`research.md` §28.4 F19; creator decision 2026-10-11). `rtok worktree add <task>` writes `env.CLAUDE_CODE_TASK_LIST_ID=<project>-<task>` into the new worktree's `.claude/settings.local.json`, so Claude Code sessions started there share one task list. `<task>` is the worktree claim's task id; `<project>` is `project::project_name`. Sources, checked 2026-10-11: https://code.claude.com/docs/en/env-vars (`CLAUDE_CODE_TASK_LIST_ID`) and https://code.claude.com/docs/en/settings (`.claude/settings.local.json` and the `env` block).
+
+Check: `agents::task_list::tests` (new file with only our key, every other byte and comment of an existing file kept and the write idempotent, malformed file untouched, a foreign value or shape kept, nothing written where git does not ignore the file), `tests/worktree.rs` (`add_creates_one_locked_worktree_per_task_from_a_fresh_base`), and `just check`.
+
+Result: `src/agents/task_list.rs` is called by `rtok worktree add` and MCP `worktree_add` after the worktree exists (it lives under `agents` because `worktree` may not depend on it: `module_graph` forbids the cycle; the `WorktreeCreate` hook path does not set it). It reuses `agents::jsonc::upsert_member`, the byte-preserving editor `rtok agents install` uses for host configs, and `rtok_agent_sdk::write` for the atomic write; nothing new parses JSON. Fail open: a file that is not JSON, a root that is not an object, an `env` that is not an object, or a different id the user already set is warned about and left untouched, and `worktree add` still succeeds. The file is written only when `git check-ignore` says the repository ignores it (this repository ignores `.claude/`), because an untracked file would also make `worktree remove` refuse the worktree as dirty; otherwise a warning says why nothing was set. Docs in `docs/agents-and-worktrees.md` and `docs/ru|uk`.
+
+Status: done 2026-10-11
+Model: Claude Code / claude-sonnet-5-5
+
+### T441.13.4. Conflict and parallel markers on GitHub and GitLab (F9 follow-up)
+
+Follow-up of T441.13.2, which stores the markers on the disk adapter only. Store `conflicts_with` as `rtok:conflicts:<id>` labels and `parallel` as an `rtok:parallel` label through `src/tasks/meta.rs` (the same managed-label path as `rtok:needs:` and `rtok:p:`), read them back in the GitHub and GitLab issue-to-task mapping, drop the T441.13.2 refusal for these adapters (`stores_markers` true), and keep a user's own labels untouched. Done when `task conflict` and `task parallel` work on both with the recorded HTTP fixtures, `list`/`show`/`ready` show the markers, and `just check` passes.
+
+Check: the recorded HTTP fixtures for both adapters pass and `just check` is green.
+
+Result: GitHub and GitLab store `conflicts_with` as `rtok:conflicts:<id>` labels and `parallel` as `rtok:parallel`, through the managed-label path in `src/tasks/meta.rs` (`read_meta` now returns a `Meta` struct; `is_managed`, `managed_for` and `merge_labels` cover both labels). Both adapters read the markers back in the issue-to-task mapping and report `stores_markers() == true`, so `task conflict` and `task parallel` work there and `list`, `show` and `ready` show them; other adapters still refuse. A user's own labels are kept. Tests on mock-server responses in `src/tasks/github.rs` and `src/tasks/gitlab.rs` (exact save bodies, read-back, symmetric `Project::conflict`, user-label survival) and a round-trip test in `meta.rs`; the "Disk adapter only" help text is gone from the CLI, MCP and goldens; docs en/ru/uk.
+
+Status: done 2026-10-11
+
+Model: Claude Code / claude-sonnet-5-5
+
+### T441.13.7. Task board page in the web UI (F20)
+
+`research.md` §28.4 F20, creator go-ahead 2026-10-11 (it was under T441 §13 "Out of scope"). A read-only board in `rtok web`: one column per status (open, in progress, done, closed), a card per task with id, title, parent, the `needs`/priority/conflict/parallel markers and the external link, for the project the page is opened for. Data comes from the same adapter and JSON shape as `rtok task list --all --json`; nothing on the page writes tasks.
+
+Done when: the page lists the tasks of a fixture project in the right columns, works in dark and light themes at 375 and 1280 px, has a keyboard-navigable list view, and shows an empty state when the project has no `[tasks]` section.
+
+Check: the API route test, the SPA unit and story tests, `just spa-test`, `just js`, `just spa-stories`, `just spa-e2e`, `just check`.
+
+Result: `rtok web` has a read-only Tasks page (`g b`, Monitor group) and `rtok tui` a `tasks` tab, both fed by `src/model/tasks.rs`, which calls the same `Project::adapter().list(&filter(&[], true, None)?)` as `rtok task list --all --json` for the project the process runs in. One column per status; each card shows id, title, parent, assignee, the issue link (only `http(s)` links reach the page) and the priority/needs/conflicts/parallel markers; a keyboard-navigable list view with a detail panel and a filter box. A project without a `[tasks]` section gets an empty state pointing at `rtok task init`; an unreachable adapter is a message on the page. Done and closed are capped at the newest 50 each; disk is re-read every 5 s, remote adapters every 120 s, off the tick. The page rides the `/ws` snapshot like Usage instead of a separate `/api/tasks` route: the server has only `/health`, `/ws` and the SPA, the origin guard sits on `/ws`, and D23 parity needs the TUI body anyway. Config is read with `layers::load` (never writes a stray `config.toml`). Tests: 7 unit tests in `src/model/tasks.rs`, the TUI tab test, `web/src/pages/tasks.test.tsx`, 9 stories (dark/light, 375 px no-overflow, list, filter, empty, no `[tasks]`, reading, failed), e2e smoke and board tests; docs en/ru/uk; icon `brand/icons/ui/tasks.svg`.
+
+Status: done 2026-10-11
+
+Model: Claude Code / claude-sonnet-5-5
+
+### T441.13.5. GitHub Issues exporter for disk tasks (F11)
+
+`research.md` §28.4 F11, creator go-ahead 2026-10-11. A project on the disk adapter mirrors its tasks one way into GitHub Issues; the disk files stay the source of truth and the exporter never reads issues back into tasks. `rtok task export github [--dry-run] [--json]` creates a missing issue (title `<id>. <title>`, labels `rtok` and `rtok:<id>`, the managed labels from `meta.rs`), updates title, body and labels when they drift, and closes the issue for `done` (`completed`) and `closed` (`not_planned`). Config `[tasks.export.github] repo = "owner/name"`, token lookup and pacing from `src/tasks/remote.rs`, issue mapping reused from `src/tasks/github.rs`.
+
+Done when: a second run against the same state sends no write; `--dry-run` prints the planned creates, updates and closes and sends nothing; recorded HTTP fixtures (no live network) cover create, update, close and a re-run; `just check`.
+
+Check: the exporter's fixture tests, the trycmd help golden and `just check`.
+
+Result: `rtok task export github [--dry-run] [--json]` mirrors disk tasks one way into GitHub Issues through the `github` task adapter, so labels, `<id>. ` titles, sub-issue links and close reasons are exactly what that adapter writes (`GithubAdapter::save` now delegates to `patch`, and only the exporter writes title and body). `src/tasks/export.rs` holds the `Exporter` trait, the diff of disk tasks against the tracker, `run` and the report; `src/tasks/export/github.rs` is the backend; `[tasks.export.github] repo` in `crates/rtok-config`. A missing issue is created, drift in title, body, status, priority, assignee or blockers is patched, done closes as `completed`, closed as `not_planned`, an active task reopens; a finished task with no issue is skipped unless it is the parent of an active subtask. A re-run with nothing changed sends no write; errors name the backend, the task and the URL, never the token. Tests on httpmock: create then idempotent re-run, update, close, reopen, dry-run, in-progress labelling, failure message; `config_coverage`, `surface_parity`, `task_cli` and the trycmd goldens; docs en/ru/uk.
+
+Status: done 2026-10-11
+
+Model: Claude Code / claude-sonnet-5-5
+
+### T441.13.6. Linear exporter for disk tasks (F11)
+
+`research.md` §28.4 F11, creator go-ahead 2026-10-11 (the Linear part was under T441 §13 "Out of scope"). Second backend for the T441.13.5 exporter: `rtok task export linear` mirrors disk tasks one way into a Linear team through Linear's GraphQL API, finds earlier exports by a stable marker of the rtok id, updates drift, and moves `done`/`closed` tasks to the team's completed/canceled workflow state. Config `[tasks.export.linear] team = "<key>"`, token from `LINEAR_API_KEY`. Facts about the API are checked against Linear's own docs and cited in `research.md` with the date.
+
+Done when: same contract as T441.13.5 (idempotent re-run, `--dry-run`, recorded fixtures, no live network); `just check`.
+
+Check: the Linear fixture tests and `just check`.
+
+Result: `rtok task export linear [--dry-run] [--json]` mirrors disk tasks one way into a Linear team over its GraphQL API (`src/tasks/export/linear.rs`), with a personal key from `LINEAR_API_KEY` and the team key from `[tasks.export.linear] team`; an empty team is refused before any request. It reuses the T441.13.5 diff, so creates, updates, closes and reopens go out only on drift and a re-run sends no write. Status maps to the team's workflow state by type (open → `unstarted`, else `backlog`; in progress → `started`; done → `completed`; closed → `canceled`), labels follow the GitHub vocabulary and missing ones are created, a subtask becomes a sub-issue through `parentId`, and archived issues are listed so a re-run never duplicates. Conflict and parallel markers count as drift for both backends. `remote.rs`: the token error names only the variable when a provider has no CLI, and GraphQL `errors[0].message` is used even on a 400 (Linear's rate limit is a 400 `RATELIMITED`). API facts with URLs and the 2026-10-11 check date in `research.md` §35.5; the page size above 50 and Linear's description normalisation are marked unverified (if Linear rewrites descriptions, a task would show as an update on every run). Seven httpmock tests on hand-written fixtures in Linear's response shape (create plus re-run, update/done/closed/reopen, subtask and parent state, dry-run, GraphQL error in a 200, the 400 rate limit, a missing workflow state) plus two in `export.rs`; docs en/ru/uk.
+
+Status: done 2026-10-11
+
+Model: Claude Code / claude-sonnet-5-5
+
+### T441. Task adapters: agents create and track tasks through rtok, stored on disk, in GitHub or in GitLab (epic)
+
+Creator request 2026-10-07 (voice). Plan only: no code until the creator approves the design that comes out of T441.1. Approved 2026-10-07 after T441.1: own core (§12); the remaining §12 questions are settled in the subtask they affect. Every subtask below builds on the T441.1 research findings.
+
+Check: T441.1's findings are recorded in `research.md` and the creator approves the design; each later subtask closes only when its §10 tests and `just check` pass.
+
+#### Goal
+
+Agents in any project create, read and close tasks only through rtok (AirTalk). rtok intercepts task creation, hands out a unique task number from one allocator, and stores the task through the project's configured **adapter**: plain files on disk, GitHub Issues + Projects, or GitLab Issues. Many agents work in parallel, so numbering must never collide. When a task is done, the adapter archives it (disk) or moves it to a done state (GitHub/GitLab) so it no longer shows up in the plan.
+
+#### Terms
+
+- **Provider** — already taken in rtok: an upstream LLM API the proxy talks to (`src/proxy/anthropic.rs`, `openai_chat.rs`, `gemini.rs`). Not reused here.
+- **Adapter** — new: a task storage backend (`disk`, `github`, `gitlab`). One adapter per project, chosen in config. Lives in a new `tasks` module (or crate `crates/rtok-tasks`), never under `proxy`.
+- **Task** — `id`, title, description, status, optional parent. **Plan** — the list of tasks that are not done.
+- **Allocator** — the single per-machine component that hands out task ids.
+
+#### 1. Research (T441.1, first; everything else follows it)
+
+Findings so far (verified 2026-10-07; T441.1 finishes them with a short `research.md` section):
+
+| Prior art | Storage | IDs under parallel agents | Surface | Statuses | GitHub/GitLab sync | What we take |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Backlog.md](https://github.com/MrLesk/Backlog.md) | One Markdown file per task in `backlog/`, config `backlog.config.yml` | Sequential with a configurable prefix (`TASK-1`), subtasks `TASK-5.3`; allocation under `withCreateLock()`, counting other worktrees' uncommitted files (per repo) | CLI first (`backlog task create/list/edit`, `--plain`/`--json`), optional stdio MCP (`backlog mcp start`) over the same core ([MCP README](https://github.com/MrLesk/Backlog.md/blob/main/src/mcp/README.md)) | Configurable, default To Do / In Progress / Done; archive folder | None built in | Markdown-file disk layout, configurable prefix, one core with CLI + MCP as thin wrappers, `claude mcp add` / `codex mcp add` one-liners, agent instructions pointing at a workflow doc |
+| [Taskmaster AI](https://github.com/eyaltoledano/claude-task-master) | `.taskmaster/tasks/tasks.json` | Numeric per tag, subtasks `1.2`, `1.2.1` ([task structure](https://github.com/eyaltoledano/claude-task-master/blob/main/docs/task-structure.md)); read-modify-write of one JSON file under its own `.lock` file (`withFileLock`) | CLI `task-master list/show/set-status` and MCP `get_tasks`, `get_task`, `next_task`, `set_task_status`; tool tiers via `TASK_MASTER_TOOLS` to keep tool lists small | pending, in-progress, done, review, deferred, cancelled | None built in | Dotted subtask ids, `next` command, small default MCP tool set; avoid one JSON file per repo as the only state |
+| [beads](https://github.com/steveyegge/beads) | Dolt (versioned SQL) per repo | Hash ids (`bd-a1b2`) from content + time + creator + nonce, retried on collision, length grows with the DB ([FAQ](https://github.com/steveyegge/beads/blob/main/docs/FAQ.md)); hierarchical `bd-a3f8.1` | CLI `bd` with JSON output | open, in progress, blocked, closed | `bd github`, `bd gitlab`, `bd linear`, `bd jira`, … with pull/push/sync | The reason sequential ids fail across branches/machines; we keep human `R12` ids from one allocator but adopt its import + external-id mapping and "same id = update" rule |
+| [GitHub MCP server](https://github.com/github/github-mcp-server) | GitHub | GitHub's own per-repo issue number | MCP toolsets `issues` (`issue_read`, `issue_write`, `list_issues`, `sub_issue_write`) and `projects` (`projects_get/list/write`, needs a PAT with `project` scope) | open/closed + Project Status field | Native | The GitHub adapter can call the same REST/GraphQL endpoints; sub-issues map to `R2.1`; Projects need the `project` scope |
+| [Linear MCP](https://linear.app/docs/mcp) | Linear (hosted) | Linear's team key + number (`ENG-123`) | Remote MCP over Streamable HTTP at `mcp.linear.app/mcp`, `save_issue` create-or-update | Team workflow states | Native | Upsert tool shape (`save` with/without id); hosted ids keyed by a short team prefix, like our project prefix |
+| [Claude Code tasks](https://code.claude.com/docs/en/agent-sdk/todo-tracking) (TodoWrite; TaskCreate/TaskGet/TaskUpdate/TaskList) | Session or shared list (`CLAUDE_CODE_TASK_LIST_ID`, [env vars](https://code.claude.com/docs/en/env-vars)) | Host-internal | Built-in tools only | pending, in_progress, completed | None | Agents already think in these three statuses; our status names map 1:1 |
+| [Codex CLI `update_plan`](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/plan_tool.rs) | In-session only | None (whole plan resent each call) | Built-in tool | pending, in_progress, completed; one step in progress | None | Same status vocabulary; our tasks are durable and shared, theirs are a per-turn checklist — keep both, do not replace |
+| [AGENTS.md](https://agents.md/) | Markdown convention | — | — | — | — | Install writes a short `AGENTS.md`/`CLAUDE.md` rule: "create and update tasks only through `rtok task`" |
+
+Re-checked in T441.1 (`research.md` §35.1): Backlog.md and Taskmaster lock id allocation per repository and beads uses hash ids, and beads already syncs GitHub and GitLab. What none has is one counter per project shared by every checkout, worktree and agent host on the machine, served through the MCP server and CLI the agents already have — that is what rtok adds, and §12 asks whether it is worth building rather than adopting beads.
+
+T441.1 done means: the table above re-checked, plus answers to the open questions it can settle (GitLab work items API vs issues, GitHub sub-issues limits, rate limits), recorded in `research.md`; the design below adjusted to the findings.
+
+#### 2. Recommended architecture: one core, thin CLI and MCP front-ends
+
+- One core (`rtok_tasks`): domain types, allocator, adapter trait, the three adapters. No I/O policy in the front-ends.
+- **CLI** `rtok task …`: for agents that prefer shell (Codex CLI, Claude Code with Bash) and for humans and scripts. `--json` on every command.
+- **MCP**: new tools on the existing `rtok mcp` stdio server (no second server, no second install): `task_create`, `task_list`, `task_get`, `task_status`, `task_next`. Small tool set, like Taskmaster's core tier. Same JSON shapes as the CLI.
+- **Transport**: stdio for every host (Claude Code, Claude Desktop, Codex CLI, Codex app/IDE all speak it). No HTTP listener.
+- **Install/config** (through the existing `rtok agents install <host>`; entries already managed, host configs touched only at our entry):
+  - Claude Code: `claude mcp add rtok --scope user -- rtok mcp` (or the plugin).
+  - Claude Desktop: `claude_desktop_config.json` → `"mcpServers": {"rtok": {"command": "rtok", "args": ["mcp"]}}` (absolute path to `rtok`, since the app has no shell PATH).
+  - Codex CLI and Codex app/IDE share `~/.codex/config.toml`: `[mcp_servers.rtok]` `command = "rtok"`, `args = ["mcp"]` (or `codex mcp add rtok -- rtok mcp`).
+  - Every host: the AGENTS.md/CLAUDE.md rule line from §1.
+- **Many processes at once**: every Claude/Codex window spawns its own `rtok mcp` and CLI calls are their own processes, so there is no in-memory singleton. The singleton is the allocator state file under rtok's data dir guarded by an OS file lock (§5); all processes go through it. Optional later: route allocation through the existing hook resident (`src/hooks/resident.rs`) to save a lock round trip.
+
+#### 3. CLI commands (proposed names)
+
+- `rtok task create "<title>" [-d <text>|--body-file <path>] [--parent R2] [--status open]` → prints the id (`R12`, `R2.3`).
+- `rtok task list [--status open,in-progress] [--all] [--json]` → the plan (done tasks hidden unless `--all`).
+- `rtok task show <id> [--json]` → title, description, status, parent, subtasks, external link.
+- `rtok task status <id>` → prints status; `rtok task status <id> <open|in-progress|done>` → sets it (`done` triggers §8).
+- `rtok task next` → first open task without an open parent dependency.
+- `rtok task init [--adapter disk|github|gitlab] [--prefix R]` → writes project config.
+- `rtok task sync` → reconcile local cache/index with the adapter (GitHub/GitLab).
+
+#### 4. Data model
+
+- `TaskId { prefix: String, path: Vec<u32> }` — `R12` = prefix `R`, path `[12]`; `R2.1` = `[2, 1]`. Parse/print round-trip; case-insensitive input, canonical upper-case output.
+- `Task { id, title, description, status, parent: Option<TaskId>, created_at, updated_at, external: Option<ExternalRef> }`.
+- `Status { Open, InProgress, Done, Closed }`: `Closed` is "won't do"; both it and `Done` leave the plan (T441.2, `src/tasks/mod.rs`). Maps to Claude Code / Codex `pending/in_progress/completed`.
+- `ExternalRef { adapter, number_or_iid, url, node_id }` — the GitHub/GitLab issue the task lives in.
+- Allocator state: `{ project_key → { prefix, next_top: u32, next_sub: map<top, u32> } }`.
+
+#### 5. ID allocation
+
+- One allocator per machine: a Diesel table in rtok's existing store (T441.1, `research.md` §35.4). Allocation is one `exclusive_transaction` (read → increment → write); the store already runs WAL with `busy_timeout`, so it is atomic across processes and crash-safe on macOS, Linux and Windows without a second file or lock.
+- The project key is the `origin` remote as `host/owner/repo` (two clones share it), else the main checkout's path, never the prefix, so two projects with the same first letter keep separate counters (T441.3, `project::project_key`).
+- Prefix: first letter of the project name, upper-cased (rtok → `R`), overridable in config. Two projects with the same prefix are allowed (counters are per project) but `rtok task init` warns; a two-letter override is recommended for cross-project references.
+- Subtasks: `R2.1`, `R2.2` from the parent's own sub-counter; depth limit 2 at first.
+- Seeding: on `init` for an existing tracker the counter starts above the highest id already present (scan disk files / GitHub titles / labels).
+- GitHub/GitLab: the rtok id is ours, the issue number is theirs. Issue title is prefixed `R12. <title>` and carries label `rtok:R12`; `ExternalRef` stores the mapping. Never derive our number from theirs (PRs share GitHub's counter).
+- Different machines: one allocator per machine cannot stop two machines issuing the same `R13`. Adapter `create` checks for an existing `rtok:R13` and on conflict re-allocates past the highest remote id (GitHub/GitLab label search is the cross-machine source of truth). Open question whether that is enough.
+
+#### 6. Adapter trait
+
+```rust
+trait TaskAdapter {
+    fn create(&self, task: &NewTask, id: &TaskId) -> Result<Task>;
+    fn list(&self, filter: &Filter) -> Result<Vec<Task>>;
+    fn get(&self, id: &TaskId) -> Result<Option<Task>>;
+    fn set_status(&self, id: &TaskId, status: Status) -> Result<Task>;
+    fn archive(&self, id: &TaskId) -> Result<()>; // done flow, §8
+    fn max_id(&self, prefix: &str) -> Result<Option<TaskId>>; // seeding, collisions
+}
+```
+
+As built in T441.4 (`src/tasks/adapter.rs`): `archive` is folded into `write_status` (done/closed archive), and the free `set_status` guards parents for every adapter.
+
+Sync and blocking HTTP is fine for a CLI; errors carry the adapter name and the external URL. No adapter shells out to `gh`/`glab` unless T441.1 decides to (token handling).
+
+#### 7. Adapters
+
+- **disk** (default, offline): one Markdown file per task under `tasks/` in the project, `R12 - <slug>.md` with a small front matter (id, status, parent) and the description as body, the Backlog.md layout. Writes are temp + rename. Optionally renders `plan.md`/`todo.md` rows in this workspace's format (open question).
+- **github**: issues via REST; status via a Projects v2 Status field (`Todo` / `In Progress` / `Done`) via GraphQL; subtasks as sub-issues (100 per parent; REST takes the sub-issue's database id). Token from `GH_TOKEN`, then `GITHUB_TOKEN`, then `gh auth token`; Projects need the `project` scope, and user-owned projects a classic token. Writes are paced (500 content-creating requests/hour, one per second). Config names the owner/repo and project number; field and option ids are looked up once and cached.
+- **gitlab**: issues via REST v4 (`/projects/:id/issues`), done = closed. Subtasks are tasks under the issue, linked through the GraphQL work item hierarchy (REST has no parent field). Status: native Status through GraphQL on Premium/Ultimate 18.4+, else a `status::in-progress` label the adapter swaps itself (scoped labels are Premium too). Token `GITLAB_TOKEN`, scope `api`; self-hosted base URL in config.
+
+#### 8. Done / archival flow
+
+`rtok task status R12 done` (or MCP `task_status`):
+- disk: file moves to `tasks/done/` (or is appended to `done.md` and removed), so `list` never returns it again.
+- github: Project Status → `Done` and the issue is closed (`state_reason: completed`); `list` filters done out.
+- gitlab: issue closed, status label set to done.
+- Parent with open subtasks cannot be done (error lists them) unless `--force`. The id is never reused.
+
+#### 9. Config
+
+Project `.rtok.toml` (rtok's own TOML, schema from types, one config module — T238; the `[tasks]` section landed in T441.2):
+
+```toml
+[tasks]
+adapter = "github"        # disk | github | gitlab
+prefix = "R"              # default: first letter of the project name
+[tasks.disk]
+dir = "tasks"
+[tasks.github]
+repo = "pyrlyn/rtok"
+project = 7               # Projects v2 number; optional
+[tasks.gitlab]
+url = "https://gitlab.com"
+project = "group/name"
+```
+
+#### 10. Tests to write
+
+- `TaskId` parse/print round-trip, ordering, invalid input.
+- Allocator: N processes × M allocations in parallel (spawned test binaries) → all ids unique and dense; crash between write and rename leaves a valid state; lock timeout reports clearly.
+- Two projects with the same prefix keep separate counters; seeding starts above the existing max.
+- disk adapter: create/list/get/status/archive on a temp dir; done tasks never listed.
+- github/gitlab adapters against recorded HTTP fixtures (no live network in CI, no real agents in tests): create maps title/label, status moves the Project field, done closes; collision re-allocation.
+- CLI ↔ MCP parity: same inputs give the same JSON.
+- Install: host config entries for Claude Code, Claude Desktop, Codex stay byte-for-byte except our entry.
+
+#### 11. Milestones
+
+1. **T441.1 Research** — finish §1, record in `research.md`, settle what it can of §12, adjust this card.
+2. **T441.2 Core types** — `TaskId`, `Task`, `Status`, config section; unit tests.
+3. **T441.3 Allocator** — locked file (or Diesel table), project key, prefix rule, subtask counters, seeding hook; the parallel-process test.
+4. **T441.4 Adapter trait + disk adapter** — trait, disk layout, archive on done.
+5. **T441.5 CLI** — `rtok task create/list/show/status/next/init`, `--json`.
+6. **T441.6 MCP tools** — `task_*` on `rtok mcp`, parity test. The server entry is already what `rtok agents install` writes for every host, so the tools need no install of their own.
+7. **T441.7 GitHub adapter** — issues, sub-issues, label mapping, collision check. Done; Projects v2 Status split into T441.11, `sync` into T441.12.
+8. **T441.8 GitLab adapter** — done: issues, `status::` labels, close on done, self-hosted https URL, `relates_to` parent link (#819).
+9. **T441.9 Docs** — README/docs section in English with `docs/ru|uk` synced (CONTRIBUTING.md), `toolchain.md` for any new dependency.
+10. **T441.10 Instruction line** (split from T441.6) — the AGENTS.md/CLAUDE.md rule line from §1 installed through `rtok agents install`, host config entries byte-for-byte except ours (§10).
+11. **T441.11 GitHub Projects v2 Status** (split from T441.7) — done: new issues join the `[tasks.github] project` board and its Status follows the task (#817).
+12. **T441.12 `rtok task sync`** (split from T441.7) — done: counters raised to what the adapter holds, drift reported, the adapter never written (#820).
+13. **T441.13 Task-board extras** (from T405, creator 2026-10-10; `research.md` §28.4) — a `task` field on agent messages (F8); conflict and parallel markers between tasks (F9); an optional GitHub Issues or Linear exporter (F11); `CLAUDE_CODE_TASK_LIST_ID=<project>-<task>` set for the session (F19); a task board page via `dashboard_page` (F20). One subtask per item when claimed; F20 and F11's Linear part sit under §13 "Out of scope", so they need the creator's go-ahead at claim time. Creator go-ahead 2026-10-11 for both; split into T441.13.1 (F8), T441.13.2 and T441.13.4 (F9), T441.13.3 (F19), T441.13.5 and T441.13.6 (F11 GitHub, Linear), T441.13.7 (F20).
+
+#### 12. Open questions
+
+- ~~Build or adopt (from T441.1): beads already has hash ids, a CLI, an MCP server and GitHub/GitLab sync; Backlog.md has the Markdown layout and per-repo locked ids.~~ Creator decision 2026-10-07: build rtok's own core as this card designs it (human `R12` ids, one counter per project in the store, `rtok mcp` + CLI, disk/GitHub/GitLab adapters); no beads or Backlog.md dependency.
+- ~~AirTalk's own prefix: the creator's example is "AirTalk → R" (the binary is `rtok`); the product name starts with `A`. Keep `R` for this repo by override?~~ Creator decision 2026-10-07: `A` for this repo. T441.5's `rtok task init` writes `[tasks] prefix = "A"` into `.rtok.toml`; not committed earlier, since installed rtok builds older than T441.2 reject an unknown `[tasks]` table there.
+- ~~Allocator in a JSON file + lock or in rtok's SQLite store?~~ Settled by T441.1: the store (§5).
+- Is per-machine allocation plus the remote label check enough for several machines, or should GitHub/GitLab adapters allocate remotely (e.g. a counter issue)?
+- ~~Does `closed`/won't-do need its own status, distinct from `done`? T441.1: both providers have it natively (GitHub `not_planned`, GitLab "Won't do"), so it maps cleanly; recommended yes.~~ Creator decision 2026-10-07: yes, `Status::Closed` (T441.2).
+- Should the disk adapter also keep this workspace's `plan.md`/`todo.md`/`done.md` in sync, or replace them?
+- How are tasks that agents create outside rtok (directly in GitHub) adopted — import on `sync`?
+
+#### 13. Out of scope
+
+- Implementation before the creator approves the T441.1 outcome.
+- More adapters (Linear, Jira) — later, through the same trait.
+- A web UI page for tasks, dependencies beyond parent/child, assignees, priorities, LLM-generated task breakdowns (Taskmaster's PRD parsing).
+- An HTTP MCP transport or a hosted service.
+- Replacing hosts' built-in TodoWrite/`update_plan` checklists.
+
+Result: every milestone in §11 is done: T441.1 research (`research.md` §35), T441.2 core types, T441.3 allocator in the store, T441.4 adapter trait and disk adapter, T441.5 CLI, T441.6 MCP tools, T441.7 GitHub adapter, T441.8 GitLab adapter, T441.9 docs, T441.10 instruction line, T441.11 Projects v2 Status, T441.12 `rtok task sync`, and T441.13 split into T441.13.1 (F8 `task` on agent messages), T441.13.2 and T441.13.4 (F9 conflict and parallel markers on disk, GitHub and GitLab), T441.13.3 (F19 `CLAUDE_CODE_TASK_LIST_ID`), T441.13.5 and T441.13.6 (F11 GitHub Issues and Linear exporters) and T441.13.7 (F20 read-only board in `rtok web` and `rtok tui`). The three §12 questions still open (several machines, keeping `plan.md`/`todo.md`/`done.md` in sync from the disk adapter, adopting tasks created outside rtok) are parked as I-126 to I-128 in `ideas.md`.
+
+Status: done 2026-10-11
+
+Model: Claude Code / claude-opus-5-5
+
 ### T435. MCP refuses sibling worktrees when the server's cwd is another project
 
 Found 2026-10-06: after T351, `~/.rtok/errors.log` still logs `path outside cwd` for `_worktrees/rtok-<task>/…` paths from sessions working in `apps/rtok`, and subagents in task worktrees could not read their own files through `rtok read`. In Claude.app's Code tab the session's `rtok mcp` ran with cwd `apps/stator` (`tree` listed stator's files), so the session's own repository reached the server only as a `roots/list` root. T351 looked up worktrees only for the cwd's repository, so `apps/rtok` itself passed (client root) while its worktrees did not.
@@ -11266,6 +12233,19 @@ Done when: a path inside any worktree of the repository of a `roots/list` root i
 **Result (2026-10-06).** `roots::dynamic` in `src/plugins/read/roots.rs` lists the worktrees of the cwd and of every client root (each listing cached 30 s as before, looked up only after the cheap checks fail). `guard_accepts_sibling_worktree_and_client_roots` gains the case cwd = unrelated dir, client root = main checkout → the linked worktree is accepted and a scratchpad is not; it failed before the fix. `src/plugins/read/AGENTS.md` updated.
 
 Status: done 2026-10-06
+Model: Claude Code / claude-opus-5-5
+
+### T529. `read` of a host's own skill and instruction files outside the project
+
+Found 2026-10-11: Codex agents in `apps/cox` called `mcp__rtok__read` on `/Users/listepo/.agents/skills/worktrees/SKILL.md` and `/Users/listepo/.codex/RTK.md` (included by `~/.codex/AGENTS.md`); both were refused with `path outside cwd` (`src/plugins/read/mod.rs`, also twice in `~/.rtok/errors.log`), and the agent retried with native tools. The refusal named no way out.
+
+Done when: the refusal keeps its `path outside cwd: <path>` prefix and adds that the path is outside this project and its worktrees, so the agent should read it with the host's own file tool. The creator chose this over serving host skill directories (2026-10-11): the boundary stays as it is. Any path outside the project is still refused.
+
+Result: `resolve_with` appends `(outside this project and its worktrees; read it with the host's own file tool)`. Every caller that matches the `path outside cwd` prefix is unchanged.
+
+Check: `a_refusal_points_to_the_host_s_own_file_tool` failed before the change (no hint) and passes after; `plugins::read` 90/90; `just check` green: 3328 passed, 8 skipped.
+
+Status: done 2026-10-11
 Model: Claude Code / claude-opus-5-5
 
 ### T353. MCP parameter tolerance: `a,b` line ranges and missing-param errors

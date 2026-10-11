@@ -1,0 +1,19 @@
+bin.name = "rtok"
+args = "agents junk clear --dry-run --yes"
+status.code = 2
+stdout = """
+"""
+stderr = """
+error: the argument '--dry-run' cannot be used with '--yes'
+
+Usage: rtok agents junk clear --dry-run
+
+For more information, try '--help'.
+"""
+
+[env]
+inherit = false
+
+[env.add]
+HOME = "target/tmp/agents-junk-clear-dry-run-yes"
+RTOK_HOME = "target/tmp/agents-junk-clear-dry-run-yes"

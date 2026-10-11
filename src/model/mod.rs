@@ -14,6 +14,9 @@ pub use agents::{
     AgentState, AgentView, SessionView, agent_sessions, agent_show, session_views, set_status,
 };
 
+mod tasks;
+pub use tasks::{TaskBoard, TaskCard, TaskColumn, TaskLink, TasksPage, TasksState};
+
 use anyhow::Result;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
@@ -111,6 +114,9 @@ pub struct Snapshot {
     /// overview's own `usage` key is the proxy's totals, so this one carries the page's name
     /// in its own words.
     pub agent_usage: UsagePage,
+    /// Tasks page (T441.13.7): the project's `rtok task list --all` as a board, through
+    /// [`tasks::page`]. Read-only; the slow adapters are read off the tick.
+    pub tasks: TasksPage,
 }
 
 /// The Usage page: one [`usage::Report`] — the call `rtok agents usage` makes — read once and
@@ -410,6 +416,7 @@ pub fn pages() -> &'static [(&'static str, &'static str)] {
         ("services", "services"),
         ("worktrees", "worktrees"),
         ("usage", "agent_usage"),
+        ("tasks", "tasks"),
     ]
 }
 
@@ -1209,6 +1216,8 @@ impl<'a> Model<'a> {
             worktrees: worktrees_page_text(),
             // T358.5: logs are read off the tick — see `usage_page`.
             agent_usage: usage_page(self.cfg),
+            // T441.13.7: read off the tick — see `tasks::page`.
+            tasks: tasks::page(self.cfg),
         }
     }
 

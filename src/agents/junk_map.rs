@@ -165,6 +165,10 @@ pub fn specs(host: &str) -> Vec<Spec> {
             doc(Logs, "{home}/.local/share/devin/cli/logs"),
         ],
         "qwen" => vec![doc(Data, "{home}/.qwen")],
+        "codebuddy" => vec![
+            doc(Data, "{home}/.codebuddy"),
+            doc(Data, "{home}/.workbuddy"),
+        ],
         "vscode" => {
             let mut v = vec![doc(Data, "{xdg_config}/Code")];
             // Before `electron`, which lists the same folders read-only: the first spec wins.

@@ -9,6 +9,8 @@
 use std::fs::File;
 use std::io;
 
+pub mod proc;
+
 /// Block until an exclusive lock is held on `file`.
 pub fn lock_exclusive(file: &File) -> io::Result<()> {
     file.lock()

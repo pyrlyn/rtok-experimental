@@ -424,7 +424,10 @@ describe("diff requests", () => {
 
 describe("call stream", () => {
   const batch = (now: number) =>
-    ({ type: "calls", calls: { now, running: [], feed: [], windows: [] } }) as Frame;
+    ({
+      type: "calls",
+      calls: { now, running: [], feed: [], heat_window_s: 300, windows: [] },
+    }) as Frame;
 
   test("the first listener subscribes, the last one unsubscribes, a second shares the stream", () => {
     const s = scripted();

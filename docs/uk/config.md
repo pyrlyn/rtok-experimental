@@ -229,7 +229,20 @@ on_429              = "none"          # Flex has no capacity: none = the 429 goe
 retries             = 3               # backoff only: retries before giving up; at most 5
 backoff_ms          = 1000            # backoff only: delay before the first retry, doubled each time, capped at 30 s; a 429's Retry-After (seconds) can lengthen it, up to that cap
 
-[proxy.routing]                       # ключів ще немає (D9)
+[proxy.routing]                       # model routing; only the internal and bulk lanes, never the agent lane
+enabled             = false           # off: every call keeps the model the client sent
+
+[proxy.routing.bulk]                  # one rule per lane; it acts only with from, to and gate all set
+from                = []              # request models it applies to: an exact id or a prefix ending in * (empty = off)
+to                  = ""              # the model that serves a matching call (empty = off)
+provider            = ""              # provider slug recorded for a routed call (empty = the wire's own); pair with [proxy.lanes.<lane>] upstream
+gate                = ""              # where the quality bench for this swap is kept (a path, URL or run id); empty = off
+
+[proxy.routing.internal]              # same keys as bulk (rtok's own model calls)
+from                = []
+to                  = ""
+provider            = ""
+gate                = ""
 
 [web]                                 # rtok web (ті самі дані, що й у rtok tui)
 host = "127.0.0.1"                    # --host
@@ -427,6 +440,9 @@ config_path   = "~/.config/devin/config.json"  # mcp_config.json читаєть�
 mcp_path      = ""                               # порожньо: <Code user dir>/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json
 [setup.qwen]
 dir           = "~/.qwen"                    # settings.json (хуки, mcpServers); QWEN_HOME переносить каталог
+[setup.codebuddy]
+dir           = "~/.codebuddy"               # CodeBuddy Code: settings.json (хуки), .mcp.json, plugins/; CODEBUDDY_CONFIG_DIR переносить каталог
+workbuddy_dir = "~/.workbuddy"               # WorkBuddy Desktop: ті самі файли (вбудований CodeBuddy Code; неперевірено)
 
 [expand]                              # rtok expand <id>
 max_lines = 0                         # 0 = без обмежень (--lines a-b задається для виклику)
@@ -453,6 +469,12 @@ project = 0                           # номер Projects v2 власника 
 [tasks.gitlab]                        # мітки status::in-progress | status::done | status::wont-do; підзадача пов’язана з батьківською (relates_to)
 url = "https://gitlab.com"            # https базова URL; задайте для власного інстансу; токен: GITLAB_TOKEN, GITLAB_ACCESS_TOKEN, GL_TOKEN, інакше glab
 project = ""                          # group/name або числовий id; порожньо: remote origin
+
+[tasks.export.github]                 # `rtok task export github`: односторонньо віддзеркалити завдання з диска в GitHub Issues
+repo = ""                             # owner/name; порожньо: [tasks.github] repo, інакше remote origin
+
+[tasks.export.linear]                 # `rtok task export linear`: односторонньо віддзеркалити завдання з диска в Linear; токен у LINEAR_API_KEY
+team = ""                             # короткий ключ команди, наприклад "ENG"; порожньо: експорт не запускається
 
 [otel]                                # експорт OpenTelemetry (D19); вимкнено, доки не визначено endpoint
 endpoint      = ""                    # базова URL-адреса OTLP/HTTP, наприклад "http://localhost:4318"; "" = $OTEL_EXPORTER_OTLP_ENDPOINT
@@ -559,6 +581,9 @@ reference_depth = 3                   # T329.8: скільки рівнів по
 max_auto_projects = 20                # T329.8: найбільше проєктів, які посилання можуть додати до реєстру; досягнення межі показується й логується
 alerts = true                         # T329.17: сповіщати, коли проєкт області зник, недоступний, має збійний бекенд або зламане посилання маніфесту; показують rtok doctor, graph projects і відповіді graph
 health_check_interval_s = 60          # T329.17: секунд між перевірками здоров'я в rtok mcp і rtok web (сповіщення потребує двох поспіль); 0 = вимкнено
+live_heat_window_s = 300            # T329.34: секунд, скільки вузол лишається «теплим» на живому полотні графа після виклику (rtok web, rtok tui)
+live_max_events_per_s = 50          # T329.34: скільки подій викликів жива панель показує за секунду; лічильники рахують кожен виклик
+live_feed_rows = 200                # T329.34: скільки завершених викликів зберігає жива стрічка (1-1000)
 
 [plugins.toon]
 enabled  = true
@@ -656,8 +681,7 @@ bulk заповнює лише свою смугу й ніколи не затр
 `upstream`: створення, опитування й результати Batch-задачі завжди йдуть до провайдера, якому
 вона належить.
 
-Маршрутизації тут поки немає: вона з'явиться в цій таблиці власним кроком (`[proxy.routing]`
-нижче). Смуга `agent` не має перемикача `flex`: живий хід не змінює рівень, доки клієнт сам
+Смуга `agent` не має перемикача `flex`: живий хід не змінює рівень, доки клієнт сам
 його не попросить.
 
 ### `[proxy.batch]`
@@ -713,27 +737,52 @@ force = false
 on_429 = "backoff"
 ```
 
-### `[proxy.routing]` — заплановано (див. `docs/batch-flex.md`)
+### `[proxy.routing]`
 
-Таблиця існує і порожня: ключів поки немає. Ключі нижче — **задумані**; додавання будь-якого з них
-до робочого файлу конфігурації й надалі не проходить `rtok config validate`, доки не з'явиться
-відповідний крок. Переписування для маршрутизації — це майбутня робота над `prepare` / політиками.
-Повна семантика: [`docs/batch-flex.md`](batch-flex.md).
+Маршрутизація моделей (D9) переводить виклик на дешевшу модель, і лише там, де ризик для якості
+мінімальний: власні виклики rtok у смузі `internal` та смуга `bulk`, увімкнена явно
+(`docs/research/optimization.md` §4.2). Смуга `agent` не маршрутизується ніколи: живий хід іде
+на моделі, яку обрав оператор. `batch` і `files` теж ніколи не переписуються. Типово вимкнено,
+правил у поставці немає.
 
-#### `[proxy.routing]`
+| Ключ | Тип | Типово | Значення |
+|-----|------|---------|---------|
+| `enabled` | bool | `false` | Головний перемикач; вимкнений — кожен виклик іде на моделі, яку надіслав клієнт |
 
-| Ключ | Тип | Типово (задумано) | Значення |
-|-----|------|--------------------|---------|
-| `enabled` | bool | `false` | Маршрутизація моделей / рівнів (D9); вимкнено, доки немає політики + Check вимірювання |
-| `sticky` | bool | `true` | Віддавати перевагу одному upstream заради прив'язки кешу промптів провайдера (I-84); не стосується Batch проти Flex |
-| `default_model` | string | `""` | Порожньо = лишити `model` клієнта; інакше — запасна ціль переписування |
+У `[proxy.routing.bulk]` та `[proxy.routing.internal]` лежить по одному правилу. Правило працює,
+лише коли задано всі чотири ключі нижче; недописане правило нічого не робить.
+
+| Ключ | Тип | Типово | Значення |
+|-----|------|---------|---------|
+| `from` | список рядків | `[]` | Моделі запиту, до яких застосовується правило: точний id або id із `*` наприкінці як префікс (`claude-opus-*`). Модель поза списком іде як є |
+| `to` | string | `""` | Модель, яка обслужить відповідний виклик |
+| `provider` | string | `""` | Slug провайдера, що записується для маршрутизованого виклику, якщо `to` живе не в провайдера wire; `""` = провайдер wire |
+| `gate` | string | `""` | Де зберігається бенч якості для цієї заміни (шлях, URL або id запуску) |
+
+`gate` — це контроль якості I-101. Чи достатньо добре відповідає дешева модель — результат бенчу,
+а не те, що проксі може побачити, тому rtok вимагає від оператора спершу прогнати бенч на
+реальному навантаженні смуги й назвати його тут; сам він його не читає й не оцінює. Без `gate`
+правило вимкнене.
+
+Замінюється лише JSON-поле `model` (тіло серіалізується знову); Gemini вказує модель у шляху,
+який маршрутизація не переписує, тож виклик Gemini не маршрутизується ніколи. Заміна відбувається
+до запису виклику, тож `calls` і `usage` називають модель, що обслужила виклик (і `provider`,
+якщо задано), `rtok stats --price` оцінює смугу за ціною цієї моделі, а рядок журналу виклику
+зберігає модель, яку просив клієнт. Кожен маршрутизований виклик отримує також рядок виміру
+`model_route`; заощадження токенів він не заявляє, бо заощадження — це долари: порівнюйте
+`cost by lane` з `rtok stats --price` на тому самому навантаженні з вимкненою та ввімкненою
+маршрутизацією. Правило між провайдерами поєднуйте з `[proxy.lanes.<lane>] upstream` для шлюзу,
+що обслуговує `to`; rtok не перекладає між wire, тож `to` має бути моделлю, яку приймає API цього
+wire.
 
 ```toml
-# Заплановано — сьогодні не завантажується
 [proxy.routing]
-enabled = false
-sticky = true
-default_model = ""
+enabled = true
+
+[proxy.routing.bulk]
+from = ["claude-sonnet-*"]
+to = "claude-haiku-4-5"
+gate = "bench/bulk-haiku-2026-10.md"
 ```
 
 ### Ціни для статистики (`[stats.prices]`)
@@ -752,7 +801,10 @@ default_model = ""
 а не бере стандартну ставку. Виклики, які провайдер повідомив як обслуговані на Flex (`service_tier` у відповіді, записується в
 `calls.service_tier`), виводяться під `<model>@flex` і рахуються так само. `rtok stats` і `rtok report` додають таблицю
 `lane/tier` з лічильниками кешу, коли трафік ішов поза смугою agent або на рівні, відмінному від `standard` / `default`;
-виклик, у відповіді якого рівень не названо, друкується з `-`.
+Коли трафік пішов поза смугою agent, `--price` друкує ще й `cost by lane` (у JSON — `cost.lanes`):
+долари кожної смуги, де кожен виклик оцінено за моделлю, записаною для нього, тож виклик, переведений
+[`[proxy.routing]`](#proxyrouting), оцінюється за моделлю, що його обслужила. `*` позначає смугу,
+де була й модель без рядка ціни, тож її сума — нижня оцінка.
 
 ### Хост WASM-плагінів (`[plugins.wasm]`)
 
@@ -836,6 +888,7 @@ color = false   # RTOK_UI_COLOR=false
 | `agents whoami` | — | читає `RTOK_AGENT_ID` і знаходить його через сховище (T283); без ключа, без `setup.*` (`--json` — див. рядок «читання») |
 | `worktree whoami` | — | читає `RTOK_AGENT_ID` і `[worktree] root` (T411); власного ключа немає (`--json` — див. рядок «читання») |
 | `task init` | `--adapter`, `--prefix` | `tasks.adapter`, `tasks.prefix`: записуються в `.rtok.toml` цієї копії репозиторію (T441.5) |
+| `task export` | `--dry-run`, `--json` | `tasks.export.github.repo`, `tasks.export.linear.team` (T441.13.5, T441.13.6); `--dry-run` — на один виклик (без ключа) |
 | `task create` / `list` / `status` | `--description`, `--body-file`, `--parent`, `--status`, `--all`, `--force` | для одного виклику (без ключа): яке завдання і які рядки показати; адаптер і префікс вибирає `[tasks]` |
 | `agents junk list` / `clear` | `--agent`, `--kind`, `--include review`, `--older-than`, `--session-days`, `--trash`, `--bytes`, `--items`, `--sort`, `--min-size`, `--yes` | на один виклик (без ключа): що один запуск показує або видаляє; `--session-days` це `agents.junk.stale_session_days` на один запуск; `agents.junk.keep_logs_days`, `.temp_min_age_hours`, `.crash_dump_min_age_days`, `.stale_worktree_days`, `.exclude`, `.extra` без прапорця |
 | `agents usage` | `--source`, `--host`, `--since`, `--until`, `--daily` / `--monthly`, `--tz` | `agents.usage.source`, `.hosts`, `.since`, `.until`, `.period`, `.tz`, а також `.dirs.<host>` без прапорця (`--unpriced` обирає вигляд одного виклику, `--json` — див. рядок «читання») |

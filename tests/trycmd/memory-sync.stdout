@@ -7,6 +7,7 @@ Options:
       --file <FILE>      CLAUDE.md or AGENTS.md [default: CLAUDE.md]
       --budget <BUDGET>  Token budget; default `[plugins.memory] sync_tokens`
       --dry-run          Print the unified diff and write nothing
+      --stat             With --dry-run: stat lines and totals instead of the diff
       --remove           Delete the managed block and nothing else
       --force            Overwrite a hand-edited block
   -h, --help             Print help

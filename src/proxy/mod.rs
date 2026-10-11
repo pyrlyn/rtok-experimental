@@ -75,6 +75,7 @@ mod noise;
 pub use live::LiveCall;
 pub mod openai_chat;
 pub mod openai_responses;
+mod route;
 pub mod semantic_cache;
 pub mod tools_rewrite;
 pub mod wire;
@@ -647,6 +648,11 @@ fn shape_request(
 ) -> (Bytes, Option<Recorded>, bool, Option<flex::Retry>) {
     // Each rewrite below runs only when its global switch and this lane's switch are both on.
     let policy = lane.policy(&state.cfg.proxy.lanes);
+    // Before `record`, so the ledger names the model that serves the call (T385.10).
+    let route = lane
+        .route(&state.cfg.proxy.routing)
+        .and_then(|rule| route::apply(rule, &request_body));
+    let request_body = route.as_ref().map_or(request_body, |r| r.body.clone());
     let parsed = serde_json::from_slice::<Value>(&request_body).ok();
     let recorded = record(
         state,
@@ -654,9 +660,15 @@ fn shape_request(
         path,
         parsed.as_ref(),
         headers,
-        lane.kind(),
+        Tag {
+            kind: lane.kind(),
+            provider: route.as_ref().and_then(|r| r.provider.as_deref()),
+        },
         &request_body,
     );
+    if let (Some(route), Some(r)) = (route.as_ref(), recorded.as_ref()) {
+        record_route(state, r, lane, route);
+    }
     // From here on `request_body` is what upstream sees (and what `call_io` records).
     let compressing = state.mode == "compress" && policy.compress;
     let request_body = if compressing {
@@ -773,6 +785,45 @@ fn record_context_path(state: &ProxyState, r: &Recorded, request_body: &[u8]) {
     }
 }
 
+/// T385.10: a routed call is marked by a `model_route` row (both sizes the final body's, so
+/// no token saving is claimed — the dollars are the `usage` rows' at the served model's
+/// price), and the log row keeps the model the client asked for.
+fn record_route(state: &ProxyState, r: &Recorded, lane: lane::Lane, route: &route::Routed) {
+    let nbytes = route.body.len();
+    let est = (nbytes / 4).max(1) as u32;
+    let m = Measurement {
+        plugin: "proxy",
+        kind: "model_route",
+        before_bytes: nbytes as u64,
+        after_bytes: nbytes as u64,
+        est_before: est,
+        est_after: est,
+        ref_id: None,
+        call_id: Some(r.call_id),
+    };
+    if let Err(e) = state.store.insert_measurement(&r.session, &m) {
+        log(
+            state,
+            &r.session,
+            Some(r.call_id),
+            "error",
+            &format!("model route: {e:#}"),
+        );
+    }
+    log(
+        state,
+        &r.session,
+        Some(r.call_id),
+        "info",
+        &format!(
+            "model route on the {} lane: {} -> {}",
+            lane.name(),
+            route.from,
+            route.to
+        ),
+    );
+}
+
 /// T59.5: truncate / drop `tools[]` when enabled. Fail open; unchanged bodies keep original bytes.
 fn rewrite_tools(state: &ProxyState, original: Bytes) -> (Bytes, Option<tools_rewrite::Delta>) {
     if !state.cfg.proxy.tools_rewrite.enabled {
@@ -883,6 +934,13 @@ fn compress(
         .unwrap_or(original)
 }
 
+/// What `record` writes beside the request itself: the `calls.kind` (the lane) and, for a
+/// routed call, the provider slug the rule names instead of the wire's own (T385.10).
+struct Tag<'a> {
+    kind: &'a str,
+    provider: Option<&'a str>,
+}
+
 /// One request's bookkeeping: session, host, provider+model, and the `calls` row.
 fn record(
     state: &ProxyState,
@@ -890,9 +948,13 @@ fn record(
     path: &str,
     body: Option<&Value>,
     headers: &HeaderMap,
-    kind: &str,
+    tag: Tag,
     raw: &[u8],
 ) -> Option<Recorded> {
+    let Tag {
+        kind,
+        provider: provider_override,
+    } = tag;
     let session = session_for(wire, body, headers, raw);
     // The model slug: each wire knows where its own lives (Gemini's travels in the
     // path, not the body — T51.3). Unwired paths keep the old body lookup.
@@ -900,9 +962,11 @@ fn record(
         body.and_then(|v| v.get("model").and_then(Value::as_str))
             .map(str::to_string)
     });
-    let provider = wire
-        .map(Wire::provider)
-        .or_else(|| matches!(path, "/v1/chat/completions" | "/v1/responses").then_some("openai"));
+    let provider = provider_override.or_else(|| {
+        wire.map(Wire::provider).or_else(|| {
+            matches!(path, "/v1/chat/completions" | "/v1/responses").then_some("openai")
+        })
+    });
     let result = (|| -> Result<Recorded> {
         state
             .store

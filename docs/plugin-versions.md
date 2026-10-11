@@ -43,7 +43,7 @@ $ cat plugins/claude/.rtok-plugin-version
 | `version` | SemVer; equals the `Cargo.toml` version of the commit. An invalid version is an error naming the file. |
 | `source` | Optional, reserved for a local install (`github`, `local`, `marketplace`). Committed files never carry it. |
 
-Hosts with a file: `claude`, `codex`, `copilot`, `cursor`, `devin`, `gemini`, `grok`, `kimi`,
+Hosts with a file: `claude`, `codebuddy`, `codex`, `copilot`, `cursor`, `devin`, `gemini`, `grok`, `kimi`,
 `opencode`, `pi`, `zcode`. `cline` has no manifest of its own and `antigravity`'s manifest has no
 version field, so neither has one. The same version is written into every manifest's `version`
 field (`plugins/claude/.claude-plugin/plugin.json` and the rest), so a host that caches by

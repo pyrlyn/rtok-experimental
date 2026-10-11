@@ -37,7 +37,7 @@ impl LineReader {
 
     fn next_line(&self) -> String {
         self.rx
-            .recv_timeout(std::time::Duration::from_secs(10))
+            .recv_timeout(common::scaled(std::time::Duration::from_secs(10)))
             .expect("rtok mcp did not answer in time")
     }
 }
@@ -242,7 +242,14 @@ fn mcp_with_watcher_exits_on_stdin_eof() {
         "stderr {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(ms < 500, "mcp with watcher took {ms} ms to exit at EOF");
+    // The check is that EOF ends the watcher loop at all (it polls every 50 ms and used to be
+    // joined forever), not how fast a shared runner spawns and tears down threads: the old 500 ms
+    // wall-clock bound failed at 3355 ms on Windows CI (run 38073132494) with nothing wrong.
+    let bound = common::scaled(std::time::Duration::from_secs(5)).as_millis();
+    assert!(
+        ms < bound,
+        "mcp with watcher took {ms} ms to exit at EOF (bound {bound} ms)"
+    );
     let _ = std::fs::remove_dir_all(&home);
 }
 

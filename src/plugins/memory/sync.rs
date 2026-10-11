@@ -133,7 +133,8 @@ pub fn run(
     };
     let after = guarded_splice(&before, new_block.as_deref(), stored.as_deref(), force)?;
     if dry_run {
-        crate::log::stdout(&crate::render::file_diff(&path, &before, &after));
+        let diff = change_preview::unified_diff(&path, &before, &after);
+        crate::log::stdout(&crate::stat_preview::show_file(&path, &diff));
     } else {
         if after != before {
             rtok_agent_sdk::backup(&path, cfg.setup.backup_files as usize)?;

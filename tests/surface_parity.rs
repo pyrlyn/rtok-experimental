@@ -301,6 +301,10 @@ fn live_calls_view_exists_on_both_surfaces() {
         env!("CARGO_MANIFEST_DIR"),
         "/src/web/calls_store.rs"
     ));
+    let page_feed = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/web/src/pages/graph3d/live/CallFeed.tsx"
+    ));
     let pane = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/src/tui/live_calls.rs"
@@ -340,6 +344,20 @@ fn live_calls_view_exists_on_both_surfaces() {
     assert!(
         app.contains("(\"graph\", \"f\", \"freeze/unfreeze calls\")"),
         "the TUI's KEYS table documents the freeze key"
+    );
+    // T329.34: both surfaces count from their own start, replayed from the store by the one
+    // Reader, and show the caller names the Reader resolves.
+    assert!(
+        web_live.contains("r.replay(") || web_live.contains(".replay(since)"),
+        "the web poller replays the store since the server started"
+    );
+    assert!(
+        pane.contains("r.replay(") && pane.contains("live::head_of"),
+        "the TUI pane replays the store since the TUI started"
+    );
+    assert!(
+        pane.contains("r.caller") && page_feed.contains("r.caller"),
+        "both surfaces show the caller name, not the session id"
     );
 }
 
@@ -383,12 +401,11 @@ fn call_metrics_exist_on_both_surfaces() {
     }
 }
 
-/// T329.32 (D27): the live extras that fit a terminal exist on the page first, and T500 brings them
-/// to the TUI pane. The series is already shared (`CallsStore::spark`), so the pane only draws it.
-/// The pane assertions below are the recorded gap: T500 turns them into the same checks the page
-/// gets, with the wording the page chose.
+/// T329.32 and T500 (D27): the live extras that fit a terminal are on both surfaces, the sparklines,
+/// the `outside scope` mark and the folded-call counter. The series and the counter are the
+/// store's (`CallsStore::spark`, `folded_counters`), so the pane only draws them.
 #[test]
-fn live_extras_are_on_the_page_and_wait_for_the_tui() {
+fn live_extras_are_on_the_page_and_in_the_tui() {
     let root = env!("CARGO_MANIFEST_DIR");
     let read = |rel: &str| std::fs::read_to_string(format!("{root}/{rel}")).expect(rel);
     let page = [
@@ -400,17 +417,34 @@ fn live_extras_are_on_the_page_and_wait_for_the_tui() {
     .join("\n");
     let pane = read("src/tui/live_calls.rs");
     let pane = pane.split("#[cfg(test)]\nmod tests").next().unwrap();
-    for (wording, tui_pending) in [
-        ("over the last", "spark("),
-        ("outside scope", "outside scope"),
-        ("folded calls", "folded calls"),
+    let store = read("src/web/calls_store.rs");
+    // The wording is shared: the TUI takes it from the store's constants and functions, so each
+    // item is on the page as text and on the pane as a call into the same code.
+    for (wording, shared, tui_call) in [
+        ("over the last", "pub fn spark_label(", "spark_label("),
+        (
+            "outside scope",
+            "pub const OUTSIDE_SCOPE: &str = \"outside scope\"",
+            "OUTSIDE_SCOPE",
+        ),
+        (
+            "folded calls",
+            "pub fn folded_counters(",
+            "folded_counters(",
+        ),
     ] {
         assert!(page.contains(wording), "the page shows `{wording}`");
+        assert!(store.contains(shared), "the store defines `{shared}`");
         assert!(
-            !pane.contains(tui_pending),
-            "the TUI pane has `{tui_pending}` now: T500 moves `{wording}` into a both-surface check"
+            pane.contains(tui_call),
+            "the TUI pane uses `{tui_call}` for `{wording}`"
         );
     }
+    assert!(
+        pane.contains("folded calls"),
+        "the TUI names the counter like the page"
+    );
+    assert!(pane.contains(".spark("), "the TUI draws the store's series");
     let view = read("src/web/calls_view.rs");
     assert!(
         view.contains("store.spark("),
@@ -721,6 +755,26 @@ fn usage_page_exists_on_both_surfaces() {
     );
 }
 
+/// T441.13.7: both surfaces render the Tasks page from the one list `rtok task list --all` reads
+/// (`Project::adapter().list`): the tui shows its table, the SPA the same rows as a board.
+#[test]
+fn tasks_page_exists_on_both_surfaces() {
+    let tasks = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/model/tasks.rs"));
+    let Surfaces { model, tui, .. } = SURFACES;
+    assert!(
+        model.contains("(\"tasks\", \"tasks\")"),
+        "pages() offers tasks"
+    );
+    assert!(
+        tasks.contains(".list(&filter(&[], true, None)?)"),
+        "the one list lives behind the model (D23)"
+    );
+    assert!(
+        tui.contains("\"tasks\" =>"),
+        "the TUI renders the tasks page"
+    );
+}
+
 /// Reading commands and the page of the model they render: (command path, page). The
 /// page must be one `model::pages()` offers — a page both surfaces carry in the frame.
 /// The mapping is many-to-one: several commands may render the same page.
@@ -755,6 +809,8 @@ const COMMAND_PAGES: &[(&str, &str)] = &[
     // the Worktrees page rides the snapshot since T232, so `worktree list` renders it
     ("worktree list", "worktrees"),
     ("agents usage", "usage"),
+    // the Tasks page rides the snapshot since T441.13.7, so `task list` renders it
+    ("task list", "tasks"),
 ];
 
 /// The commands D27 exempts, each with its reason. Streaming commands print a stream,
@@ -875,10 +931,6 @@ const EXEMPT: &[(&str, &str)] = &[
         "allocates an id and writes a task through the adapter (T441.5)",
     ),
     (
-        "task list",
-        "reads the project's adapter, not the store snapshot (T441.5)",
-    ),
-    (
         "task show",
         "reads the project's adapter, not the store snapshot (T441.5)",
     ),
@@ -899,6 +951,10 @@ const EXEMPT: &[(&str, &str)] = &[
         "raises the store's id counters to the adapter's highest ids; agents get that for free, since task_create seeds first (T441.12)",
     ),
     (
+        "task export",
+        "a human's one-way mirror of the disk tasks into an issue tracker; it writes to a third party, so no agent tool (T441.13.5)",
+    ),
+    (
         "task ready",
         "reads the project's adapter, not the store snapshot (T442)",
     ),
@@ -911,6 +967,14 @@ const EXEMPT: &[(&str, &str)] = &[
     (
         "task priority",
         "writes a priority through the adapter (T442)",
+    ),
+    (
+        "task conflict",
+        "writes a symmetric conflict marker through the adapter (T441.13.2)",
+    ),
+    (
+        "task parallel",
+        "writes a parallel marker through the adapter (T441.13.2)",
     ),
     (
         "worktree add",
@@ -1116,6 +1180,8 @@ const JSON_READERS: &[&str] = &[
     "task release",
     "task dep",
     "task priority",
+    "task conflict",
+    "task parallel",
 ];
 
 fn command_at<'a>(root: &'a Command, path: &str) -> &'a Command {

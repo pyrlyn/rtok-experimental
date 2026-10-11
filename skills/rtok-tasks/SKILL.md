@@ -25,6 +25,9 @@ Tools (MCP, same shapes on the CLI with `--json`):
 - `task_release` (`rtok task release <id>`): give it back. Only the holder, unless `--force`.
 - `task_dep` (`rtok task dep <id> <blocker>`): `id` waits until `blocker` is done. A cycle
   is refused and nothing is written.
+- `task_conflict` (`rtok task conflict <id> <other> [--remove]`): same files, not at once;
+  `task_ready` flags it while the partner runs. Disk adapter only.
+- `task_parallel` (`rtok task parallel <id> [--off]`): safe beside any task. Disk only.
 - `task_priority` (`rtok task priority <id> <0-4>`): 0 is highest, 2 is the default.
 
 Run `rtok task init` once per project to choose the adapter (disk, GitHub or GitLab) and the id

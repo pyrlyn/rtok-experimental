@@ -271,6 +271,25 @@ fn list_reports_installed_modules_per_host() {
     }
 }
 
+/// T416.3: the default dry run ends with the totals line; `--stat` swaps the step lines for the
+/// stat row and the same totals.
+#[test]
+fn dry_run_ends_with_totals_and_stat_replaces_the_steps() {
+    let home = tmp("dry-stat");
+    let cfg = write_cfg(&home);
+    let mut args = setup_args("codex", &[]);
+    args.push("--dry-run");
+    let plain = rtok(&args, &cfg, &home);
+    assert!(plain.contains("+ [mcp_servers.rtok]"), "{plain}");
+    assert!(plain.contains(" changed, "), "no totals line:\n{plain}");
+    args.push("--stat");
+    let stat = rtok(&args, &cfg, &home);
+    assert!(!stat.contains("+ [mcp_servers.rtok]"), "{stat}");
+    assert!(stat.contains(" | "), "no stat row:\n{stat}");
+    assert!(stat.contains(" changed, "), "no totals line:\n{stat}");
+    assert!(!home.join(".codex/config.toml").exists());
+}
+
 #[test]
 fn dry_run_setup_creates_nothing_and_copies_nothing() {
     let home = tmp("dry");

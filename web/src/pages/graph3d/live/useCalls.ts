@@ -6,7 +6,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useCallStream } from "../../../api/query";
 import type { CallsView, WindowView } from "../../../api/snapshot.gen";
 
-export const emptyCalls: CallsView = { now: 0, running: [], feed: [], windows: [] };
+export const emptyCalls: CallsView = {
+  now: 0,
+  running: [],
+  feed: [],
+  heat_window_s: 300,
+  windows: [],
+};
 export const emptyWindow: WindowView = {
   label: "",
   calls: 0,
@@ -26,7 +32,7 @@ export const emptyWindow: WindowView = {
   spark: { span_ms: 0, calls: [], saved: [] },
 };
 
-/** The server totals "since open" last, so its count is every call the stream has seen. */
+/** The server totals "since start" last, so its count is every call the stream has seen. */
 export const totalCalls = (v: CallsView) => v.windows.at(-1)?.calls ?? 0;
 
 /**

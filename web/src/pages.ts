@@ -22,6 +22,7 @@ export const PAGES = [
   { id: "services", field: "services" },
   { id: "worktrees", field: "worktrees" },
   { id: "usage", field: "agent_usage" },
+  { id: "tasks", field: "tasks" },
 ] as const satisfies readonly { id: string; field: keyof Snapshot }[];
 
 export type Page = (typeof PAGES)[number];

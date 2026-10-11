@@ -17,8 +17,8 @@ Every agent session that works through rtok gets one **rtok agent id**, and ever
 | `rtok agents sessions [--all]` | `agents_list` | every agent with host, state (`live`, `idle`, `ended`), activity, status, claimed worktrees and unread count; `--all` adds ended ones |
 | `rtok agents show <id>` | `agent_show` | one agent: host, model, ids, parent and sub-agents, cwd, claimed worktrees, status, unread |
 | `rtok agents status <text>` | `agent_status_set` | what this agent is busy with (at most 120 characters); an empty text clears it |
-| `rtok agents send <id> <text>` | `agent_send` | a message to one live agent (size-capped); `--all-live` sends to every live agent of the sender's project |
-| `rtok agents inbox [<id>]` | `agent_inbox` | your own messages, oldest first, marked read; with an id, that agent's queue, marking nothing |
+| `rtok agents send <id> <text>` | `agent_send` | a message to one live agent (size-capped); `--all-live` sends to every live agent of the sender's project; `--task <id>` (`task` for MCP) tags it with the task it is about, such as `A12` |
+| `rtok agents inbox [<id>]` | `agent_inbox` | your own messages, oldest first, marked read; with an id, that agent's queue, marking nothing; `--task <id>` (`task` for MCP) reads one task's thread and leaves the rest unread |
 
 `[agents] idle` (default 30 minutes) decides who is live. `[agents] enabled = false` stops registration and the push.
 
@@ -80,11 +80,12 @@ The `rtok-worktrees` skill tells the agent all of this: use `worktree_add` for n
 | `cline` | yes | hooks | none (checkpoints, not worktrees) | `worktree_add` |
 | `roo` | no | MCP | not checked yet | `worktree_add` |
 | `qwen` | yes | hooks | not checked yet | `worktree_add` |
+| `codebuddy` | yes | hooks | not checked yet | `worktree_add` |
 | `codewhale` | yes | hooks | none documented | `worktree_add` |
 | `aider` | no | none | none | CLI only |
 | `zed` | no | MCP | threads can point at a worktree you make | `worktree_adopt` |
 
-Every host can create worktrees with `worktree_add` (MCP) or `rtok worktree add` (CLI); a host with no agent row passes `--owner` on the CLI. A worktree whose path matches none of the pools above is listed with origin `other` and adopted the same way.
+Every host can create worktrees with `worktree_add` (MCP) or `rtok worktree add` (CLI); a host with no agent row passes `--owner` on the CLI. A worktree whose path matches none of the pools above is listed with origin `other` and adopted the same way. `worktree add` (CLI and MCP `worktree_add`) also sets `env.CLAUDE_CODE_TASK_LIST_ID` to `<project>-<task>` in the new worktree's `.claude/settings.local.json`, so Claude Code sessions there share one task list; only that key is written, the rest of the file stays as it was, a file that is not valid JSON or already sets the id is left alone with a warning, and `.claude/` is git-ignored.
 
 ### Windows
 

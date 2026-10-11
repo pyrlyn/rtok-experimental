@@ -77,11 +77,16 @@ pub fn max_with_prefix(ids: impl IntoIterator<Item = TaskId>, prefix: &str) -> O
 /// (`gh auth token`), the order the providers' own CLIs use.
 pub fn token(adapter: &str, vars: &[&str], cli: &[&str]) -> Result<String> {
     token_with(|v| std::env::var(v).ok(), vars, cli).with_context(|| {
-        format!(
-            "{adapter}: no token; set {} or run `{}`",
-            vars.join(" or "),
-            cli.join(" ")
-        )
+        // A provider with no CLI (Linear) has only the variable to offer.
+        if cli.is_empty() {
+            format!("{adapter}: no token; set {}", vars.join(" or "))
+        } else {
+            format!(
+                "{adapter}: no token; set {} or run `{}`",
+                vars.join(" or "),
+                cli.join(" ")
+            )
+        }
     })
 }
 
@@ -208,7 +213,13 @@ impl Http {
             let text = res.text().unwrap_or_default();
             let msg = serde_json::from_str::<Value>(&text)
                 .ok()
-                .and_then(|v| v.get("message")?.as_str().map(String::from))
+                // GraphQL (Linear) puts the reason in `errors[0].message`, even for a 400.
+                .and_then(|v| {
+                    v.get("message")
+                        .or_else(|| v.pointer("/errors/0/message"))?
+                        .as_str()
+                        .map(String::from)
+                })
                 .unwrap_or_else(|| text.chars().take(300).collect());
             bail!("{}: {method} {url}: {status}: {msg}", self.adapter);
         }

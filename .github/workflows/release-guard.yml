@@ -1,0 +1,26 @@
+# After a release PR lands on main (by bump, by hand or by auto-merge) the tag and a regular
+# GitHub Release must exist. pyrlyn/ci's release-guard.yml waits for bump's tag, creates a
+# missing tag/draft Release and dispatches release.yml (idempotent), verifies the Release is
+# published, and otherwise OPENS a `revert/release-vX.Y.Z` pull request (never merged here).
+# See docs/release.md.
+name: release-guard
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    uses: pyrlyn/ci/.github/workflows/release-guard.yml@b4d700f3c6780284ff1558a7c516de0d520f9d6d # feat/release-guard (pyrlyn/ci#69); repin to its merge commit
+    permissions:
+      contents: write # tag, Release, revert branch
+      actions: write # dispatch release.yml
+      pull-requests: write # the revert PR
+    with:
+      prerelease: false
+      release-workflows: release.yml
+    secrets:
+      BUMP_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}

@@ -50,5 +50,5 @@ thinned, coral cells are measured cuts (Δ). The wordmark is tracked `RTOK` plus
 
 - `icons/feature/`: "Signal / scope" feature icons for marketing pages, with `@2x` PNGs; coral
   appears only where the drawing already marks a Δ. The shared UI icons are `@pyrlyn/brand/base/icons/ui/*`; rtok's own
-  extras (config, graph, hosts, services, stats, usage, worktrees, from `web/assets/icons/`) are in
+  extras (config, graph, hosts, services, stats, tasks, usage, worktrees, from `web/assets/icons/`) are in
   `icons/ui/` here, and the offline illustration (`web/assets/offline.svg`) in `illustrations/`.

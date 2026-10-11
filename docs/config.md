@@ -228,7 +228,20 @@ on_429              = "none"          # Flex has no capacity: none = the 429 goe
 retries             = 3               # backoff only: retries before giving up; at most 5
 backoff_ms          = 1000            # backoff only: delay before the first retry, doubled each time, capped at 30 s; a 429's Retry-After (seconds) can lengthen it, up to that cap
 
-[proxy.routing]                       # no keys yet (D9)
+[proxy.routing]                       # model routing; only the internal and bulk lanes, never the agent lane
+enabled             = false           # off: every call keeps the model the client sent
+
+[proxy.routing.bulk]                  # one rule per lane; it acts only with from, to and gate all set
+from                = []              # request models it applies to: an exact id or a prefix ending in * (empty = off)
+to                  = ""              # the model that serves a matching call (empty = off)
+provider            = ""              # provider slug recorded for a routed call (empty = the wire's own); pair with [proxy.lanes.<lane>] upstream
+gate                = ""              # where the quality bench for this swap is kept (a path, URL or run id); empty = off
+
+[proxy.routing.internal]              # same keys as bulk (rtok's own model calls)
+from                = []
+to                  = ""
+provider            = ""
+gate                = ""
 
 [web]                                 # rtok web (same data as rtok tui)
 host = "127.0.0.1"                    # --host
@@ -426,6 +439,9 @@ config_path   = "~/.config/devin/config.json"  # mcp_config.json is read beside 
 mcp_path      = ""                               # empty: <Code user dir>/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json
 [setup.qwen]
 dir           = "~/.qwen"                    # settings.json (hooks, mcpServers); QWEN_HOME moves the directory
+[setup.codebuddy]
+dir           = "~/.codebuddy"               # CodeBuddy Code: settings.json (hooks), .mcp.json, plugins/; CODEBUDDY_CONFIG_DIR moves it
+workbuddy_dir = "~/.workbuddy"               # WorkBuddy Desktop: the same files (embedded CodeBuddy Code; unverified)
 
 [expand]                              # rtok expand <id>
 max_lines = 0                         # 0 = unlimited   (--lines a-b is per call)
@@ -452,6 +468,12 @@ project = 0                           # repo owner's Projects v2 number: issues 
 [tasks.gitlab]                        # status::in-progress | status::done | status::wont-do labels; a subtask links to its parent (relates_to)
 url = "https://gitlab.com"            # https base URL; set it for a self-hosted instance; token: GITLAB_TOKEN, GITLAB_ACCESS_TOKEN, GL_TOKEN, else glab
 project = ""                          # group/name or numeric id; empty: the origin remote
+
+[tasks.export.github]                 # `rtok task export github`: mirror the disk tasks into GitHub Issues, one way
+repo = ""                             # owner/name; empty: [tasks.github] repo, else the origin remote
+
+[tasks.export.linear]                 # `rtok task export linear`: mirror the disk tasks into Linear, one way; token in LINEAR_API_KEY
+team = ""                             # the team's short key, e.g. "ENG"; empty: the export refuses to run
 
 [otel]                                # OpenTelemetry export (D19); off until endpoint resolves
 endpoint      = ""                    # OTLP/HTTP base URL, e.g. "http://localhost:4318"; "" = $OTEL_EXPORTER_OTLP_ENDPOINT
@@ -558,6 +580,9 @@ reference_depth = 3                   # T329.8: reference levels followed from t
 max_auto_projects = 20                # T329.8: most projects references may add to the registry; reaching it is shown and logged
 alerts = true                         # T329.17: alert when a project in the scope is missing, unreachable, has its backend down or a broken manifest link; shown by rtok doctor, graph projects and graph answers
 health_check_interval_s = 60          # T329.17: seconds between health checks in rtok mcp and rtok web (an alert needs two in a row); 0 = off
+live_heat_window_s = 300            # T329.34: seconds a node stays warm on the live graph canvas after a call (rtok web, rtok tui)
+live_max_events_per_s = 50          # T329.34: most call events the live panel lists per second; the counters still count every call
+live_feed_rows = 200                # T329.34: finished calls the live feed keeps (1-1000)
 
 [plugins.toon]
 enabled  = true
@@ -654,7 +679,7 @@ switched off (`proxy.enabled`, `core.enabled` or `plugins.proxy.enabled` false) 
 capped or queued. `batch` and `files` have no `upstream`: a Batch job's create, poll and
 results always go to the provider that owns it.
 
-Routing is not here yet: it joins this table with its own step (`[proxy.routing]` below).
+Model routing is not a lane switch: it has its own table, [`[proxy.routing]`](#proxyrouting).
 The `agent` lane has no `flex` switch: a live turn never changes tier unless the client asks
 for it.
 
@@ -711,26 +736,49 @@ force = false
 on_429 = "backoff"
 ```
 
-### `[proxy.routing]` — planned (see `docs/batch-flex.md`)
+### `[proxy.routing]`
 
-The table exists and is empty: it has no key yet. The keys below are the **intended** ones; adding
-any of them to a live config file still fails `rtok config validate` until the matching step ships.
-Routing rewrites are future `prepare` / policy work. Full semantics: [`docs/batch-flex.md`](batch-flex.md).
+Model routing (D9) moves a call to a cheaper model, and only where the quality risk is lowest:
+rtok's own `internal` calls and the opted-in `bulk` lane (`docs/research/optimization.md` §4.2).
+The `agent` lane is never routed: a live turn runs on the model the operator chose. `batch` and
+`files` are never rewritten either. Off by default, and no rule ships.
 
-#### `[proxy.routing]`
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `enabled` | bool | `false` | Master switch; off, every call keeps the model the client sent |
 
-| Key | Type | Default (intended) | Meaning |
-|-----|------|--------------------|---------|
-| `enabled` | bool | `false` | Model / tier routing (D9); off until a policy + measurement Check exists |
-| `sticky` | bool | `true` | Prefer one upstream for provider prompt-cache affinity (I-84); not Batch vs Flex |
-| `default_model` | string | `""` | Empty = leave the client `model`; otherwise a fallback rewrite target |
+`[proxy.routing.bulk]` and `[proxy.routing.internal]` each hold one rule. A rule acts only when all
+four keys below are set; a half-written rule does nothing.
+
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `from` | string list | `[]` | Request models the rule applies to: an exact id, or an id ending in `*` for a prefix (`claude-opus-*`). A model not listed is forwarded as it is |
+| `to` | string | `""` | The model that serves a matching call |
+| `provider` | string | `""` | Provider slug recorded for a routed call, when `to` lives at another provider than the wire's own; `""` = the wire's provider |
+| `gate` | string | `""` | Where the quality bench for this swap is kept (a path, URL or run id) |
+
+`gate` is the I-101 quality gate. Whether the cheaper model answers well enough is a bench result,
+not something a proxy can see, so rtok asks the operator to run that bench on the lane's real
+workload first and to name it here; it does not read or judge it. Without it the rule stays off.
+
+Only the JSON `model` field is replaced (the body is re-serialised); Gemini names its model in the
+path, which routing does not rewrite, so a Gemini call is never routed. The swap happens before
+the call is recorded, so `calls` and `usage` name the model that served it (and `provider`, when
+set), `rtok stats --price` prices the lane at that model, and the log row of the call keeps the
+model the client asked for. Each routed call also gets a `model_route` measurement row; it claims
+no token saving, because the saving is dollars: compare `cost by lane` from `rtok stats --price`
+for the same workload with routing off and on. Pair a cross-provider rule with
+`[proxy.lanes.<lane>] upstream` for the gateway that serves `to`; rtok does not translate between
+wires, so `to` must be a model that wire's API accepts.
 
 ```toml
-# Planned — not loaded today
 [proxy.routing]
-enabled = false
-sticky = true
-default_model = ""
+enabled = true
+
+[proxy.routing.bulk]
+from = ["claude-sonnet-*"]
+to = "claude-haiku-4-5"
+gate = "bench/bulk-haiku-2026-10.md"
 ```
 
 ### Stats prices (`[stats.prices]`)
@@ -750,6 +798,11 @@ rather than borrow the standard rate. Calls the provider reports serving on Flex
 recorded on `calls.service_tier`) are listed under `<model>@flex` and costed the same way. `rtok stats` and `rtok report`
 add a `lane/tier` table of cache counters once traffic ran off the agent lane or on a tier other than `standard` /
 `default`; a call whose response named no tier prints `-`.
+
+Once traffic ran off the agent lane, `--price` also prints `cost by lane` (the JSON `cost.lanes`): each
+lane's USD, with every call priced at the model recorded for it, so a call moved by
+[`[proxy.routing]`](#proxyrouting) is costed at the model that served it. A `*` marks a lane that also used
+a model without a price row, so its figure is a floor.
 
 ### WASM plugin host (`[plugins.wasm]`)
 
@@ -833,6 +886,7 @@ Unset keeps Mozilla roots only. `rtok hook` never opens TLS.
 | `agents whoami` | — | reads `RTOK_AGENT_ID` and resolves it through the store (T283); no key, no `setup.*` (`--json` is the reading row) |
 | `worktree whoami` | — | reads `RTOK_AGENT_ID` and `[worktree] root` (T411); no key of its own (`--json` is the reading row) |
 | `task init` | `--adapter`, `--prefix` | `tasks.adapter`, `tasks.prefix`: written into the checkout's `.rtok.toml` (T441.5) |
+| `task export` | `--dry-run`, `--json` | `tasks.export.github.repo`, `tasks.export.linear.team` (T441.13.5, T441.13.6); `--dry-run` is per call (no key) |
 | `task create` / `list` / `status` | `--description`, `--body-file`, `--parent`, `--status`, `--all`, `--force` | per call (no key): what one task is and which rows one call shows; `[tasks]` picks the adapter and the prefix |
 | `agents junk list` / `clear` | `--agent`, `--kind`, `--include review`, `--older-than`, `--session-days`, `--trash`, `--bytes`, `--items`, `--sort`, `--min-size`, `--yes` | per call (no key): what one run lists or removes; `--session-days` is `agents.junk.stale_session_days` for one run; `agents.junk.keep_logs_days`, `.temp_min_age_hours`, `.crash_dump_min_age_days`, `.stale_worktree_days`, `.exclude`, `.extra` have no flag |
 | `agents usage` | `--source`, `--host`, `--since`, `--until`, `--daily` / `--monthly`, `--tz` | `agents.usage.source`, `.hosts`, `.since`, `.until`, `.period`, `.tz`, plus `.dirs.<host>` with no flag (`--unpriced` picks the view of one call, `--json` is the reading row) |

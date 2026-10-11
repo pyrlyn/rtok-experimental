@@ -19,6 +19,23 @@ use std::path::Path;
 use std::process::{Child, Command};
 use std::time::Duration;
 
+/// Multiplier for wall-clock bounds in tests that spawn `rtok` and wait on it. `RTOK_TEST_TIME_SCALE`
+/// (a positive number) overrides; unset it is 3 on Windows, where process spawn, Defender and NTFS
+/// stretched a 0.3 s exchange to 7 s on a loaded shared runner (run 38073132494), and 1 elsewhere.
+pub fn time_scale() -> f64 {
+    std::env::var("RTOK_TEST_TIME_SCALE")
+        .ok()
+        .and_then(|v| v.parse::<f64>().ok())
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(if cfg!(windows) { 3.0 } else { 1.0 })
+}
+
+/// `base` stretched by [`time_scale`]: a bound that separates "answered" from "hung", not a
+/// latency measurement (those live in the benches and `tests/latency.rs`).
+pub fn scaled(base: Duration) -> Duration {
+    base.mul_f64(time_scale())
+}
+
 /// T111: run one TS host plugin test file under vitest (the mise tool; `vitest.config.mjs` at the
 /// repo root). `envs` are set for the run. Panics with the file name when a test fails.
 ///

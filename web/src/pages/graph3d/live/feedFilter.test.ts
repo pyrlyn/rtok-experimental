@@ -8,13 +8,13 @@ import { distinct, filterFeed } from "./feedFilter";
 
 test("caller, tool and project narrow the rows and blank means all", () => {
   const feed = [
-    done("c", 2, 1, { session: "y", project: "q" }),
-    done("b", 2, 1, { session: "y", tool: "impact", project: "p" }),
-    done("a", 2, 1, { session: "x", project: "p" }),
+    done("c", 2, 1, { caller: "y", project: "q" }),
+    done("b", 2, 1, { caller: "y", tool: "impact", project: "p" }),
+    done("a", 2, 1, { caller: "x", project: "p" }),
   ];
-  const none = { session: "", tool: "", project: "" };
+  const none = { caller: "", tool: "", project: "" };
   expect(filterFeed(feed, none)).toHaveLength(3);
-  expect(filterFeed(feed, { ...none, session: "y" }).map((r) => r.call)).toEqual(["c", "b"]);
-  expect(filterFeed(feed, { ...none, session: "y", tool: "callers" })).toHaveLength(1);
+  expect(filterFeed(feed, { ...none, caller: "y" }).map((r) => r.call)).toEqual(["c", "b"]);
+  expect(filterFeed(feed, { ...none, caller: "y", tool: "callers" })).toHaveLength(1);
   expect(distinct(feed, "project")).toEqual(["p", "q"]);
 });

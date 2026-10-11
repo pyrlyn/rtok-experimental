@@ -118,6 +118,7 @@ Options:
                        checklist, a pipe the diff; --yes writes without asking
       --yes            With --fix: write the changes (a copy goes to `_backup/` first)
       --dry-run        With --fix --yes: print the diffs and write nothing
+      --stat           With --fix: stat lines and totals instead of the diffs (a dry run)
       --only <ONLY>    With --fix: limit it to these problems (repeatable; default: all of them)
                        [possible values: broken-hooks, duplicate-hooks, duplicate-mcp]
       --agent <HOST>   Check (and with --fix, repair) the hooks of one host only (an id of `rtok
@@ -190,6 +191,7 @@ Options:
       --project        Add rtok to the project's post-create script, so a worktree the host makes
                        joins rtok (`cursor`, `kilo`, `windsurf`, `devin`); run it inside the
                        repository
+      --stat           With --dry-run: stat lines and totals instead of the planned edits
   -h, --help           Print help
 
 $ rtok agents uninstall --help
@@ -208,6 +210,7 @@ Options:
       --yes            Also remove rtok entries you changed, without asking
       --project        Take rtok out of the project's post-create script (`cursor`, `kilo`,
                        `windsurf`, `devin`) instead of the host's config
+      --stat           With --dry-run: stat lines and totals instead of the planned edits
   -h, --help           Print help
 
 $ rtok agents update --help
@@ -229,6 +232,7 @@ Options:
       --source <SOURCE>  Compare against this install source instead of the one on record [possible
                          values: github, local, marketplace]
       --check            List outdated plugins only (same output as `agents outdated`)
+      --stat             With --dry-run: stat lines and totals instead of the planned edits
   -h, --help             Print help
 
 $ rtok agents outdated --help
@@ -401,6 +405,12 @@ Options:
       --yes
           Apply; without it this is a dry run that changes nothing
 
+      --dry-run
+          Say the dry run out loud: print what would go and change nothing (the default)
+
+      --stat
+          The same preview as the dry run: a removal's line already is its stat
+
       --json
           JSON instead of the table
 
@@ -493,6 +503,8 @@ Arguments:
 Options:
       --all-live       Every live agent of this project (same repository or cwd), except the sender
       --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
+      --task <ID>      The task this message is about (e.g. `A12`); the recipient can read just that
+                       thread
   -h, --help           Print help
 
 $ rtok agents inbox --help
@@ -507,6 +519,7 @@ Arguments:
 Options:
       --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
       --unread         Only messages not read yet
+      --task <ID>      Only messages about this task (e.g. `A12`)
       --json           JSON instead of the framed text
   -h, --help           Print help
 
@@ -606,6 +619,9 @@ Options:
       --list
           Print each shell, whether its completions are installed (yes/no) and the file
 
+      --dry-run
+          With `--install`/`--uninstall`: show the file diff and write nothing
+
   -h, --help
           Print help (see a summary with '-h')
 
@@ -656,6 +672,7 @@ Options:
       --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
       --force          Overwrite an existing file
       --dry-run        Print the diff it would write and exit
+      --stat           With --dry-run: stat lines and totals instead of the diff
   -h, --help           Print help
 
 $ rtok config path --help
@@ -715,6 +732,7 @@ Arguments:
 Options:
       --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
       --dry-run        Print the diff it would write and exit
+      --stat           With --dry-run: stat lines and totals instead of the diff
   -h, --help           Print help
 
 $ rtok memory --help
@@ -1238,6 +1256,10 @@ Usage: rtok worktree gc [OPTIONS]
 Options:
       --config <PATH>            User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
       --yes                      Apply; without it this is a dry run that changes nothing
+      --dry-run                  Say the dry run out loud: print what would go and change nothing
+                                 (the default)
+      --stat                     The same preview as the dry run: a removal's line already is its
+                                 stat
       --owner <OWNER>            Open locks whose reason starts with this owner; any other lock
                                  holds until `--stale-lock`
       --idle <IDLE>              Keep worktrees modified within this window (`24h`, `7d`) [default:
@@ -1259,6 +1281,9 @@ Options:
       --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
       --idle <IDLE>    Keep caches modified within this window (`24h`, `7d`) [default: 24h]
       --yes            Apply; without it this is a dry run that changes nothing
+      --dry-run        Say the dry run out loud: print what would go and change nothing (the
+                       default)
+      --stat           The same preview as the dry run: a removal's line already is its stat
       --json           JSON instead of the table
   -h, --help           Print help
 
@@ -1331,6 +1356,7 @@ Options:
                        <model>` of the agent
       --keep-branch    Remove an unmerged worktree too and keep its branch (a merged branch is kept
                        as well)
+      --dry-run        Show the path, branch, size and file count that would go; remove nothing
       --json           JSON instead of the text line
   -h, --help           Print help
 
@@ -1351,8 +1377,13 @@ Commands:
   release   Clear the assignee and set the task open. Only the holder, unless --force
   dep       Record that this task waits on another. A cycle is refused and nothing is written
   priority  Set priority from 0 (highest) to 4. 2 is the default and is not stored
+  conflict  Record that two tasks touch the same files, so they should not run at once. Symmetric;
+            `ready` flags a task whose partner is in progress
+  parallel  Mark a task safe to run beside any other task
   sync      Raise the id counters to the adapter's highest ids and report drift; never writes the
             adapter
+  export    Mirror the disk tasks one way into an issue tracker; the files stay the source of truth.
+            A second run with nothing changed sends no write
   init      Write `[tasks]` into this checkout's `.rtok.toml` and seed the counter from existing
             tasks
   help      Print this message or the help of the given subcommand(s)
@@ -1496,6 +1527,36 @@ Options:
       --json           Print the task as JSON
   -h, --help           Print help
 
+$ rtok task conflict --help
+Record that two tasks touch the same files, so they should not run at once. Symmetric; `ready` flags
+a task whose partner is in progress
+
+Usage: rtok task conflict [OPTIONS] <ID> <OTHER>
+
+Arguments:
+  <ID>     One task
+  <OTHER>  The task it conflicts with
+
+Options:
+      --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
+      --remove         Take the conflict off instead
+      --json           Print the task as JSON
+  -h, --help           Print help
+
+$ rtok task parallel --help
+Mark a task safe to run beside any other task
+
+Usage: rtok task parallel [OPTIONS] <ID>
+
+Arguments:
+  <ID>  Task id, e.g. `R12`
+
+Options:
+      --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
+      --off            Take the mark off instead
+      --json           Print the task as JSON
+  -h, --help           Print help
+
 $ rtok task sync --help
 Raise the id counters to the adapter's highest ids and report drift; never writes the adapter
 
@@ -1503,6 +1564,21 @@ Usage: rtok task sync [OPTIONS]
 
 Options:
       --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
+      --json           JSON instead of the text
+  -h, --help           Print help
+
+$ rtok task export --help
+Mirror the disk tasks one way into an issue tracker; the files stay the source of truth. A second
+run with nothing changed sends no write
+
+Usage: rtok task export [OPTIONS] <BACKEND>
+
+Arguments:
+  <BACKEND>  Where to mirror the tasks [possible values: github, linear]
+
+Options:
+      --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
+      --dry-run        Print the planned creates, updates and closes and send nothing
       --json           JSON instead of the text
   -h, --help           Print help
 

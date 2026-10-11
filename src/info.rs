@@ -90,7 +90,7 @@ pub struct Info {
     pub total_bytes: u64,
 }
 
-pub use crate::bytes::human_bytes;
+use change_preview::human_bytes;
 
 fn file_of(path: &Path) -> FileInfo {
     FileInfo {
@@ -345,16 +345,6 @@ impl Info {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn human_bytes_uses_binary_units() {
-        assert_eq!(human_bytes(0), "0 B");
-        assert_eq!(human_bytes(1023), "1023 B");
-        assert_eq!(human_bytes(1024), "1.0 KB");
-        assert_eq!(human_bytes(1536), "1.5 KB");
-        assert_eq!(human_bytes(1024 * 1024), "1.0 MB");
-        assert_eq!(human_bytes(1024 * 1024 * 1024), "1.0 GB");
-    }
 
     #[test]
     fn error_count_reads_the_level_not_the_text() {

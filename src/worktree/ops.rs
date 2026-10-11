@@ -107,11 +107,17 @@ pub fn remove(
     agent: Option<&str>,
     owner: Option<String>,
     keep_branch: bool,
+    dry_run: bool,
 ) -> Result<Removed> {
     let store = opened(cfg);
     let agent = claim::caller(store.as_ref(), agent)?;
     let cwd = std::env::current_dir()?;
-    super::remove::for_agent(
+    let run = if dry_run {
+        super::remove::preview_for_agent
+    } else {
+        super::remove::for_agent
+    };
+    run(
         store.as_ref(),
         &cwd,
         target,

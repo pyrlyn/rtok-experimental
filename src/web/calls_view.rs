@@ -23,7 +23,9 @@ pub struct CallsView {
     pub running: Vec<Running>,
     /// Newest first.
     pub feed: Vec<Finished>,
-    /// One per chip, in the order of [`WINDOWS`]; the last is "since open".
+    /// `[plugins.graph] live_heat_window_s`: how long a node stays warm on the live canvas.
+    pub heat_window_s: u32,
+    /// One per chip, in the order of [`WINDOWS`]; the last is "since start".
     pub windows: Vec<WindowView>,
 }
 
@@ -102,6 +104,7 @@ impl CallsView {
             now,
             running: store.running.clone(),
             feed: store.feed.clone(),
+            heat_window_s: store.heat_window_s,
             windows: WINDOWS
                 .iter()
                 .enumerate()
@@ -129,7 +132,7 @@ mod tests {
         let v = CallsView::of(&s, T + 9 * 60_000 + 1000);
         assert_eq!(
             v.windows.iter().map(|w| &w.label[..]).collect::<Vec<_>>(),
-            ["1 min", "5 min", "15 min", "since open"]
+            ["1 min", "5 min", "15 min", "since start"]
         );
         assert_eq!(
             v.windows.iter().map(|w| w.before).collect::<Vec<_>>(),

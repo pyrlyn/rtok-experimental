@@ -12,7 +12,7 @@
 
 use axum::http::HeaderMap;
 
-use crate::config::{LanePolicy, Lanes};
+use crate::config::{LanePolicy, Lanes, RouteRule, RoutingPolicy};
 
 /// Request header naming the lane; stripped before the request goes upstream.
 pub const HEADER: &str = "x-rtok-lane";
@@ -87,6 +87,20 @@ impl Lane {
             Lane::Embeddings => lanes.embeddings.clone(),
             Lane::Meta => lanes.meta.clone(),
             Lane::Internal => lanes.internal.clone(),
+        }
+    }
+
+    /// The model-routing rule of this lane (T385.10), `None` when routing is off or the lane
+    /// cannot be routed. Only `internal` and `bulk` can: the `agent` lane is a live turn whose
+    /// quality the operator chose, and the rest carry no chat body the proxy may rewrite.
+    pub fn route(self, routing: &RoutingPolicy) -> Option<&RouteRule> {
+        if !routing.enabled {
+            return None;
+        }
+        match self {
+            Lane::Bulk => Some(&routing.bulk),
+            Lane::Internal => Some(&routing.internal),
+            _ => None,
         }
     }
 
@@ -318,6 +332,34 @@ mod tests {
             );
         }
         assert_eq!(Lane::Bulk.policy(&lanes), moved);
+    }
+
+    #[test]
+    fn only_internal_and_bulk_can_be_routed_and_only_when_enabled() {
+        let rule = RouteRule {
+            from: vec!["big".into()],
+            to: "small".into(),
+            gate: "bench".into(),
+            ..RouteRule::default()
+        };
+        let mut routing = RoutingPolicy {
+            bulk: rule.clone(),
+            internal: rule.clone(),
+            ..RoutingPolicy::default()
+        };
+        for lane in Lane::ALL {
+            assert!(lane.route(&routing).is_none(), "{} while off", lane.name());
+        }
+        routing.enabled = true;
+        for lane in Lane::ALL {
+            let routable = matches!(lane, Lane::Bulk | Lane::Internal);
+            assert_eq!(
+                lane.route(&routing) == Some(&rule),
+                routable,
+                "{}",
+                lane.name()
+            );
+        }
     }
 
     #[test]

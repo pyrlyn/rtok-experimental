@@ -66,7 +66,7 @@ brand/
   PROVENANCE.md    conflicts resolved, adoption steps per surface, where the provenance snapshots live
   logo/ (+png/)    mark, favicon, wordmark; PNG exports
   icons/feature/   feature icons (+ @2x PNG)
-  icons/ui/        rtok-only UI icons (config, graph, hosts, services, sidebar, stats, usage, worktrees) and the operation and status icons of web/src/ui/operations.ts
+  icons/ui/        rtok-only UI icons (config, graph, hosts, services, sidebar, stats, tasks, usage, worktrees) and the operation and status icons of web/src/ui/operations.ts
   illustrations/   offline.svg (web admin empty state)
   examples/        index.html demo page (flat build)
   preview/         light/dark preview PNGs

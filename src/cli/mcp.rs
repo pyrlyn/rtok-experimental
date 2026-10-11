@@ -70,6 +70,7 @@ pub(super) fn run(config_file: &Option<PathBuf>, args: Args) -> Result<()> {
             bail!("rtok mcp --http serves rtok's own tools; it takes no subcommand or `--`");
         }
         let addr = addr.unwrap_or_else(|| cfg.mcp.http.clone());
+        rtok_sys::proc::disable_progress();
         return crate::mcp::http::serve_blocking(&cfg, &addr);
     }
     if let Some(McpCmd::Ping {
@@ -93,6 +94,8 @@ pub(super) fn run(config_file: &Option<PathBuf>, args: Args) -> Result<()> {
         let _ = std::io::Write::flush(&mut std::io::stdout());
         std::process::exit(code);
     }
+    // stderr belongs to the host from here on, so a tool that runs a program draws no spinner.
+    rtok_sys::proc::disable_progress();
     if let Some(name) = call {
         if !wrap.is_empty() {
             bail!("rtok mcp --call does not wrap a foreign server");

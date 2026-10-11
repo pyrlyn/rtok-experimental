@@ -472,23 +472,8 @@ pub(crate) fn file_diff(path: &Path, before: &str, after: &str) -> String {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     match paint {
         Some(paint) => paint(path, before, after),
-        None => unified_diff(path, before, after),
+        None => change_preview::unified_diff(path, before, after),
     }
-}
-
-/// Uncoloured unified diff, three lines of context. Empty when nothing differs.
-fn unified_diff(path: &Path, before: &str, after: &str) -> String {
-    if before == after {
-        return String::new();
-    }
-    similar::TextDiff::from_lines(before, after)
-        .unified_diff()
-        .context_radius(3)
-        .header(
-            &format!("a/{}", path.display()),
-            &format!("b/{}", path.display()),
-        )
-        .to_string()
 }
 
 /// `cli::run` registers the `cmd` rules checker. Config stays free of `plugins`.
@@ -687,6 +672,17 @@ fn check_leaf(
             // Each retry holds the client's connection open; past a handful it is a hang.
             "proxy.flex.retries" if n > 5 => {
                 errors.push(format!("{at}: {dotted} must be ≤ 5"));
+            }
+            // A zero window or rate would blank the live panel; 1000 rows is what a frame carries.
+            "plugins.graph.live_heat_window_s"
+            | "plugins.graph.live_max_events_per_s"
+            | "plugins.graph.live_feed_rows"
+                if n < 1 =>
+            {
+                errors.push(format!("{at}: {dotted} must be ≥ 1"));
+            }
+            "plugins.graph.live_feed_rows" if n > 1000 => {
+                errors.push(format!("{at}: {dotted} must be ≤ 1000"));
             }
             "tui.tick_secs" if n < 1 => {
                 errors.push(format!("{at}: {dotted} must be ≥ 1"));

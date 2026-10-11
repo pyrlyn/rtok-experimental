@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Result, bail};
 use rmcp::model::{
     CallToolResult, ContentBlock, Implementation, JsonObject, ListToolsResult, ProtocolVersion,
-    ServerCapabilities, ServerConfig, Tool,
+    ServerCapabilities, ServerConfig, Tool, ToolAnnotations,
 };
 use serde_json::{Value, json};
 
@@ -713,13 +713,53 @@ impl Server {
     }
 }
 
+/// Tools that change nothing a user or another agent would see (T528). They carry MCP
+/// `readOnlyHint`, so Codex's `default_tools_approval_mode = "writes"` runs them without
+/// asking and still asks for every other tool. `agent_inbox` counts: it marks only this
+/// session's own messages read. Only built-in tools are listed, so no plugin can claim a name.
+const READ_ONLY_TOOLS: &[&str] = &[
+    "expand",
+    "ping",
+    "whoami",
+    "worktree_list",
+    "agent_inbox",
+    "agents_list",
+    "agent_show",
+    "task_list",
+    "task_get",
+    "task_next",
+    "task_ready",
+    "read",
+    "search",
+    "tree",
+    "mem_search",
+    "mem_pack",
+    "mem_get",
+    "handoff",
+    "symbol",
+    "callers",
+    "impact",
+    "outline",
+    "explore",
+    "graph_diff",
+    "graph_export",
+    "docs_resolve",
+    "docs_query",
+    "docs_get",
+];
+
 fn to_tool(def: &ToolDef) -> Tool {
     let schema = def
         .input_schema
         .as_object()
         .cloned()
         .unwrap_or_else(JsonObject::new);
-    Tool::new(def.name, def.description, Arc::new(schema))
+    let tool = Tool::new(def.name, def.description, Arc::new(schema));
+    if READ_ONLY_TOOLS.contains(&def.name) {
+        tool.annotate(ToolAnnotations::new().read_only(true))
+    } else {
+        tool
+    }
 }
 
 fn invoke(cx: &Runtime, name: &str, args: &Value) -> Result<String> {
@@ -1017,6 +1057,54 @@ mod tests {
             next_line(&mut r, &mut buf, 64).unwrap().unwrap(),
             "{\"id\":1}\n"
         );
+    }
+
+    /// T528: tools that change a worktree, a task, a note or another agent's inbox; Codex asks
+    /// before each under `"writes"`.
+    const WRITING_TOOLS: &[&str] = &[
+        "worktree_add",
+        "worktree_remove",
+        "worktree_adopt",
+        "agent_send",
+        "agent_status_set",
+        "task_create",
+        "task_status",
+        "task_claim",
+        "task_release",
+        "task_dep",
+        "task_priority",
+        "task_conflict",
+        "task_parallel",
+        "mem_save",
+        "mem_update",
+    ];
+
+    /// T528: every built-in tool, enabled or not, is sorted into one list on purpose, so a new
+    /// tool can neither skip Codex's approval nor lose it by accident.
+    #[test]
+    fn every_tool_is_read_only_or_writing_and_only_read_only_ones_say_so() {
+        let (cfg, dir) = tmp("mcp-read-only");
+        let server = Server::new(&cfg).unwrap();
+        let defs: Vec<ToolDef> = server
+            .listed
+            .iter()
+            .map(|t| t.def.clone())
+            .chain(crate::plugins::all().iter().flat_map(|p| p.mcp_tools()))
+            .collect();
+        for def in &defs {
+            let read_only = READ_ONLY_TOOLS.contains(&def.name);
+            assert!(
+                read_only != WRITING_TOOLS.contains(&def.name),
+                "{} must be in exactly one list",
+                def.name
+            );
+            let hint = to_tool(def).annotations.and_then(|a| a.read_only_hint);
+            assert_eq!(hint, read_only.then_some(true), "{}", def.name);
+        }
+        for name in READ_ONLY_TOOLS.iter().chain(WRITING_TOOLS) {
+            assert!(defs.iter().any(|d| d.name == *name), "{name} is no tool");
+        }
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

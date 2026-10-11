@@ -37,6 +37,9 @@ env:
   # file:line (`Location` is compiled in); backtrace frames lose it. Local builds keep
   # `line-tables-only`.
   CARGO_PROFILE_DEV_DEBUG: "0"
+  # nextest's `ci` profile (.config/nextest.toml): two retries, no fail-fast, so one timing flake
+  # does not cancel the other shard and the macOS job. Reaches `just test` and the Windows run.
+  NEXTEST_PROFILE: ci
 
 jobs:
   # T261: everything that is not the test suite, once, on ubuntu, in parallel with `check`.

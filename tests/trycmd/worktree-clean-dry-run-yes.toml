@@ -1,0 +1,18 @@
+bin.name = "rtok"
+args = "worktree clean --dry-run --yes"
+status.code = 2
+stdout = ""
+stderr = """
+error: the argument '--dry-run' cannot be used with '--yes'
+
+Usage: rtok worktree clean --dry-run [PATHS]...
+
+For more information, try '--help'.
+"""
+
+[env]
+inherit = false
+
+[env.add]
+HOME = "target/tmp/worktree-clean-dry-run-yes"
+RTOK_HOME = "target/tmp/worktree-clean-dry-run-yes"

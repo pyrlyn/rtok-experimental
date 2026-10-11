@@ -11,7 +11,7 @@ use diesel::prelude::*;
 use serde::Serialize;
 
 use super::schema::{agents, hosts, messages};
-use super::{Store, coalesce, unixepoch};
+use super::{Store, TaskId, coalesce, unixepoch};
 
 /// The cap on a cleaned body, in bytes of UTF-8.
 pub const MAX_BODY: usize = 4096;
@@ -27,6 +27,9 @@ pub struct Message {
     pub created_at: i64,
     pub delivered_at: Option<i64>,
     pub read_at: Option<i64>,
+    /// The task the message is about (T441.13.1), canonical text such as `A12`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
 }
 
 type MessageTuple = (
@@ -38,6 +41,7 @@ type MessageTuple = (
     i64,
     Option<i64>,
     Option<i64>,
+    Option<String>,
 );
 
 /// Control characters stripped (`\n` and `\t` kept); refused when empty or over [`MAX_BODY`]
@@ -61,7 +65,20 @@ impl Store {
     /// message id. Refused for an unknown or ended recipient and for a body [`clean_body`]
     /// rejects.
     pub fn send_message(&self, from: Option<&str>, to: &str, text: &str) -> Result<i32> {
+        self.send_message_on(from, to, text, None)
+    }
+
+    /// [`Store::send_message`] tagged with the task it is about (T441.13.1). `task` must parse
+    /// as a [`TaskId`] and is stored in its canonical upper-case form.
+    pub fn send_message_on(
+        &self,
+        from: Option<&str>,
+        to: &str,
+        text: &str,
+        task: Option<&str>,
+    ) -> Result<i32> {
         let body = clean_body(text)?;
+        let task = canonical_task(task)?;
         let mut conn = self.lock()?;
         let ended: Option<Option<i64>> = agents::table
             .filter(agents::id.eq(to))
@@ -81,6 +98,7 @@ impl Store {
                 messages::from_agent.eq(from),
                 messages::to_agent.eq(to),
                 messages::body.eq(&body),
+                messages::task.eq(task),
             ))
             .returning(messages::id)
             .get_result(&mut *conn)?)
@@ -91,21 +109,24 @@ impl Store {
     /// rows come back as they were before that stamp, so `read_at: None` still tells which
     /// were new. The user peeking at an agent's queue passes `mark_read: false`.
     pub fn inbox(&self, to: &str, unread_only: bool, mark_read: bool) -> Result<Vec<Message>> {
-        self.inbox_limited(to, unread_only, mark_read, None)
+        self.inbox_limited(to, unread_only, mark_read, None, None)
     }
 
-    /// [`Store::inbox`] with at most `limit` messages, the oldest. The cut is made before the
-    /// read mark, so a message that did not fit stays unread for the next call.
+    /// [`Store::inbox`] with at most `limit` messages, the oldest, and only those about `task`
+    /// when one is given. The cut is made before the read mark, so a message that did not fit
+    /// stays unread for the next call, and a message about another task is never marked.
     pub fn inbox_limited(
         &self,
         to: &str,
         unread_only: bool,
         mark_read: bool,
         limit: Option<usize>,
+        task: Option<&str>,
     ) -> Result<Vec<Message>> {
+        let task = canonical_task(task)?;
         let mut conn = self.lock()?;
         let only = if unread_only { Only::Unread } else { Only::All };
-        let mut rows = load(&mut conn, to, only)?;
+        let mut rows = load(&mut conn, to, only, task.as_deref())?;
         if let Some(limit) = limit {
             rows.truncate(limit);
         }
@@ -135,7 +156,7 @@ impl Store {
     /// T288: agent `to`'s messages no hook has pushed yet, in send order — one query on the
     /// `messages_to_agent` index. Stamps nothing: the hook marks only what it pushed.
     pub fn undelivered(&self, to: &str) -> Result<Vec<Message>> {
-        load(&mut *self.lock()?, to, Only::Undelivered)
+        load(&mut *self.lock()?, to, Only::Undelivered, None)
     }
 
     /// T288: stamp `delivered_at` on exactly `ids` where it is unset; `read_at` is left alone,
@@ -155,6 +176,13 @@ impl Store {
     }
 }
 
+/// `task` as the text the column holds, or an error when it is not a task id.
+fn canonical_task(task: Option<&str>) -> Result<Option<String>> {
+    Ok(task
+        .map(|t| t.trim().parse::<TaskId>().map(|id| id.to_string()))
+        .transpose()?)
+}
+
 /// Which of an agent's messages [`load`] returns.
 enum Only {
     All,
@@ -162,7 +190,12 @@ enum Only {
     Undelivered,
 }
 
-fn load(conn: &mut SqliteConnection, to: &str, only: Only) -> Result<Vec<Message>> {
+fn load(
+    conn: &mut SqliteConnection,
+    to: &str,
+    only: Only,
+    task: Option<&str>,
+) -> Result<Vec<Message>> {
     let mut query = messages::table
         .left_join(agents::table.on(agents::id.nullable().eq(messages::from_agent)))
         .left_join(hosts::table.on(hosts::id.nullable().eq(agents::host_id.nullable())))
@@ -176,9 +209,13 @@ fn load(conn: &mut SqliteConnection, to: &str, only: Only) -> Result<Vec<Message
             messages::created_at,
             messages::delivered_at,
             messages::read_at,
+            messages::task,
         ))
         .order(messages::id.asc())
         .into_boxed();
+    if let Some(task) = task {
+        query = query.filter(messages::task.eq(task));
+    }
     match only {
         Only::All => {}
         Only::Unread => query = query.filter(messages::read_at.is_null()),
@@ -196,6 +233,7 @@ fn load(conn: &mut SqliteConnection, to: &str, only: Only) -> Result<Vec<Message
             created_at: t.5,
             delivered_at: t.6,
             read_at: t.7,
+            task: t.8,
         })
         .collect())
 }
@@ -228,7 +266,7 @@ mod tests {
             .iter()
             .map(|t| store.send_message(Some(&a), &b, t).unwrap())
             .collect();
-        let page = store.inbox_limited(&b, true, true, Some(2)).unwrap();
+        let page = store.inbox_limited(&b, true, true, Some(2), None).unwrap();
         assert_eq!(page.iter().map(|m| m.id).collect::<Vec<_>>(), ids[..2]);
         let rest = store.inbox(&b, true, false).unwrap();
         assert_eq!(rest.iter().map(|m| m.id).collect::<Vec<_>>(), ids[2..]);
@@ -264,6 +302,55 @@ mod tests {
         assert!(
             store.inbox(&a, false, false).unwrap().is_empty(),
             "a's own queue"
+        );
+    }
+
+    #[test]
+    fn a_task_tag_is_canonical_filters_the_inbox_and_marks_only_its_thread() {
+        let store = Store::open_in_memory().unwrap();
+        let (a, b) = two_agents(&store);
+        let on_a12 = store
+            .send_message_on(Some(&a), &b, "one", Some(" a12 "))
+            .unwrap();
+        let on_a13 = store
+            .send_message_on(Some(&a), &b, "two", Some("A13"))
+            .unwrap();
+        let plain = store.send_message(Some(&a), &b, "three").unwrap();
+
+        let thread = store
+            .inbox_limited(&b, true, true, None, Some("a12"))
+            .unwrap();
+        assert_eq!(thread.iter().map(|m| m.id).collect::<Vec<_>>(), [on_a12]);
+        assert_eq!(thread[0].task.as_deref(), Some("A12"));
+
+        let rest = store.inbox(&b, true, false).unwrap();
+        assert_eq!(
+            rest.iter().map(|m| m.id).collect::<Vec<_>>(),
+            [on_a13, plain]
+        );
+        assert_eq!(rest[0].task.as_deref(), Some("A13"));
+        assert_eq!(rest[1].task, None, "a message sent without a task has none");
+    }
+
+    #[test]
+    fn a_task_that_is_not_an_id_is_refused_on_both_sides() {
+        let store = Store::open_in_memory().unwrap();
+        let (a, b) = two_agents(&store);
+        for bad in ["", "12", "A0", "A1.2.3", "A12\n> forged"] {
+            assert!(
+                store.send_message_on(Some(&a), &b, "x", Some(bad)).is_err(),
+                "{bad:?}"
+            );
+            assert!(
+                store
+                    .inbox_limited(&b, false, false, None, Some(bad))
+                    .is_err(),
+                "{bad:?}"
+            );
+        }
+        assert!(
+            store.inbox(&b, false, false).unwrap().is_empty(),
+            "nothing was queued"
         );
     }
 

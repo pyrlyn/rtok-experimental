@@ -285,6 +285,7 @@ fn dispatch_owned_strict(stdin: &[u8], event: &str, cfg: &Config) -> Result<Vec<
     let gemini = !grok && cfg.hook.host == "gemini";
     let codewhale = !grok && cfg.hook.host == "codewhale";
     let cline = !grok && cfg.hook.host == "cline";
+    let codebuddy = !grok && cfg.hook.host == "codebuddy";
     if grok {
         input.adapt_grok(event);
     } else if cursor {
@@ -355,7 +356,29 @@ fn dispatch_owned_strict(stdin: &[u8], event: &str, cfg: &Config) -> Result<Vec<
         let parsed: HookOutput = serde_json::from_slice(&out).unwrap_or_default();
         return Ok(cline_output(&parsed));
     }
+    if codebuddy {
+        let parsed: HookOutput = serde_json::from_slice(&out).unwrap_or_default();
+        return Ok(codebuddy_output(&parsed));
+    }
     Ok(out)
+}
+
+/// CodeBuddy Code (https://www.codebuddy.ai/docs/cli/hooks, checked 2026-10-11) sends Claude's
+/// stdin and reads Claude's output envelope, except that a PreToolUse rewrite travels as
+/// `hookSpecificOutput.modifiedInput` where Claude says `updatedInput`. Decisions, context and
+/// `{}` pass through untouched.
+pub fn codebuddy_output(out: &HookOutput) -> Vec<u8> {
+    let Ok(mut v) = serde_json::to_value(out) else {
+        return b"{}".to_vec();
+    };
+    if let Some(h) = v
+        .get_mut("hookSpecificOutput")
+        .and_then(serde_json::Value::as_object_mut)
+        && let Some(input) = h.remove("updatedInput")
+    {
+        h.insert("modifiedInput".into(), input);
+    }
+    serde_json::to_vec(&v).unwrap_or_else(|_| b"{}".to_vec())
 }
 
 /// Gemini CLI (https://geminicli.com/docs/hooks/reference/, fetched 2026-09-22) reads a
@@ -1211,12 +1234,71 @@ mod tests {
         );
     }
 
+    #[test]
+    fn codebuddy_output_renames_updated_input_and_passes_the_rest() {
+        let json = |b: Vec<u8>| serde_json::from_slice::<serde_json::Value>(&b).unwrap();
+        assert_eq!(
+            json(codebuddy_output(&HookOutput::default())),
+            serde_json::json!({})
+        );
+        let rewrite = pre_out(
+            None,
+            None,
+            Some(serde_json::json!({"command": "rtok run -- ls"})),
+        );
+        let v = json(codebuddy_output(&rewrite));
+        assert_eq!(
+            v,
+            serde_json::json!({"hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "modifiedInput": {"command": "rtok run -- ls"}
+            }})
+        );
+        assert!(v["hookSpecificOutput"].get("updatedInput").is_none());
+        let deny = pre_out(Some("deny"), Some("guard"), None);
+        assert_eq!(
+            json(codebuddy_output(&deny)),
+            serde_json::to_value(&deny).unwrap()
+        );
+        let post = post_out("ctx");
+        assert_eq!(
+            json(codebuddy_output(&post)),
+            serde_json::to_value(&post).unwrap()
+        );
+    }
+
     fn cline_cfg(dir: &std::path::Path) -> Config {
         let mut cfg = Config::default();
         cfg.hook.host = "cline".into();
         cfg.core.db_path = dir.join("rtok.db");
         cfg.core.archive_dir = dir.join("archive");
         cfg
+    }
+
+    #[test]
+    fn codebuddy_pre_tool_use_rewrites_into_modified_input() {
+        let dir = unique_dir("rtok-hook-codebuddy");
+        let mut cfg = cline_cfg(&dir);
+        cfg.hook.host = "codebuddy".into();
+        let stdin = serde_json::to_vec(&serde_json::json!({
+            "session_id": "cb-1",
+            "cwd": "/tmp",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status"}
+        }))
+        .unwrap();
+        let out = dispatch_owned_strict(&stdin, "PreToolUse", &cfg).unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        let h = &v["hookSpecificOutput"];
+        assert!(
+            h["modifiedInput"]["command"]
+                .as_str()
+                .unwrap()
+                .starts_with("rtok run"),
+            "{v}"
+        );
+        assert!(h.get("updatedInput").is_none(), "{v}");
     }
 
     #[test]

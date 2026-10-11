@@ -22,6 +22,7 @@ export const GO: Record<Page["id"], string> = {
   services: "v",
   worktrees: "w",
   usage: "u",
+  tasks: "b",
 };
 
 /** How long `g` waits for its second key. */

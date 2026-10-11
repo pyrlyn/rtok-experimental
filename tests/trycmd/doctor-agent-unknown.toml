@@ -3,7 +3,7 @@ args = "--config tests/trycmd/input/json-readers.toml doctor --agent no-such-hos
 status.code = 1
 stdout = ""
 stderr = """
-Error: unknown host `no-such-host`; valid hosts: claude, cursor, codex, [..], qwen
+Error: unknown host `no-such-host`; valid hosts: claude, cursor, codex, [..], qwen, codebuddy
 """
 
 # The error names the valid ids, so the flag is self-documenting.

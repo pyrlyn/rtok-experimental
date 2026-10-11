@@ -23,6 +23,7 @@ against each host's current docs 2026-09-23; re-verify before flipping a host to
 | codex | yes | git-hosted catalog (`.agents/plugins/marketplace.json`) | [developers.openai.com](https://developers.openai.com/codex/plugins) |
 | antigravity | no | bundled/local install only, no marketplace | [antigravity.google](https://antigravity.google/docs/plugins/) |
 | cline | no | no marketplace: `cline plugin install <source>` installs straight from a git repo or local path (SDK/CLI/Kanban only, not the VS Code extension), no catalog file to publish | [docs.cline.bot](https://docs.cline.bot/customization/plugins.md) |
+| codebuddy | no | git-hosted catalog possible, not wired in this repo yet | [codebuddy.ai](https://www.codebuddy.ai/docs/cli/plugin-marketplaces) |
 | copilot | no | git-hosted catalog possible, not wired in this repo yet | [docs.github.com](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference) |
 | cursor | no | manual review via cursor.com/marketplace/publish | [cursor.com](https://cursor.com/docs/plugins) |
 | devin | no | no public catalog to publish to: `devin plugins install <owner/repo>` installs straight from a git repo, and the Devin marketplace is an org/enterprise manifest in the web app | [docs.devin.ai](https://docs.devin.ai/cli/extensibility/plugins/overview) |

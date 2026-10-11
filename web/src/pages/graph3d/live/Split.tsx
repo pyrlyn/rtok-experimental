@@ -6,6 +6,7 @@ import { type CSSProperties, type KeyboardEvent, type ReactNode, useRef, useStat
 import { readStored, writeStored } from "../../../storage";
 import { Chip } from "../../../ui/Chip";
 import { focusRing } from "../../../ui/cx";
+import { MaximisablePart, useMaximised } from "./Maximise";
 
 export const SPLIT_KEY = "rtok.graph.split";
 export const HIDE_KEY = "rtok.graph.live.hidden";
@@ -29,6 +30,7 @@ export function Split({ explorer, live }: { explorer: ReactNode; live: ReactNode
     const [hidden, setHidden] = useState(() => readStored(HIDE_KEY) === "1");
     const box = useRef<HTMLDivElement>(null);
     const dragging = useRef(false);
+    const [maximised, setMaximised] = useMaximised();
 
     const set = (next: number, keep = true) => {
         setRatio(clamp(next));
@@ -63,35 +65,48 @@ export function Split({ explorer, live }: { explorer: ReactNode; live: ReactNode
                 style={{ "--split": `${ratio * 100}%` } as CSSProperties}
                 className="flex flex-col gap-2 min-[900px]:flex-row min-[900px]:gap-0"
             >
-                <div
-                    className={`min-w-0 ${hidden ? "min-[900px]:flex-1" : "min-[900px]:grow-0 min-[900px]:basis-[var(--split)]"}`}
+                <MaximisablePart
+                    label="explorer"
+                    maximised={maximised === "explorer"}
+                    onToggle={(on) => setMaximised(on ? "explorer" : null)}
+                    className={`min-w-0 ${maximised === "live" ? "hidden" : ""} ${hidden ? "min-[900px]:flex-1" : "min-[900px]:grow-0 min-[900px]:basis-[var(--split)]"}`}
                 >
                     {explorer}
-                </div>
-                {!hidden && (
+                </MaximisablePart>
+                {/* Not rendered while the explorer is maximised, like while hidden: no stream is held. */}
+                {!hidden && maximised !== "explorer" && (
                     <>
-                        <div
-                            role="separator"
-                            aria-orientation="vertical"
-                            aria-label="resize the live graph"
-                            aria-valuemin={MIN * 100}
-                            aria-valuemax={MAX * 100}
-                            aria-valuenow={Math.round(ratio * 100)}
-                            tabIndex={0}
-                            onPointerDown={(e) => {
-                                dragging.current = true;
-                                e.currentTarget.setPointerCapture(e.pointerId);
-                            }}
-                            onPointerMove={(e) => move(e.clientX)}
-                            onPointerUp={() => {
-                                dragging.current = false;
-                                writeStored(SPLIT_KEY, String(ratio));
-                            }}
-                            onDoubleClick={() => set(0.5)}
-                            onKeyDown={key}
-                            className={`${focusRing} hidden w-2 shrink-0 cursor-col-resize touch-none rounded-full bg-border hover:bg-border-strong min-[900px]:mx-1 min-[900px]:block`}
-                        />
-                        <div className="min-w-0 min-[900px]:flex-1">{live}</div>
+                        {!maximised && (
+                            <div
+                                role="separator"
+                                aria-orientation="vertical"
+                                aria-label="resize the live graph"
+                                aria-valuemin={MIN * 100}
+                                aria-valuemax={MAX * 100}
+                                aria-valuenow={Math.round(ratio * 100)}
+                                tabIndex={0}
+                                onPointerDown={(e) => {
+                                    dragging.current = true;
+                                    e.currentTarget.setPointerCapture(e.pointerId);
+                                }}
+                                onPointerMove={(e) => move(e.clientX)}
+                                onPointerUp={() => {
+                                    dragging.current = false;
+                                    writeStored(SPLIT_KEY, String(ratio));
+                                }}
+                                onDoubleClick={() => set(0.5)}
+                                onKeyDown={key}
+                                className={`${focusRing} hidden w-2 shrink-0 cursor-col-resize touch-none rounded-full bg-border hover:bg-border-strong min-[900px]:mx-1 min-[900px]:block`}
+                            />
+                        )}
+                        <MaximisablePart
+                            label="live graph"
+                            maximised={maximised === "live"}
+                            onToggle={(on) => setMaximised(on ? "live" : null)}
+                            className="min-w-0 min-[900px]:flex-1"
+                        >
+                            {live}
+                        </MaximisablePart>
                     </>
                 )}
             </div>

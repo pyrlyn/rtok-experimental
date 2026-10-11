@@ -207,7 +207,13 @@ pub fn status_caller(cfg: &Config) -> Option<String> {
 
 /// `rtok agents send` (T287): one recipient by id prefix, or every live agent of the caller's
 /// project (`project_name` of its cwd, else the cwd itself) minus the sender.
-pub fn send(cfg: &Config, to: Option<String>, text: Option<String>, all_live: bool) -> Result<()> {
+pub fn send(
+    cfg: &Config,
+    to: Option<String>,
+    text: Option<String>,
+    all_live: bool,
+    task: Option<&str>,
+) -> Result<()> {
     let (to, text) = match (all_live, to, text) {
         (false, Some(to), Some(text)) => (Some(to), text),
         (true, Some(text), None) => (None, text),
@@ -254,7 +260,7 @@ pub fn send(cfg: &Config, to: Option<String>, text: Option<String>, all_live: bo
         vec![id]
     };
     for id in targets {
-        let msg = store.send_message(from.as_deref(), &id, &text)?;
+        let msg = store.send_message_on(from.as_deref(), &id, &text, task)?;
         crate::log::stdout_ln(&format!(
             "sent #{msg} to {}",
             crate::store::short_agent_id(&id)
@@ -265,7 +271,13 @@ pub fn send(cfg: &Config, to: Option<String>, text: Option<String>, all_live: bo
 
 /// `rtok agents inbox` (T287): with no id the caller reads — and marks read — its own queue;
 /// with one the user peeks at that agent's queue and marks nothing.
-pub fn inbox(cfg: &Config, id: Option<String>, unread: bool, json: bool) -> Result<()> {
+pub fn inbox(
+    cfg: &Config,
+    id: Option<String>,
+    unread: bool,
+    task: Option<&str>,
+    json: bool,
+) -> Result<()> {
     let store = Store::open(&cfg.core.db_path)?;
     let (to, mark) = match id {
         Some(prefix) => (
@@ -279,7 +291,7 @@ pub fn inbox(cfg: &Config, id: Option<String>, unread: bool, json: bool) -> Resu
             None => bail!("not inside an agent session; pass an agent id"),
         },
     };
-    let rows = store.inbox(&to, unread, mark)?;
+    let rows = store.inbox_limited(&to, unread, mark, None, task)?;
     if json {
         let framed: Vec<serde_json::Value> = rows
             .iter()

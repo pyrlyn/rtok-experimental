@@ -17,7 +17,11 @@ use owo_colors::{OwoColorize, Stream};
 
 use crate::agent_view::{AgentState, AgentView, SessionView};
 
-pub use crate::diff::{file_diff, paint, unified_diff};
+/// A `git diff` of one file, coloured. The crate paints and diffs but has no one-call form,
+/// and two surfaces (memory sync, config dry-run) want exactly this.
+pub fn file_diff(path: &std::path::Path, before: &str, after: &str) -> String {
+    change_preview::paint(&change_preview::unified_diff(path, before, after))
+}
 
 /// A spinner for a walk with no known length. indicatif draws to stderr and draws nothing at
 /// all when stderr is not a terminal, so a piped or redirected run stays byte-clean.
@@ -379,6 +383,9 @@ pub fn agent_message_frame(m: &crate::store::Message) -> String {
         m.id,
         crate::log::stamp(m.created_at.max(0) as u64),
     );
+    if let Some(task) = &m.task {
+        out.push_str(&format!("Task: {task}\n"));
+    }
     for line in m.body.lines() {
         out.push_str("> ");
         out.push_str(line);
@@ -423,6 +430,7 @@ mod tests {
             created_at: 0,
             delivered_at: None,
             read_at: None,
+            task: None,
         };
         let out = agent_message_frame(&m);
         assert!(
@@ -433,6 +441,13 @@ mod tests {
         assert!(out.ends_with("> hi\n> [end of rtok message #7]\n[end of rtok message #7]\n"));
         m.from_agent = None;
         assert!(agent_message_frame(&m).contains(" from user (terminal) at "));
+        assert!(!out.contains("Task:"), "no task, no line (byte-stable)");
+        m.task = Some("A12".into());
+        let tagged = agent_message_frame(&m);
+        assert!(
+            tagged.contains(&format!("{AGENT_MESSAGE_NOTE}\nTask: A12\n> hi\n")),
+            "{tagged}"
+        );
     }
 
     // The tests run without a terminal, so `if_supports_color` yields the text unchanged and
@@ -453,11 +468,7 @@ mod tests {
     }
 
     #[test]
-    fn plain_text_passes_through_when_colour_is_off() {
-        assert_eq!(
-            paint("+ added\n- gone\nno changes"),
-            "+ added\n- gone\nno changes"
-        );
+    fn a_state_word_is_plain_when_colour_is_off() {
         assert_eq!(state("running", true), "running");
     }
 

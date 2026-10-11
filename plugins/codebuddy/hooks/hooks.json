@@ -1,0 +1,103 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v rtok-hook >/dev/null 2>&1 && exec rtok-hook PreToolUse --host codebuddy; command -v rtok >/dev/null 2>&1 && exec rtok hook PreToolUse --host codebuddy; exec \"${CODEBUDDY_PLUGIN_ROOT}/scripts/hook.sh\" PreToolUse",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v rtok-hook >/dev/null 2>&1 && exec rtok-hook PreToolUse --host codebuddy; command -v rtok >/dev/null 2>&1 && exec rtok hook PreToolUse --host codebuddy; exec \"${CODEBUDDY_PLUGIN_ROOT}/scripts/hook.sh\" PreToolUse",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v rtok-hook >/dev/null 2>&1 && exec rtok-hook PreToolUse --host codebuddy; command -v rtok >/dev/null 2>&1 && exec rtok hook PreToolUse --host codebuddy; exec \"${CODEBUDDY_PLUGIN_ROOT}/scripts/hook.sh\" PreToolUse",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v rtok-hook >/dev/null 2>&1 && exec rtok-hook PostToolUse --host codebuddy; command -v rtok >/dev/null 2>&1 && exec rtok hook PostToolUse --host codebuddy; exec \"${CODEBUDDY_PLUGIN_ROOT}/scripts/hook.sh\" PostToolUse",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v rtok-hook >/dev/null 2>&1 && exec rtok-hook UserPromptSubmit --host codebuddy; command -v rtok >/dev/null 2>&1 && exec rtok hook UserPromptSubmit --host codebuddy; exec \"${CODEBUDDY_PLUGIN_ROOT}/scripts/hook.sh\" UserPromptSubmit",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v rtok-hook >/dev/null 2>&1 && exec rtok-hook SessionStart --host codebuddy; command -v rtok >/dev/null 2>&1 && exec rtok hook SessionStart --host codebuddy; exec \"${CODEBUDDY_PLUGIN_ROOT}/scripts/hook.sh\" SessionStart",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v rtok-hook >/dev/null 2>&1 && exec rtok-hook PreCompact --host codebuddy; command -v rtok >/dev/null 2>&1 && exec rtok hook PreCompact --host codebuddy; exec \"${CODEBUDDY_PLUGIN_ROOT}/scripts/hook.sh\" PreCompact",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v rtok-hook >/dev/null 2>&1 && exec rtok-hook PostCompact --host codebuddy; command -v rtok >/dev/null 2>&1 && exec rtok hook PostCompact --host codebuddy; exec \"${CODEBUDDY_PLUGIN_ROOT}/scripts/hook.sh\" PostCompact",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v rtok-hook >/dev/null 2>&1 && exec rtok-hook SessionEnd --host codebuddy; command -v rtok >/dev/null 2>&1 && exec rtok hook SessionEnd --host codebuddy; exec \"${CODEBUDDY_PLUGIN_ROOT}/scripts/hook.sh\" SessionEnd",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

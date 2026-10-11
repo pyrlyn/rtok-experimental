@@ -59,6 +59,7 @@ See [`src/agents/claude/README.md`](../src/agents/claude/README.md) and [`docs/a
 | Directory | Host | Shape |
 | --- | --- | --- |
 | [`antigravity/`](antigravity/) | Antigravity | MCP-only plugin dir |
+| [`codebuddy/`](codebuddy/) | CodeBuddy Code + WorkBuddy | `.codebuddy-plugin` manifest + `hooks/hooks.json` (`--host codebuddy`); MCP from the host file (D33) |
 | [`codex/`](codex/) | Codex (CLI + app) | `.codex-plugin` manifest + hooks + local marketplace (no MCP: T275) |
 | [`commandcode/`](commandcode/) | Command Code | hooks + MCP launcher (no plugin-bundle format) |
 | [`copilot/`](copilot/) | GitHub Copilot CLI | legacy `plugin.json` + camelCase hooks (no MCP: T275) |

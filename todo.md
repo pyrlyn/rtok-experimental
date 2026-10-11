@@ -1,3 +1,88 @@
+- T531. Make the archive reference returned by read dedup expandable
+- T532. Preserve typed content and message fields in the direct cache key
+- T533. Scope cached responses to the resolved upstream request target
+- T534. Validate expand ranges against the payload before freezing decisions
+- T535. Record the first full or ranged read when its output is capped
+- T536. Preserve raw command bytes when storage fails open
+- T537. Keep MCP pending calls when the server sends its own request
+- T538. Do not let skipped memory imports reserve unseen body hashes
+- T539. Preserve a global note's project scope when revising it
+- T541. Reject disk task filename and frontmatter identity mismatches
+- T542. Invalidate graph rows when an extension's grammar mapping changes
+- T543. Make stale-fingerprint dry runs predict the actual cold reindex
+- T544. Keep unrelated gitignored files excluded when graph include is nonempty
+- T545. Apply full-walk include and glob-exclude rules to watcher events
+- T546. Refresh stored file ranks after deletion or zero-symbol replacement
+- T548. Redact private text before storing and restoring checkpoints
+- T549. Scope local llms documentation to its workspace
+- T550. Preserve returned doc ids when unchanged local docs are re-ingested
+- T551. Estimate docs-query savings against the same full content as byte accounting
+- T552. Keep checkpoint prefilter equivalent for spaced and mixed-content JSONL
+- T553. Use the shared project resolver for session checkpoint handoff
+- T555. Preserve quoted whitespace in guard command identities
+- T556. Resolve guard Read and invalidation paths against the same cwd
+- T557. Reject side-effect variants of nominally read-only shell commands
+- T558. Fail open for a sole skill installation scoped to another project
+- T559. Recognize YAML-quoted host keys before digesting skills
+- T560. Make the TOON test decoder handle quoted comma cells
+- T562. Abort memory sync when an existing host file cannot be read
+- T563. Key memory-sync protection by the complete destination path
+- T564. Keep memory-sync note titles from becoming block delimiters
+- T565. Include serialized metadata and separators in mem_pack's budget
+- T566. Preserve leading dots in memory note-file mentions
+- T567. Apply negative pnpm workspace patterns before reading members
+- T569. Preserve each host file's undo bytes across backup deduplication and pruning
+- T570. Fail SDK writes on symlink cycles instead of replacing a link
+- T571. Redact graph-export scope metadata and suggested download names
+- T573. Apply terminal call state even when the live event list is capped
+- T574. Decode SPA asset URL paths before looking up filenames
+- T576. Bind Doctor web writes to the confirmed preview
+- T577. Protect nested package-manager lockfiles during junk cleanup
+- T579. Count each transcript once when scanning directory aliases
+- T580. Include report metadata and anchors in the AI output budget
+- T581. Filter actionable report sinks before applying the top-ten limit
+- T583. Make Batch result accounting idempotent across downloads
+- T584. Preserve complete SSE usage events before an incomplete UTF-8 tail
+- T586. Resolve local relative remotes before deriving project identity
+- T587. Let an explicit report --format md override configuration
+- T589. Track log generations without using their first line as identity
+- T590. Preserve filesystem semantics for parent segments after symlinks
+- T592. Keep late same-second sessions from moving behind the OTel cursor
+- T594. Validate structured config types before persisting edits
+- T595. Keep commented-default discovery outside TOML string payloads
+- T597. Reject stale demon process identities before stopping services
+- T599. Make stored-body cleaning stable when noise removal reveals a wrapper
+- T601. Prevent an expired task-lock guard from deleting its successor's lock
+- T604. Keep literal strings distinct from JSON-tree variable references
+- T606. Preserve fitting Unicode mode files when bounding injection reads
+- T608. Preserve identifier and path suffixes in prose word stripping
+- T609. Preserve code inside longer Markdown backtick fences
+- T611. Decode serialized Copilot tool arguments before hook dispatch
+- T613. Attach sub-agents when their main agent is registered later
+- T615. Preserve claim order when tasks are claimed in the same second
+- T617. Limit file-linked observation recall after deduplicating observations
+- T618. Scrub private observation content before truncation removes its delimiters
+- T619. Scroll wrapped TUI panel results by rendered rows
+- T620. Enforce LSP request deadlines during blocking transport reads
+- T621. Refresh opened LSP documents after their files change
+- T622. Preserve non-text blocks when the pi extension compresses tool output
+- T623. Correlate web replies across request timeouts and retries
+- T624. Retain the trace ID in the OTel integration-check extractor
+- T625. Preserve invalid Grok configuration when installing MCP
+- T626. Match Aider proxy ownership by URL authority
+- T627. Preserve JSONC separators when removing an item with a trailing comment
+- T628. Select cached plugin versions by version precedence
+- T629. Reopen previously closed hosts when a later preflight fails
+- T630. Preserve the selected config file in operator pages
+- T631. Track the real Git metadata when embedding a worktree build SHA
+- T632. Use rendered chart height when paginating PDF reports
+- T633. Include the contents page in printed PDF page numbers
+- T634. Keep PyPI dry-run behavior independent of flag order
+- T635. Decode JSON paths in Claude worktree fallback hooks
+- T636. Limit Claude legacy proxy migration to owned endpoints
+- T637. Route filter text before global TUI shortcuts
+- T638. Bound benchmark output draining after the child exits
+- T639. Keep the selected Calls row visible in the TUI
 - T124. Realized `tools_rewrite` saving as a dated `research.md` row
 
 - T131. Measure the spawn brief: cost row and on/off re-read share
@@ -10,38 +95,29 @@
 - T275. Install/update removes rtok's MCP entry from an agent's config while a plugin serves MCP (every host)
 - T275.1. `rtok mcp ping <agent>`: prove the agent's rtok MCP server is alive and answering
 - T276. Spinner audit: every place rtok runs an external command and the user waits for its output
+- T276.3. Shared agent helpers on `ProgressRunner`: `run_cli`, `spawn_cli`, `app_version`, doctor MCP probe
+- T276.4. `ProgressRunner` in `bench`, `plugins/cmd/run` and `agents/restart`
+- T276.5. `ProgressRunner` in `graph`, `demon`, `log`, `otel`, hooks and the MCP wrapper
+- T276.6. Retire the point indicators, turn on the `Command::new` ban, docs and changelog
 - T277. Move rtok's MCP core into its own crate `crates/rtok-mcp`
 - T278. `rtok agents info <agent>` reports the real MCP state, not "mcp installed" by assumption
 - T279. One plugin version scheme for every install source (GitHub, local, marketplace), and `agents update` that skips an up-to-date plugin
 - T281. Probe: tie a host session's hooks and its rtok MCP server to one agent
-- T283. An agent learns its own rtok agent id
 - T289. Worktrees the host creates join rtok: `rtok worktree adopt` and the post-create hooks
 - T329. Graph page: project selector, auto-added projects and linked projects (epic)
 - T329.50. Graph page: running labels with elapsed counters on the live canvas
-- T329.51. Graph page: maximise buttons for the two parts
-- T329.52. Graph page: metrics collapsed to a strip under 900 px
-- T329.53. Graph page: count-up animation of the live numbers
-- T500. TUI: live calls extras (sparklines, outside-scope mark, folded-target counter)
-- T329.34. Graph page: caller names, store-wide totals and `live_*` config keys
 - T356. Never index `$HOME` or `/` as a graph root
 - T369.1. Measure grep_symbol follow-up rate after an opt-in window
 - T370. SessionStart repo map ranked by file-level personalized PageRank
-- T372. Link tests to sources by naming convention in `affected_from_paths`
-- T373. `rrf_merge` breaks score ties by note id
 - T378. Trigram prefilter for `search` (only if I-95 shows p95 > 200 ms)
 - T385. Proxy lanes and the optimization plan from `docs/research/optimization.md`
 - T385.3. Defaults bench: `compress` mode, context editing, skills, `live_blobs`
 - T385.9. P28 Phase 2: async compressor on the `internal` lane
-- T385.10. Routing for `internal` and `bulk` calls
-- T385.11. Deferred tool schemas and thinking replay
 - T394. Run the paid live benches and record them
 - T395. One real session as one OpenTelemetry trace in SigNoz and Maple
 - T396. Verify the usage readers against real files
 - T398. Probe editors on a `worktree.useRelativePaths` worktree
-- T404. Evaluate a local draft model that the cloud model only verifies
 - T413. More agent hosts: popular agents rtok does not install into yet
-- T413.1. `rtok agents install roo` — Roo Code
-- T413.2. `rtok agents install qwen` — Qwen Code
 - T413.3. `rtok agents install droid` — Factory Droid
 - T413.4. `rtok agents install kiro` — Kiro IDE and CLI
 - T413.5. `rtok agents install amp` — Amp
@@ -58,13 +134,9 @@
 - T414. Web dashboard restyle on the brand pack, built from `brand/` sources
 - T414.7. Re-shoot `web/screenshots/`; close the web admin gap in `brand/`
 - T416. Shared `change-preview` crate for dry-run output
-- T416.1. rtok renders previews through `change-preview`
-- T416.2. Deletion commands: `--dry-run`, `--stat`, sizes and file counts
-- T416.3. `--stat` on the commands that show a diff
-- T416.4. `--dry-run` for the destructive commands without a preview
 - T428. SessionStart hook back under the 10 ms budget
 - T436.3. Shared operation-icon crate for rtok and ketch
 - T436.4. Spinner on `agents install/update` through T276's `ProgressRunner`
-- T441. Task adapters: agents create and track tasks through rtok, stored on disk, in GitHub or in GitLab (epic)
 - T477. TUI: re-index and remove projects (counterpart of the web actions)
 - T521. MiMo Desktop variant of the `mimo` host
+- T561. TUI: folded-target counter in a one-project view

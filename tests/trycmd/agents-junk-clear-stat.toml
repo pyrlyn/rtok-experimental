@@ -1,0 +1,14 @@
+bin.name = "rtok"
+args = "agents junk clear --stat"
+stdout = """
+action kind path bytes  note
+
+nothing to clear
+"""
+
+[env]
+inherit = false
+
+[env.add]
+HOME = "target/tmp/agents-junk-clear-stat"
+RTOK_HOME = "target/tmp/agents-junk-clear-stat"

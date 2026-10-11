@@ -159,7 +159,20 @@
 # retries             = 3               # backoff only: retries before giving up; at most 5
 # backoff_ms          = 1000            # backoff only: delay before the first retry, doubled each time, capped at 30 s; a 429's Retry-After (seconds) can lengthen it, up to that cap
 
-[proxy.routing]                       # no keys yet
+[proxy.routing]                       # model routing; only the internal and bulk lanes, never the agent lane
+# enabled             = false           # off: every call keeps the model the client sent
+
+[proxy.routing.bulk]                  # one rule per lane; it acts only with from, to and gate all set
+# from                = []              # request models it applies to: an exact id or a prefix ending in * (empty = off)
+# to                  = ""              # the model that serves a matching call (empty = off)
+# provider            = ""              # provider slug recorded for a routed call (empty = the wire's own); pair with [proxy.lanes.<lane>] upstream
+# gate                = ""              # where the quality bench for this swap is kept (a path, URL or run id); empty = off
+
+[proxy.routing.internal]              # same keys as bulk (rtok's own model calls)
+# from                = []
+# to                  = ""
+# provider            = ""
+# gate                = ""
 
 [web]                                 # rtok web (same data as rtok tui)
 # host = "127.0.0.1"                    # --host
@@ -368,6 +381,9 @@
 # mcp_path      = ""                               # empty: <Code user dir>/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json
 [setup.qwen]
 # dir           = "~/.qwen"                    # settings.json (hooks, mcpServers); QWEN_HOME moves the directory
+[setup.codebuddy]
+# dir           = "~/.codebuddy"               # CodeBuddy Code: settings.json (hooks), .mcp.json, plugins/; CODEBUDDY_CONFIG_DIR moves it
+# workbuddy_dir = "~/.workbuddy"               # WorkBuddy Desktop: the same files (embedded CodeBuddy Code; unverified)
 
 [expand]                              # rtok expand <id>
 # max_lines = 0                         # 0 = unlimited   (--lines a-b is per call)
@@ -394,6 +410,12 @@
 [tasks.gitlab]
 # url     = "https://gitlab.com"        # https base URL; set it for a self-hosted instance
 # project = ""                          # group/name or numeric id; empty: the origin remote
+
+[tasks.export.github]                 # `rtok task export github`: mirror the disk tasks into GitHub Issues, one way
+# repo = ""                             # owner/name; empty: [tasks.github] repo, else the origin remote
+
+[tasks.export.linear]                 # `rtok task export linear`: mirror the disk tasks into Linear, one way; token in LINEAR_API_KEY
+# team = ""                             # the team's short key, e.g. "ENG"; empty: the export refuses to run
 
 [otel]                                # OpenTelemetry export; off until endpoint resolves
 # endpoint      = ""                    # OTLP/HTTP base URL, e.g. "http://localhost:4318"; "" = $OTEL_EXPORTER_OTLP_ENDPOINT
@@ -508,6 +530,9 @@
 # max_auto_projects = 20                # most projects references may add to the registry; reaching it is shown and logged
 # alerts = true                         # alert when a project in the scope is missing, unreachable, has its backend down or a broken manifest link; shown by rtok doctor, graph projects and graph answers
 # health_check_interval_s = 60          # seconds between health checks in rtok mcp and rtok web (an alert needs two in a row); 0 = off
+# live_heat_window_s = 300              # seconds a node stays warm on the live graph canvas after a call (rtok web, rtok tui)
+# live_max_events_per_s = 50            # most call events the live panel lists per second; the counters still count every call
+# live_feed_rows = 200                  # finished calls the live feed keeps
 # exclude    = []                       # gitignore-style paths dropped from the walk
 # include    = []                       # gitignore-style paths forced back in
 # extensions = {}                       # ext = "grammar" remap for custom suffixes

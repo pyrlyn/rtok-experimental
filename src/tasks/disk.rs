@@ -51,6 +51,10 @@ struct Head {
     assignee: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     blocked_by: Vec<TaskId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    conflicts_with: Vec<TaskId>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    parallel: bool,
 }
 
 /// Removes `<dir>/.claim.lock` when the claim finishes, including on panic.
@@ -190,6 +194,10 @@ impl TaskAdapter for DiskAdapter {
         Ok(Box::new(lock_claim(&self.dir)?))
     }
 
+    fn stores_markers(&self) -> bool {
+        true
+    }
+
     fn save(&self, task: &Task) -> Result<Task> {
         let Some((old, _)) = self.find(&task.id)? else {
             bail!("disk tasks: no task {} in {}", task.id, self.dir.display());
@@ -201,6 +209,8 @@ impl TaskAdapter for DiskAdapter {
         }
         task.blocked_by.sort();
         task.blocked_by.dedup();
+        task.conflicts_with.sort();
+        task.conflicts_with.dedup();
         self.place(Some(old), &task)
     }
 
@@ -301,6 +311,8 @@ fn render(task: &Task) -> Result<String> {
         priority: task.priority,
         assignee: task.assignee.clone(),
         blocked_by: task.blocked_by.clone(),
+        conflicts_with: task.conflicts_with.clone(),
+        parallel: task.parallel,
     };
     let yaml = serde_saphyr::to_string(&head)?;
     let body = task.description.trim_end();
@@ -326,6 +338,9 @@ fn parse(text: &str) -> Result<Task> {
     let mut blocked_by = head.blocked_by;
     blocked_by.sort();
     blocked_by.dedup();
+    let mut conflicts_with = head.conflicts_with;
+    conflicts_with.sort();
+    conflicts_with.dedup();
     let assignee = head.assignee.filter(|s| !s.is_empty());
     Ok(Task {
         description: body.trim().to_string(),
@@ -336,6 +351,8 @@ fn parse(text: &str) -> Result<Task> {
         priority: head.priority,
         assignee,
         blocked_by,
+        conflicts_with,
+        parallel: head.parallel,
         ..Task::open(head.id, head.title, "", 0)
     })
 }
@@ -480,10 +497,16 @@ mod tests {
             status: Status::InProgress,
             created_at: 10,
             updated_at: 20,
+            conflicts_with: vec![id("R2"), id("R3")],
+            parallel: true,
             ..Task::open(id("R4"), "", "", 0)
         };
         let text = render(&task).unwrap();
         assert!(text.starts_with("---\nid: R4\n"), "{text}");
+        assert!(
+            text.contains("conflicts_with:") && text.contains("parallel: true"),
+            "{text}"
+        );
         assert_eq!(parse(&text).unwrap(), task);
         assert_eq!(parse(&text.replace('\n', "\r\n")).unwrap(), task);
         let bare = Task {

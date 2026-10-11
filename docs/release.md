@@ -32,6 +32,18 @@ the new head and checked again. `dry-run` opens the PR, waits for the checks and
 `release-untagged-head` releases a version that is already on `main` untagged (nothing to
 commit) after its checks pass; off by default.
 
+A release PR can still land without bump (merged by hand, or auto-merge enabled on a `dry-run`
+PR, as with #981). [`release-guard.yml`](../.github/workflows/release-guard.yml) (pyrlyn/ci
+`release-guard.yml`, on every push to `main`) covers that: for a merged `release/bump-*` PR it
+waits 15 minutes for bump's tag, otherwise creates the tag, the draft Release and dispatches
+**Release** (everything existing is reused, so a re-run changes nothing), then checks that the
+Release is published and a regular one (not a prerelease). If it is not (the build failed, was
+cancelled, never ran, timed out), it opens a pull request `revert/release-v<version>` that
+reverts the release commit. It never merges or auto-merges it and never pushes to `main`; once
+per tag, never for a revert. The tag stays: delete it and any draft Release before releasing the
+version again. Releases are regular Releases; the binaries are still built with the `dev`
+profile (`[profile.dist]`).
+
 The preview lives only locally — it prints the version that would be released and writes
 nothing:
 

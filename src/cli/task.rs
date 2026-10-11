@@ -121,8 +121,46 @@ pub(super) enum TaskCmd {
         #[arg(long)]
         json: bool,
     },
+    /// Record that two tasks touch the same files, so they should not run at once. Symmetric;
+    /// `ready` flags a task whose partner is in progress.
+    Conflict {
+        /// One task
+        id: String,
+        /// The task it conflicts with
+        other: String,
+        /// Take the conflict off instead
+        #[arg(long)]
+        remove: bool,
+        /// Print the task as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Mark a task safe to run beside any other task.
+    Parallel {
+        /// Task id, e.g. `R12`
+        id: String,
+        /// Take the mark off instead
+        #[arg(long)]
+        off: bool,
+        /// Print the task as JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Raise the id counters to the adapter's highest ids and report drift; never writes the adapter
     Sync {
+        /// JSON instead of the text
+        #[arg(long)]
+        json: bool,
+    },
+    /// Mirror the disk tasks one way into an issue tracker; the files stay the source of truth.
+    /// A second run with nothing changed sends no write.
+    Export {
+        /// Where to mirror the tasks
+        #[arg(value_parser = crate::tasks::export::BACKENDS)]
+        backend: String,
+        /// Print the planned creates, updates and closes and send nothing
+        #[arg(long)]
+        dry_run: bool,
         /// JSON instead of the text
         #[arg(long)]
         json: bool,
@@ -234,6 +272,18 @@ pub(super) fn run(action: TaskCmd, config_file: Option<&std::path::Path>) -> Res
                 print!("{}", crate::tasks::sync::text(&report));
             }
         }
+        TaskCmd::Export {
+            backend,
+            dry_run,
+            json,
+        } => {
+            let report = crate::tasks::ops::export(&cfg, &cwd, &backend, dry_run)?;
+            if json {
+                print_json(&report)?;
+            } else {
+                print!("{}", crate::tasks::export::render(&report));
+            }
+        }
         TaskCmd::Next { json } => {
             let next = crate::tasks::ops::next(&cfg, &open()?)?;
             match (next, json) {
@@ -283,6 +333,31 @@ pub(super) fn run(action: TaskCmd, config_file: Option<&std::path::Path>) -> Res
                 print_json(&task)?;
             } else {
                 println!("{id}: blocked by {blocker}");
+            }
+        }
+        TaskCmd::Conflict {
+            id,
+            other,
+            remove,
+            json,
+        } => {
+            let task = open()?.conflict(&id_of(&id)?, &id_of(&other)?, remove)?;
+            if json {
+                print_json(&task)?;
+            } else if remove {
+                println!("{id}: no longer conflicts with {other}");
+            } else {
+                println!("{id}: conflicts with {other}");
+            }
+        }
+        TaskCmd::Parallel { id, off, json } => {
+            let task = open()?.set_parallel(&id_of(&id)?, !off)?;
+            if json {
+                print_json(&task)?;
+            } else if off {
+                println!("{}: not parallel", task.id);
+            } else {
+                println!("{}: parallel", task.id);
             }
         }
         TaskCmd::Priority { id, level, json } => {

@@ -29,6 +29,7 @@ cd "$(dirname "$0")/.."
 # `antigravity`'s plugin.json carries no version field for its host to cache by.
 VERSION_HOSTS="
 claude
+codebuddy
 codex
 copilot
 cursor
@@ -45,6 +46,7 @@ zcode
 # Manifests that carry a top-level "version" field, raised in step with the hosts above.
 MANIFEST_FILES="
 plugins/claude/.claude-plugin/plugin.json
+plugins/codebuddy/.codebuddy-plugin/plugin.json
 plugins/codex/.codex-plugin/plugin.json
 plugins/cursor/plugin.json
 plugins/cursor/.cursor-plugin/plugin.json

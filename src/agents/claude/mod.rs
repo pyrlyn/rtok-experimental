@@ -17,6 +17,10 @@ use std::sync::LazyLock;
 use crate::config::Config;
 use anyhow::Result;
 use rtok_agent_sdk::{Apply, KETCH_INSTALL, NO_CHANGES, array_at, edit_json, object_at};
+use rtok_mcp::ops::Mode as McpMode;
+use rtok_mcp::spec::{
+    Client as McpClient, DuplicateName, EntryShape, Format as McpFormat, Launch, McpSpec,
+};
 use semver::Version;
 use serde::Deserialize;
 use serde::de::{Deserializer, MapAccess, Visitor};
@@ -151,6 +155,24 @@ pub fn run(cfg: &Config, remove: bool) -> Result<String> {
 pub(super) struct HookForm {
     pub command: fn(&str, &str) -> String,
     pub is_ours: fn(&str, &str) -> bool,
+}
+
+/// [`command`] for a host that names itself: `hook <event> --host <host>` (Devin T89, CodeBuddy
+/// T560.2), resolved at run time like Claude's on POSIX.
+pub(super) fn command_for(host: &str, bin: &str, event: &str) -> String {
+    if cfg!(windows) || bin != "rtok" {
+        return format!("{bin} hook {event} --host {host}");
+    }
+    super::hook_resolver(&format!("hook {event} --host {host}"), None)
+}
+
+/// [`is_ours`] for [`command_for`]'s spelling.
+pub(super) fn is_ours_for(host: &str, cmd: &str, event: &str) -> bool {
+    let suffix = format!(" hook {event} --host {host}");
+    if let Some(bin) = cmd.strip_suffix(&suffix) {
+        return super::is_rtok_bin(super::unquote_bin(bin));
+    }
+    cmd.contains(&format!("exec rtok hook {event} --host {host};"))
 }
 
 /// Claude's own spelling, which Codex and ZCode share.
@@ -362,21 +384,47 @@ pub(super) fn strip_ours_as(
     super::with_kept(kept, super::removed_report(removed))
 }
 
+/// Claude's MCP entry for one client, as `rtok_mcp` reads it (T277.1): the `mcpServers.rtok`
+/// object at `file`, started with `command` and named `--host claude`. Claude Code and Claude
+/// Desktop are the two clients; they differ only in file and launch command.
+pub(crate) fn mcp_spec_at(client: McpClient, file: PathBuf, command: String) -> McpSpec {
+    McpSpec {
+        host: "claude",
+        client,
+        config_path: file,
+        format: McpFormat::Json,
+        key_path: McpSpec::key_path("mcpServers"),
+        server: rtok_mcp::registry::RTOK,
+        launch: Launch {
+            command: Some(command),
+            host_arg: true,
+        },
+        entry_shape: EntryShape::TypedCommand,
+        duplicate_name: DuplicateName::ShowsBoth,
+        plugin_serves: None,
+    }
+}
+
+/// [`mcp_spec_at`] for `kind` at the real file: `~/.claude.json`, or the desktop config.
+fn mcp_spec(cfg: &Config, kind: Kind) -> McpSpec {
+    match kind {
+        Kind::Cli => mcp_spec_at(
+            McpClient::Cli,
+            cfg.doctor.claude_json.clone(),
+            super::rtok_command(),
+        ),
+        Kind::Desktop => mcp_spec_at(McpClient::Desktop, desktop_path(), desktop_command()),
+    }
+}
+
 /// Add `rtok mcp` to `mcpServers` in `~/.claude.json` (T4.7).
 pub fn register_mcp(cfg: &Config) -> Result<String> {
-    let cmd = super::rtok_command();
-    rtok_agent_sdk::register_mcp(
-        &apply(cfg),
-        &cfg.doctor.claude_json,
-        "rtok",
-        &cmd,
-        &super::mcp_args("claude"),
-    )
+    mcp::run(cfg, &mcp_spec(cfg, Kind::Cli), McpMode::Install)
 }
 
 /// Drop `mcpServers.rtok` from `~/.claude.json` (`rtok agents remove claude`).
 pub fn unregister_mcp(cfg: &Config) -> Result<String> {
-    super::unregister_mcp_ours(cfg, &cfg.doctor.claude_json, "rtok")
+    mcp::run(cfg, &mcp_spec(cfg, Kind::Cli), McpMode::Remove)
 }
 
 /// The plugin tree (T114) and its id in the one-plugin marketplace that tree also is.
@@ -902,21 +950,24 @@ impl Agent for Claude {
     fn apply(&self, cfg: &Config, kind: Kind, mode: Mode) -> Result<Vec<String>> {
         let remove = mode == Mode::Remove;
         if kind == Kind::Desktop {
-            let (a, path) = (apply(cfg), desktop_path());
+            let spec = mcp_spec(cfg, kind);
             // `--replace` is about Claude Code's hooks; on the desktop it is a plain install.
             // Install and update always write this entry; only `remove` takes it out (T275) —
             // the plugin no longer serves MCP, so there is no second rtok server to guard
             // against here (D21, T243, T244 amended).
             return Ok(vec![
                 if remove {
-                    super::unregister_mcp_ours(cfg, &path, "rtok")?
+                    mcp::run(cfg, &spec, McpMode::Remove)?
                 } else if cfg.setup.mcp {
-                    rtok_agent_sdk::register_mcp(
-                        &a,
-                        &path,
-                        "rtok",
-                        &desktop_command(),
-                        &super::mcp_args("claude"),
+                    let update = mode == Mode::Update;
+                    mcp::run(
+                        cfg,
+                        &spec,
+                        if update {
+                            McpMode::Update
+                        } else {
+                            McpMode::Install
+                        },
                     )?
                 } else {
                     NO_CHANGES.into()
@@ -1135,18 +1186,12 @@ mod tests {
             Claude.support(Kind::Desktop, "hooks"),
             Support::No(_)
         ));
-        // Register/unregister through the SDK at a temp path, the way `apply` does (D29: never
+        // Install/remove through `rtok_mcp` at a temp path, the way `apply` does (D29: never
         // the real `desktop_path()`, which is not overridable from a Config).
         let path = tmp("desktop-mcp");
-        let a = apply(&cfg(path.clone(), false));
-        rtok_agent_sdk::register_mcp(
-            &a,
-            &path,
-            "rtok",
-            &desktop_command(),
-            &crate::agents::mcp_args("claude"),
-        )
-        .unwrap();
+        let c = cfg(path.clone(), false);
+        let spec = desktop_spec_at(&path);
+        mcp::run(&c, &spec, McpMode::Install).unwrap();
         // Compare the parsed value: a Windows path's `\` is `\\` in the raw JSON (T83.5).
         let raw = fs::read_to_string(&path).unwrap();
         let written: Value = serde_json::from_str(&raw).unwrap();
@@ -1156,39 +1201,76 @@ mod tests {
             "{raw}"
         );
         assert!(mcp::has_entry(&path, "mcpServers", "rtok"));
-        assert_ne!(
-            rtok_agent_sdk::unregister_mcp(&a, &path, "rtok").unwrap(),
-            NO_CHANGES
-        );
+        assert_ne!(mcp::run(&c, &spec, McpMode::Remove).unwrap(), NO_CHANGES);
         assert!(!fs::read_to_string(&path).unwrap().contains("\"rtok\""));
         assert!(!mcp::has_entry(&path, "mcpServers", "rtok"));
     }
 
     /// T275: install and update take the exact same branch for the desktop entry — `cfg.setup.mcp`
     /// gates a plain register, whatever the plugin's state; there is nothing left to guard
-    /// against a "second rtok server" (the plugin no longer serves MCP). One register call
-    /// stands in for both Install and Update, since the code path is identical; a second call
-    /// is the idempotent re-run.
+    /// against a "second rtok server" (the plugin no longer serves MCP). Table over both
+    /// surfaces and every mode (T277.1): the first install or update writes the entry, the
+    /// rest are the idempotent re-run, and remove takes it out, keeping the file's other keys.
     #[test]
-    fn desktop_install_and_update_write_the_same_entry_regardless_of_the_plugin() {
-        let path = tmp("desktop-mcp-independent");
-        let a = apply(&cfg(path.clone(), false));
-        for _ in 0..2 {
-            rtok_agent_sdk::register_mcp(
-                &a,
-                &path,
-                "rtok",
-                &desktop_command(),
-                &crate::agents::mcp_args("claude"),
-            )
-            .unwrap();
+    fn install_update_and_remove_write_the_same_entry_on_both_surfaces() {
+        for (name, desktop) in [("cli", false), ("desktop", true)] {
+            let spec_at = |p: &Path| {
+                if desktop {
+                    desktop_spec_at(p)
+                } else {
+                    cli_spec_fn(p)
+                }
+            };
+            let path = tmp(&format!("mcp-both-{name}"));
+            fs::write(&path, r#"{"keep":{"me":1}}"#).unwrap();
+            let c = cfg(path.clone(), false);
+            let spec = spec_at(&path);
+            let steps = [
+                (McpMode::Update, false),
+                (McpMode::Install, true),
+                (McpMode::Update, true),
+            ];
+            for (mode, idempotent) in steps {
+                let line = mcp::run(&c, &spec, mode).unwrap();
+                assert_eq!(line == NO_CHANGES, idempotent, "{name} {mode:?}: {line}");
+                assert!(
+                    line == NO_CHANGES || line.starts_with("mcpServers.rtok: "),
+                    "{line}"
+                );
+            }
+            let raw: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            assert_eq!(raw["mcpServers"]["rtok"]["type"], "stdio", "{name}");
+            assert_eq!(
+                raw["mcpServers"]["rtok"]["args"],
+                json!(["mcp", "--host", "claude"]),
+                "{name}"
+            );
+            assert_eq!(raw["keep"], json!({"me": 1}), "{name}");
+
+            let removed = mcp::run(&c, &spec, McpMode::Remove).unwrap();
+            assert_eq!(removed, "- mcpServers.rtok", "{name}");
+            let raw: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            assert_eq!(raw, json!({"keep": {"me": 1}}), "{name}");
         }
-        assert!(mcp::has_entry(&path, "mcpServers", "rtok"));
-        let raw: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(
-            raw["mcpServers"]["rtok"]["args"],
-            json!(["mcp", "--host", "claude"])
-        );
+    }
+
+    fn cli_spec_fn(path: &Path) -> McpSpec {
+        mcp_spec_at(McpClient::Cli, path.into(), crate::agents::rtok_command())
+    }
+
+    fn desktop_spec_at(path: &Path) -> McpSpec {
+        mcp_spec_at(McpClient::Desktop, path.into(), desktop_command())
+    }
+
+    /// `--dry-run` reports the write and leaves the file alone; a missing `~/.claude.json`
+    /// is not created by it.
+    #[test]
+    fn dry_run_reports_the_entry_without_creating_the_file() {
+        let path = tmp("mcp-dry-run");
+        let c = cfg(path.clone(), true);
+        let line = mcp::run(&c, &cli_spec_fn(&path), McpMode::Install).unwrap();
+        assert!(line.starts_with("mcpServers.rtok: "), "{line}");
+        assert!(!path.exists());
     }
 
     /// T246 via the Claude wrapper: an entry the user pointed elsewhere is left alone on
@@ -1217,7 +1299,7 @@ mod tests {
 
         let desktop = tmp("desktop-user-edited");
         fs::write(&desktop, edited.to_string()).unwrap();
-        let report = crate::agents::unregister_mcp_ours(&c, &desktop, "rtok").unwrap();
+        let report = mcp::run(&c, &desktop_spec_at(&desktop), McpMode::Remove).unwrap();
         assert!(
             report.starts_with("leave mcpServers.rtok") && report.contains("changed by you"),
             "{report}"

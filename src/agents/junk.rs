@@ -16,7 +16,7 @@
 //! `rtok.db`, not as loose files — this command makes the first two runnable on demand and
 //! reports what they would do before anyone applies them.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -30,9 +30,9 @@ use super::junk_review;
 use super::junk_sessions;
 use super::junk_worktrees;
 use super::{Agent, HOSTS, host, present};
-use crate::bytes::human_bytes;
 use crate::config::Config;
 use crate::store::Store;
+use change_preview::human_bytes;
 
 #[derive(Debug, Serialize)]
 pub struct Outcome {
@@ -40,6 +40,8 @@ pub struct Outcome {
     pub kind: &'static str,
     pub path: String,
     pub bytes: u64,
+    /// A log sibling or archive is one file.
+    pub files: u64,
     /// `clear` or `keep` (only after `--yes` failed to remove it).
     pub action: &'static str,
     pub note: String,
@@ -76,6 +78,7 @@ fn outcome(kind: &'static str, path: PathBuf, note: String) -> Outcome {
         kind,
         path: path.display().to_string(),
         bytes,
+        files: 1,
         action: "clear",
         note,
         failed: false,
@@ -163,6 +166,12 @@ pub fn to_table(outcomes: &[Outcome], yes: bool) -> String {
     let mut out = crate::worktree::noted_table(&cols, &lines, notes);
     let cleared = outcomes.iter().filter(|o| o.action == "clear" && !o.failed);
     let (n, bytes) = cleared.fold((0, 0), |(n, b), o| (n + 1, b + o.bytes));
+    if !yes && n > 0 {
+        let planned = outcomes.iter().filter(|o| o.action == "clear");
+        let planned = planned.map(|o| (o.path.as_str(), o.bytes, o.files));
+        out.push('\n');
+        out.push_str(&crate::removal_preview::render(planned));
+    }
     out.push_str(&match (yes, n) {
         (false, 0) => "\nnothing to clear\n".to_string(),
         (false, n) => format!(
@@ -239,67 +248,7 @@ pub struct Report {
     pub freed_review_bytes: u64,
 }
 
-/// What one walk found. A folder it could not read or finish is a lower bound, never an error.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct Usage {
-    pub bytes: u64,
-    pub denied: bool,
-    pub timed_out: bool,
-}
-
-/// How long one agent's folders may take to size before the rest is reported as a lower bound
-/// (a huge cache on a network volume must not hang `list`).
-pub const AGENT_SCAN_LIMIT: Duration = Duration::from_secs(10);
-
-/// Disk usage, not apparent size: allocated blocks on Unix so sparse files and APFS clones are
-/// not over-counted, a hard link once. Elsewhere it is the apparent size with every link
-/// counted, because std has no stable file id to dedupe by there. A symlink costs itself and is
-/// never followed, so a link out of an agent folder cannot pull foreign bytes into the total.
-pub fn disk_usage(path: &Path) -> u64 {
-    disk_usage_until(path, None).bytes
-}
-
-/// [`disk_usage`] that stops at `deadline` and reports a directory it was not allowed to read.
-pub fn disk_usage_until(path: &Path, deadline: Option<Instant>) -> Usage {
-    fn walk(path: &Path, seen: &mut HashSet<(u64, u64)>, deadline: Option<Instant>, u: &mut Usage) {
-        if u.timed_out || deadline.is_some_and(|d| Instant::now() >= d) {
-            u.timed_out = true;
-            return;
-        }
-        let meta = match std::fs::symlink_metadata(path) {
-            Ok(m) => m,
-            Err(e) => {
-                u.denied |= e.kind() == std::io::ErrorKind::PermissionDenied;
-                return;
-            }
-        };
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            if meta.nlink() < 2 || seen.insert((meta.dev(), meta.ino())) {
-                u.bytes += meta.blocks() * 512;
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = &seen;
-            u.bytes += meta.len();
-        }
-        if meta.is_dir() {
-            match std::fs::read_dir(path) {
-                Ok(entries) => {
-                    for entry in entries.flatten() {
-                        walk(&entry.path(), seen, deadline, u);
-                    }
-                }
-                Err(e) => u.denied |= e.kind() == std::io::ErrorKind::PermissionDenied,
-            }
-        }
-    }
-    let mut usage = Usage::default();
-    walk(path, &mut HashSet::new(), deadline, &mut usage);
-    usage
-}
+pub use crate::disk_usage::{AGENT_SCAN_LIMIT, Usage, disk_usage, disk_usage_until};
 
 /// The directories rtok's junk lives in: the log directory and the archive directory. One
 /// nested inside the other is folded into the outer so a byte is shown once.

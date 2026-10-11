@@ -47,6 +47,17 @@ pub enum EntryShape {
     Command,
 }
 
+/// How a host starts the server when that is not the registry's bare `rtok mcp`. A desktop app
+/// starts without a shell `PATH`, so it needs the absolute binary; since T283.2 every host's
+/// entry also names itself with `--host <id>`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Launch {
+    /// The binary to run instead of `server.command`.
+    pub command: Option<String>,
+    /// Append `--host <spec.host>` to the registry's args.
+    pub host_arg: bool,
+}
+
 /// One host client's MCP config: where it lives, how it is shaped, and the entry rtok writes
 /// into it. `ops::apply` is the only thing that should read one of these.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -58,6 +69,7 @@ pub struct McpSpec {
     /// Dotted path to the servers table (`mcpServers`, `mcp_servers`, `mcp.servers`).
     pub key_path: Vec<String>,
     pub server: Server,
+    pub launch: Launch,
     pub entry_shape: EntryShape,
     pub duplicate_name: DuplicateName,
     /// The name the rtok plugin itself serves on this host, if any (D33: usually none — the
@@ -72,6 +84,27 @@ impl McpSpec {
         dotted.split('.').map(str::to_string).collect()
     }
 
+    /// The binary and its args as the entry spells them: the launch override on top of the
+    /// registry's bare `rtok mcp`.
+    fn argv(&self) -> (&str, Vec<&'static str>) {
+        let command = self
+            .launch
+            .command
+            .as_deref()
+            .unwrap_or(self.server.command);
+        let mut args = self.server.args.to_vec();
+        if self.launch.host_arg {
+            args.extend(["--host", self.host]);
+        }
+        (command, args)
+    }
+
+    /// `rtok mcp --host claude`: what a host's report prints after `<key>.<name>: `.
+    pub fn summary(&self) -> String {
+        let (command, args) = self.argv();
+        format!("{command} {}", args.join(" "))
+    }
+
     /// The JSON entry [`crate::config`] and [`crate::ops`] write under
     /// `key_path.<server.name>`. TOML specs get the same shape converted on write
     /// ([`crate::config`] owns that conversion, never a caller).
@@ -80,8 +113,9 @@ impl McpSpec {
         if self.entry_shape == EntryShape::TypedCommand {
             m.insert("type".into(), json!("stdio"));
         }
-        m.insert("command".into(), json!(self.server.command));
-        m.insert("args".into(), json!(self.server.args));
+        let (command, args) = self.argv();
+        m.insert("command".into(), json!(command));
+        m.insert("args".into(), json!(args));
         if !self.server.env.is_empty() {
             let env: serde_json::Map<String, Value> = self
                 .server

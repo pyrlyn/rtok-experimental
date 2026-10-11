@@ -1,6 +1,6 @@
 {
   "name": "rtok-pi",
-  "version": "0.15.1",
+  "version": "0.17.0",
   "description": "rtok token-saving bash path for the pi agent (no MCP, D21)",
   "pi": {
     "extensions": ["./extensions/rtok.ts"]

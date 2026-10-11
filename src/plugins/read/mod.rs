@@ -233,7 +233,10 @@ pub(crate) fn resolve_with(
     {
         return Ok(abs);
     }
-    bail!("path outside cwd: {}", path.display())
+    bail!(
+        "path outside cwd: {} (outside this project and its worktrees; read it with the host's own file tool)",
+        path.display()
+    )
 }
 
 /// `Path::starts_with("")` is true for every path, so an empty root (`allow_paths = [""]`)
@@ -474,6 +477,17 @@ pub(crate) mod tests {
         let deep = "../".repeat(32) + "etc/passwd";
         assert!(read(&Ctx::new(&cx), &deep, "full", None).is_err());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    /// T529: agents asked `read` for a host's own skill and instruction files; a bare refusal
+    /// left them guessing, so it names the way out and keeps the prefix callers match on.
+    #[test]
+    fn a_refusal_points_to_the_host_s_own_file_tool() {
+        let err = resolve(Path::new("/nonexistent-cwd"), Path::new("/etc/hosts"), &[])
+            .unwrap_err()
+            .to_string();
+        assert!(err.starts_with("path outside cwd: /etc/hosts"), "{err}");
+        assert!(err.contains("host's own file tool"), "{err}");
     }
 
     /// `RTOK_PLUGINS_READ_ALLOW_PATHS=` once became `[""]`, and `starts_with("")` is always true.

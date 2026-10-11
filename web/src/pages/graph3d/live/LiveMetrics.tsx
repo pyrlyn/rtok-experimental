@@ -5,10 +5,12 @@
 import { useMemo } from "react";
 import type { CallsView, WindowView } from "../../../api/snapshot.gen";
 import { Chip } from "../../../ui/Chip";
+import { CountUp } from "../../../ui/CountUp";
 import { Kpi } from "../../../ui/Kpi";
 import { Pill } from "../../../ui/Pill";
 import { Sparkline } from "../../../ui/Sparkline";
 import { compact, fmt, pct } from "../../format";
+import { MetricsFold } from "./MetricsFold";
 import { emptyWindow } from "./useCalls";
 
 const seconds = (ms: number) => `${Math.max(0, Math.round(ms / 1000))}s`;
@@ -96,47 +98,70 @@ export function LiveMetrics({
                     </Chip>
                 </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
-                <Kpi
-                    label="running"
-                    value={fmt(view.running.length)}
-                    sub={view.running.length ? view.running.map((r) => r.tool).join(", ") : "idle"}
-                />
-                <Kpi
-                    label="calls"
-                    value={fmt(t.calls)}
-                    tone={t.failed ? "warn" : "default"}
-                    sub={`${fmt(t.failed)} failed`}
-                    viz={<Trend spark={t.spark} values={t.spark.calls} what="calls" />}
-                />
-                <Kpi
-                    label="latency p50"
-                    value={lat ? millis(lat.p50) : "-"}
-                    sub={lat ? `p95 ${millis(lat.p95)}` : undefined}
-                />
-                <Kpi
-                    label="symbols returned"
-                    value={`${fmt(t.symbols_returned)} of ${fmt(t.symbols)}`}
-                    sub={`${fmt(t.crossed)} across projects`}
-                />
-                <Kpi label="files touched" value={fmt(t.files_touched)} />
-                <Kpi label="projects with hits" value={fmt(t.projects_hit)} />
-                <Kpi
-                    label="fallbacks"
-                    value={fmt(t.fallbacks)}
-                    tone={t.fallbacks ? "warn" : "default"}
-                    sub={`${fmt(t.caps)} capped`}
-                />
-                <Kpi label="tokens sent" value={compact(t.after)} />
-                <Kpi label="without rtok" value={compact(t.before)} />
-                <Kpi
-                    label="saved"
-                    value={compact(saved)}
-                    tone="saved"
-                    sub={t.before ? pct(saved / t.before, 0) : "-"}
-                    viz={<Trend spark={t.spark} values={t.spark.saved} what="tokens saved" />}
-                />
-            </div>
+            <MetricsFold
+                strip={
+                    <>
+                        <span>{fmt(view.running.length)} running</span>
+                        <span>{fmt(t.calls)} calls</span>
+                        <span className="text-delta-fg">{compact(saved)} saved</span>
+                    </>
+                }
+            >
+                <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
+                    <Kpi
+                        label="running"
+                        value={fmt(view.running.length)}
+                        sub={
+                            view.running.length
+                                ? view.running.map((r) => r.tool).join(", ")
+                                : "idle"
+                        }
+                    />
+                    <Kpi
+                        label="calls"
+                        value={<CountUp value={t.calls} format={fmt} />}
+                        tone={t.failed ? "warn" : "default"}
+                        sub={`${fmt(t.failed)} failed`}
+                        viz={<Trend spark={t.spark} values={t.spark.calls} what="calls" />}
+                    />
+                    <Kpi
+                        label="latency p50"
+                        value={lat ? millis(lat.p50) : "-"}
+                        sub={lat ? `p95 ${millis(lat.p95)}` : undefined}
+                    />
+                    <Kpi
+                        label="symbols returned"
+                        value={`${fmt(t.symbols_returned)} of ${fmt(t.symbols)}`}
+                        sub={`${fmt(t.crossed)} across projects`}
+                    />
+                    <Kpi
+                        label="files touched"
+                        value={<CountUp value={t.files_touched} format={fmt} />}
+                    />
+                    <Kpi
+                        label="projects with hits"
+                        value={<CountUp value={t.projects_hit} format={fmt} />}
+                    />
+                    <Kpi
+                        label="fallbacks"
+                        value={<CountUp value={t.fallbacks} format={fmt} />}
+                        tone={t.fallbacks ? "warn" : "default"}
+                        sub={`${fmt(t.caps)} capped`}
+                    />
+                    <Kpi label="tokens sent" value={<CountUp value={t.after} format={compact} />} />
+                    <Kpi
+                        label="without rtok"
+                        value={<CountUp value={t.before} format={compact} />}
+                    />
+                    <Kpi
+                        label="saved"
+                        value={<CountUp value={saved} format={compact} />}
+                        tone="saved"
+                        sub={t.before ? pct(saved / t.before, 0) : "-"}
+                        viz={<Trend spark={t.spark} values={t.spark.saved} what="tokens saved" />}
+                    />
+                </div>
+            </MetricsFold>
             {view.running.length > 0 && (
                 <ul aria-label="running calls" className="flex flex-col gap-1 text-xs">
                     {view.running.map((r) => (

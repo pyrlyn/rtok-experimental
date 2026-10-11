@@ -347,7 +347,7 @@ impl Report {
         if let Some(bytes) = self.junk_bytes {
             out.push_str(&format!(
                 "junk\n  reclaimable: {}",
-                crate::bytes::human_bytes(bytes)
+                change_preview::human_bytes(bytes)
             ));
             if bytes > JUNK_HINT_BYTES {
                 out.push_str(" (run `rtok agents junk list`)");
@@ -1388,7 +1388,7 @@ fn mcp_servers(claude: Option<&Value>, mcp_json: &Path) -> Vec<Server> {
 /// paths) must go through `cmd.exe /D /C`: CreateProcess will not run those
 /// shims, so a probe used to report 0 tools for every npx-launched server.
 fn mcp_command(command: &str, args: &[String]) -> Command {
-    if cfg!(windows) && windows_needs_cmd_host(command) {
+    if cfg!(windows) && rtok_sys::proc::needs_cmd_host(command) {
         let mut c = Command::new("cmd.exe");
         c.arg("/D").arg("/C").arg(command).args(args);
         c
@@ -1397,19 +1397,6 @@ fn mcp_command(command: &str, args: &[String]) -> Command {
         c.args(args);
         c
     }
-}
-
-/// True when `command` is a Windows batch/PATHEXT shim CreateProcess cannot run.
-fn windows_needs_cmd_host(command: &str) -> bool {
-    let lower = command.to_ascii_lowercase();
-    if lower.ends_with(".exe") || lower.ends_with(".com") {
-        return false;
-    }
-    if lower.ends_with(".cmd") || lower.ends_with(".bat") {
-        return true;
-    }
-    // Bare name with no path: `npx`, `uvx`, `rtok` — PATHEXT may resolve a .cmd.
-    !command.contains('/') && !command.contains('\\') && !command.contains(':')
 }
 
 /// `initialize`, `notifications/initialized`, `tools/list`, then `call` when set.
@@ -2224,17 +2211,6 @@ mod tests {
                 .join("lean-ctx")
                 .join("SKILL.md")
         );
-    }
-
-    #[test]
-    fn windows_cmd_host_wraps_npx_shims_not_exes() {
-        assert!(windows_needs_cmd_host("npx"));
-        assert!(windows_needs_cmd_host("uvx"));
-        assert!(windows_needs_cmd_host(r"C:\Program Files\nodejs\npx.cmd"));
-        assert!(windows_needs_cmd_host("tool.bat"));
-        assert!(!windows_needs_cmd_host("rtok.exe"));
-        assert!(!windows_needs_cmd_host(r"C:\Users\u\.ketch\bin\rtok.exe"));
-        assert!(!windows_needs_cmd_host("/usr/bin/uvx"));
     }
 
     #[test]

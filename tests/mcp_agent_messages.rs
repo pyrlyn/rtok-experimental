@@ -129,3 +129,37 @@ fn a_send_to_an_unknown_ended_or_oversized_target_is_refused() {
     assert!(ended[0].0 && ended[0].1.contains("ended"), "{ended:?}");
     assert!(fx.store.inbox(&b, false, false).unwrap().is_empty());
 }
+
+#[test]
+fn a_task_tag_travels_through_the_tools_and_filters_the_inbox() {
+    let fx = Fixture::new("mcp-messages-task");
+    let b = fx.agent(1);
+    let send =
+        |text: &str, task: &str| format!(r#"{{"to":"{}","text":"{text}"{task}}}"#, short(&b));
+    let sent = fx.run(
+        0,
+        &[
+            ("agent_send", &send("on twelve", r#","task":"a12""#)),
+            ("agent_send", &send("on nothing", "")),
+            ("agent_send", &send("bad", r#","task":"nope""#)),
+        ],
+    );
+    assert!(!sent[0].0 && !sent[1].0, "{sent:?}");
+    assert!(sent[2].0, "a bad task id is refused: {sent:?}");
+
+    let got = fx.run(
+        1,
+        &[("agent_inbox", r#"{"task":"A12"}"#), ("agent_inbox", "{}")],
+    );
+    assert!(
+        got[0].1.contains("\nTask: A12\n> on twelve\n"),
+        "{}",
+        got[0].1
+    );
+    assert!(!got[0].1.contains("on nothing"), "{}", got[0].1);
+    assert!(
+        got[1].1.contains("> on nothing") && !got[1].1.contains("on twelve"),
+        "{}",
+        got[1].1
+    );
+}

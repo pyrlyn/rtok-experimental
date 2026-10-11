@@ -14,8 +14,9 @@
 use std::path::{Path, PathBuf};
 
 use rtok_mcp::config::Fs;
+use rtok_mcp::ops::{self, Mode as McpMode};
 use rtok_mcp::registry::RTOK;
-use rtok_mcp::spec::{Client, DuplicateName, EntryShape, Format, McpSpec};
+use rtok_mcp::spec::{Client, DuplicateName, EntryShape, Format, Launch, McpSpec};
 use rtok_mcp::status::Entry;
 use serde_json::Value;
 use toml_edit::{DocumentMut, Item};
@@ -215,7 +216,9 @@ pub(crate) fn surfaces(agent: &dyn super::Agent, cfg: &Config, kind: Kind) -> Ve
         "claude" => (cfg.doctor.claude_json.clone(), SERVERS),
         "cline" if desktop => (cline::ext_mcp_path(cfg), SERVERS),
         "cline" => (s.cline.mcp_path.clone(), SERVERS),
+        "codebuddy" => (super::codebuddy::mcp_path(cfg, kind), SERVERS),
         "codewhale" => (codewhale::mcp_path(cfg), SERVERS),
+        "commandcode" => (super::commandcode::mcp_path(cfg), SERVERS),
         "codex" => (s.codex.config_path.clone(), "mcp_servers"),
         "copilot" => (copilot::mcp_path(cfg), SERVERS),
         "cursor" => (cursor::mcp_path(cfg), SERVERS),
@@ -266,6 +269,7 @@ fn surface(
         format,
         key_path: McpSpec::key_path(key),
         server: RTOK,
+        launch: Launch::default(),
         entry_shape: EntryShape::Command,
         duplicate_name: DuplicateName::ShowsBoth,
         plugin_serves: plugin.map(|_| RTOK.name),
@@ -383,6 +387,29 @@ impl Fs for Disk {
     fn write(&mut self, path: &Path, _: Vec<u8>) -> anyhow::Result<()> {
         anyhow::bail!("{}: MCP status is read-only", path.display())
     }
+}
+
+/// The disk [`run`] writes through: [`rtok_agent_sdk::write`] gives the atomic swap, the
+/// `_backup` copy and the dry run that every other host installer already has, so this crate's
+/// `Fs::backup` stays the no-op default.
+struct Writer<'a>(&'a rtok_agent_sdk::Apply);
+
+impl Fs for Writer<'_> {
+    fn read(&self, path: &Path) -> Option<Vec<u8>> {
+        Disk.read(path)
+    }
+    fn write(&mut self, path: &Path, bytes: Vec<u8>) -> anyhow::Result<()> {
+        let body = String::from_utf8(bytes)?;
+        rtok_agent_sdk::write(self.0, path, &body, "mcp entry")
+    }
+}
+
+/// Install, update or remove rtok's MCP entry for `spec` on the real disk: the one entry
+/// point a migrated host's `apply` calls (T277.1), returning the line it reports.
+pub(crate) fn run(cfg: &Config, spec: &McpSpec, mode: McpMode) -> anyhow::Result<String> {
+    let ctx = super::apply(cfg);
+    let report = ops::apply(spec, mode, &ctx, &mut Writer(&ctx), super::is_rtok_bin)?;
+    Ok(report.line())
 }
 
 /// `None` when `have` runs `rtok mcp` for `host` (any path to the rtok binary; argv as `command`
@@ -699,6 +726,7 @@ mod tests {
         let mut c = Config::default();
         let root = Path::new("/nonexistent/rtok-t278");
         c.setup.gemini.dir = root.join("gemini");
+        c.setup.commandcode.dir = root.join("commandcode");
         c.setup.grok.config_path = root.join("grok/config.toml");
         c.setup.claude.settings_path = root.join("claude/settings.json");
         c.doctor.claude_json = root.join("claude.json");
@@ -778,6 +806,17 @@ mod tests {
             }
         }
         assert!(seen >= 20, "{seen} surfaces");
+    }
+
+    /// T275.2: Command Code is a host with MCP of its own, so it has a surface (and a doctor line).
+    #[test]
+    fn commandcode_has_an_mcp_surface() {
+        let cfg = vfs_cfg();
+        let host = super::super::host("commandcode").unwrap();
+        let rows = surfaces(host, &cfg, Kind::Cli);
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].spec.config_path.ends_with("commandcode/mcp.json"));
+        assert_eq!(rows[0].spec.key_path, ["mcpServers"]);
     }
 
     /// Before T275 the Code plugin made Desktop read as installed; with it installed and a

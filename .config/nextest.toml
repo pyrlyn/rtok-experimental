@@ -110,3 +110,24 @@ threads-required = "num-test-threads"
 [[profile.default.overrides]]
 filter = 'test(/list_reports_installed_modules_per_host/)'
 threads-required = "num-test-threads"
+
+# Every test that spawns `rtok mcp` (a stdio server with a watcher, health and retention thread
+# each) shares this group. On the 4-vCPU Windows runner, a dozen of them next to the heavy tests
+# stretched a 0.3 s exchange to 7-10 s and failed `mcp_with_watcher_exits_on_stdin_eof` and
+# `mcp_moves_into_the_first_file_root_after_roots_list` (run 38073132494). Two at a time keeps
+# the other threads for the rest of the suite.
+[test-groups]
+mcp-spawn = { max-threads = 2 }
+
+[[profile.default.overrides]]
+filter = 'binary(/^mcp(_agent_messages|_agents|_call_lsp_orphan|_http|_ping|_wrap)?$/)'
+test-group = "mcp-spawn"
+
+# CI (`NEXTEST_PROFILE=ci`, set in ci.yml): one flake must not cancel the other shard and the
+# macOS job (run 38073132494 lost ~10 min of green work to two timing failures), and a test that
+# passes on retry is reported FLAKY in the log instead of failing the gate. Two retries, not
+# more: a test that fails three times in a row is broken. Local runs keep the default profile,
+# where a flake stays visible.
+[profile.ci]
+retries = 2
+fail-fast = false

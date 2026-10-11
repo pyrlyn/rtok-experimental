@@ -66,6 +66,10 @@ pub(super) enum MemoryCmd {
         /// Print the unified diff and write nothing
         #[arg(long)]
         dry_run: bool,
+        // T416.3
+        /// With --dry-run: stat lines and totals instead of the diff
+        #[arg(long, requires = "dry_run")]
+        stat: bool,
         /// Delete the managed block and nothing else
         #[arg(long)]
         remove: bool,
@@ -143,9 +147,11 @@ pub(super) fn run(config_file: &Option<PathBuf>, action: MemoryCmd) -> Result<()
             file,
             budget,
             dry_run,
+            stat,
             remove,
             force,
         } => with_loader("syncing memory", || {
+            crate::stat_preview::set(stat);
             crate::plugins::memory::sync::run(&cfg, file, budget, dry_run, remove, force)
         })?,
         MemoryCmd::Status {

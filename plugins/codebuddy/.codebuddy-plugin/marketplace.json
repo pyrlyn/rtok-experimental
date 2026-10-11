@@ -1,0 +1,14 @@
+{
+  "name": "rtok",
+  "owner": {
+    "name": "pyrlyn"
+  },
+  "description": "rtok plugins for CodeBuddy Code and WorkBuddy",
+  "plugins": [
+    {
+      "name": "rtok",
+      "source": "./",
+      "description": "rtok hooks for CodeBuddy Code and WorkBuddy"
+    }
+  ]
+}

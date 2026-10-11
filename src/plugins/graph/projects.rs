@@ -361,6 +361,47 @@ pub fn run(rt: &Runtime, action: Action, json: bool) -> Result<String> {
     }
 }
 
+/// What `Remove` or `Unlink` would drop, with nothing written (T416.4). Any other action is
+/// refused: only the two that delete rows have a preview.
+pub fn preview(rt: &Runtime, action: Action, json: bool) -> Result<String> {
+    match action {
+        Action::Unlink { to, from, both } => {
+            let (a, b) = pair(rt, &to, from.as_deref())?;
+            let links = rt.store.project_links()?;
+            let linked =
+                |x: &Project, y: &Project| links.iter().any(|l| l.from == x.id && l.to == y.id);
+            let mut done = vec![(&a, &b, linked(&a, &b))];
+            if both {
+                done.push((&b, &a, linked(&b, &a)));
+            }
+            changes(&done, "would unlink", "is not linked", json)
+        }
+        Action::Remove(target) => {
+            let p = resolve(&rt.store, &target)?;
+            let links = rt.store.project_links()?;
+            let out = links.iter().filter(|l| l.from == p.id).count();
+            let incoming = links.iter().filter(|l| l.to == p.id).count();
+            let index = row(rt, p.clone())?.index;
+            let (rows, files) = index.as_ref().map_or((0, 0), |i| (i.rows, i.files));
+            if json {
+                return Ok(serde_json::to_string_pretty(&serde_json::json!({
+                    "would_remove": p.id,
+                    "root": p.root,
+                    "index_rows": rows,
+                    "indexed_files": files,
+                    "links_out": out,
+                    "links_in": incoming,
+                }))? + "\n");
+            }
+            Ok(format!(
+                "would remove {} (id {})\n  index rows: {rows} over {files} files\n  links: {out} out, {incoming} in\n  files untouched; nothing removed (dry run)\n",
+                p.root, p.id
+            ))
+        }
+        _ => bail!("only `remove` and `unlink` have a dry run"),
+    }
+}
+
 pub enum Action {
     Link {
         to: String,

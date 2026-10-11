@@ -263,3 +263,91 @@ fn claim_ready_and_a_blocker() {
     assert_eq!(out, "C1: open\n");
     assert!(sb.ok(&["ready"]).contains("C1"));
 }
+
+/// T441.13.2: conflict and parallel markers through the CLI and MCP on the disk adapter. A
+/// conflict is written on both tasks, `list`/`show`/`ready` show the markers, and a partner in
+/// progress flags a ready task without hiding it or refusing its claim.
+#[test]
+fn conflict_and_parallel_markers_are_symmetric_and_flag_ready() {
+    let sb = Sandbox::new("markers");
+    sb.ok(&["init", "--prefix", "K"]);
+    let db = sb.home.join(".rtok").join("rtok.db");
+    let store = rtok::store::Store::open(&db).unwrap();
+    let host = store.host_id("claude").unwrap().unwrap();
+    let agent = store
+        .register_agent(host, "cli-markers", None, None, None)
+        .unwrap();
+    for title in ["First", "Second", "Third"] {
+        sb.ok(&["create", title]);
+    }
+
+    assert_eq!(sb.ok(&["conflict", "K1", "K2"]), "K1: conflicts with K2\n");
+    assert_eq!(sb.ok(&["parallel", "K3"]), "K3: parallel\n");
+    let list = sb.ok(&["list"]);
+    assert!(list.contains("First  [conflicts: K2]"), "{list}");
+    assert!(list.contains("Second  [conflicts: K1]"), "{list}");
+    assert!(list.contains("Third  [parallel]"), "{list}");
+    assert!(sb.ok(&["show", "K2"]).contains("conflicts with: K1\n"));
+    assert!(sb.ok(&["show", "K3"]).contains("parallel: yes\n"));
+
+    // Both files carry the edge; the marker keys appear only where they apply.
+    let tasks = std::fs::read_dir(sb.file("tasks")).unwrap();
+    let text = |prefix: &str| {
+        let hit = tasks
+            .filter_map(Result::ok)
+            .find(|e| e.file_name().to_string_lossy().starts_with(prefix));
+        std::fs::read_to_string(hit.unwrap().path()).unwrap()
+    };
+    assert!(text("K2 ").contains("conflicts_with:"));
+
+    let before = sb.ok(&["ready"]);
+    assert_eq!(before, "K1  First\nK2  Second\nK3  Third  [parallel]\n");
+    let (ok, _, err) = sb.task_as(&agent, &["claim", "K1"]);
+    assert!(ok, "{err}");
+    let ready = sb.ok(&["ready"]);
+    assert_eq!(
+        ready,
+        "K2  Second  (conflicts with K1 in progress)\nK3  Third  [parallel]\n"
+    );
+    let (ok, _, err) = sb.task_as(&agent, &["claim", "K2"]);
+    assert!(ok, "a conflict is a warning, not a refusal: {err}");
+
+    // CLI and MCP answer alike; a repeat leaves the task as it is.
+    let (ok, out) = sb.mcp("task_conflict", r#"{"id":"K1","other":"K3"}"#);
+    assert!(ok, "{out}");
+    let via_mcp: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let via_cli: serde_json::Value =
+        serde_json::from_str(&sb.ok(&["conflict", "K1", "K3", "--json"])).unwrap();
+    assert_eq!(via_mcp, via_cli);
+    assert_eq!(via_mcp["conflicts_with"], serde_json::json!(["K2", "K3"]));
+    let (ok, out) = sb.mcp("task_parallel", r#"{"id":"K3","on":false}"#);
+    assert!(ok && !out.contains("parallel"), "{out}");
+
+    assert_eq!(
+        sb.ok(&["conflict", "K1", "K2", "--remove"]),
+        "K1: no longer conflicts with K2\n"
+    );
+    assert!(!sb.ok(&["show", "K2"]).contains("conflicts with"));
+    assert_eq!(sb.ok(&["parallel", "K3", "--off"]), "K3: not parallel\n");
+
+    for args in [&["conflict", "K1", "K1"][..], &["conflict", "K1", "K9"]] {
+        let (ok, _, err) = sb.task(args);
+        assert!(!ok && !err.is_empty(), "{args:?}: {err}");
+    }
+}
+
+#[test]
+fn export_mirrors_the_disk_adapter_only_and_names_the_backends() {
+    let sb = Sandbox::new("export");
+    // A github-adapter checkout is refused before any token lookup or request.
+    std::fs::write(
+        sb.file(".rtok.toml"),
+        "[tasks]\nadapter = \"github\"\nprefix = \"E\"\n",
+    )
+    .unwrap();
+    let (ok, _, err) = sb.task(&["export", "github", "--dry-run"]);
+    assert!(!ok && err.contains("mirrors the disk adapter"), "{err}");
+
+    let (ok, _, err) = sb.task(&["export", "jira"]);
+    assert!(!ok && err.contains("invalid value"), "{err}");
+}

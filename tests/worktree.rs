@@ -22,8 +22,7 @@ fn find<'a>(entries: &'a [Entry], name: &str) -> &'a Entry {
 /// Claim rows store `fs::canon`. On Windows that drops a safe `\\?\` prefix that
 /// `std::fs::canonicalize` keeps, so a string compare against the raw canonical path fails.
 fn stored_claim_path(path: &Path) -> String {
-    let text = path.canonicalize().unwrap().display().to_string();
-    text.strip_prefix(r"\\?\").unwrap_or(&text).to_string()
+    dunce::canonicalize(path).unwrap().display().to_string()
 }
 
 #[test]
@@ -482,6 +481,10 @@ fn add_creates_one_locked_worktree_per_task_from_a_fresh_base() {
     // Only on the remote: a stale local `origin/main` would branch from the wrong commit.
     run(&tmp, &["clone", "-q", "origin.git", "other"]);
     commit(&tmp.join("other"), "b.txt");
+    // T441.13.3: the host config is only written where git ignores it.
+    std::fs::write(tmp.join("other/.gitignore"), ".claude/\n").unwrap();
+    run(&tmp.join("other"), &["add", ".gitignore"]);
+    run(&tmp.join("other"), &["commit", "-q", "-m", "ignore"]);
     run(&tmp.join("other"), &["push", "-q", "origin", "main"]);
     let tip = run(&tmp.join("other"), &["rev-parse", "HEAD"]);
     // T410: the default root is `~/.rtok/worktrees`; a `_worktrees/` beside the repository
@@ -504,6 +507,15 @@ fn add_creates_one_locked_worktree_per_task_from_a_fresh_base() {
     let expected = root.join("rtok-t158").canonicalize().unwrap();
     assert_eq!(path.canonicalize().unwrap(), expected);
     assert_eq!(run(path, &["rev-parse", "HEAD"]), tip);
+    // T441.13.3: the session started in the worktree shares one Claude Code task list.
+    let local: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(path.join(".claude/settings.local.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        local["env"]["CLAUDE_CODE_TASK_LIST_ID"], "origin-t158",
+        "{local}"
+    );
     assert_eq!(
         run(path, &["branch", "--show-current"]).trim(),
         "t158-worktree-add"
@@ -614,10 +626,37 @@ fn clean_deletes_idle_tagged_caches_and_nothing_else() {
     let table = rtok(&work, &["worktree", "clean"]);
     let table = String::from_utf8_lossy(&table.stdout);
     assert!(table.contains("dry run: 2 caches, "), "{table}");
+    // T416.2: each cache is a removal line with its file count, then the totals; `--stat` and
+    // `--dry-run` print the same preview, `--json` carries the count.
+    assert_eq!(row("wt-idle")["files"], 2);
+    assert_eq!(row("wt-fresh")["files"], 0);
+    assert!(table.contains("2 paths, 4 files"), "{table}");
+    assert!(table.contains("  2 files"), "{table}");
+    // The idle column counts seconds, so two runs may differ in it: compare the words with
+    // every age (`9s`, `2h`) masked.
+    let words = |out: &std::process::Output| -> Vec<String> {
+        let age = |w: &str| {
+            let (n, unit) = w.split_at(w.len().saturating_sub(1));
+            !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) && "smhd".contains(unit)
+        };
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        let mask = |w: &str| if age(w) { "AGE".into() } else { w.to_string() };
+        text.split_whitespace().map(mask).collect()
+    };
+    for flag in ["--stat", "--dry-run"] {
+        let flagged = rtok(&work, &["worktree", "clean", flag]);
+        assert_eq!(words(&flagged), words(&rtok(&work, &["worktree", "clean"])));
+    }
 
     let out = rtok(&work, &["worktree", "clean", "--yes"]);
     assert!(
         out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // T276.2: two caches go, so a bar is due on a terminal; off one, stderr stays untouched.
+    assert!(
+        out.stderr.is_empty(),
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
@@ -961,6 +1000,70 @@ fn remove_takes_only_the_caller_s_own_clean_worktree() {
     for name in ["wt-dirty", "wt-theirs", "wt-here"] {
         assert!(tmp.join(name).exists(), "{name}");
     }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// T416.4: `remove --dry-run` names the path, branch, size and file count, keeps every refusal,
+/// and leaves the worktree, its branch and its claim alone.
+#[test]
+fn remove_dry_run_previews_and_changes_nothing() {
+    let tmp = rtok::testutil::tmp_dir("worktree-remove-dry");
+    run(&tmp, &["init", "-q", "--bare", "origin.git"]);
+    run(&tmp, &["clone", "-q", "origin.git", "work"]);
+    let work = tmp.join("work");
+    commit(&work, "a.txt");
+    run(&work, &["push", "-q", "-u", "origin", "main"]);
+    run(&work, &["remote", "set-head", "origin", "main"]);
+    let (store, ids) = agents(&tmp, &["sess-me"]);
+    let me = ids[0].as_str();
+    add(
+        &work,
+        "done",
+        Some(&format!("claude | t1 | 2026-09-27 | agent {me}")),
+    );
+    add(
+        &work,
+        "open",
+        Some(&format!("claude | t2 | 2026-09-27 | agent {me}")),
+    );
+    commit(&tmp.join("wt-done"), "done.txt");
+    commit(&tmp.join("wt-open"), "open.txt");
+    squash(&work, "t-done");
+    run(&work, &["push", "-q", "origin", "main"]);
+    let done = tmp.join("wt-done").canonicalize().unwrap();
+    store
+        .claim_worktree(&done.display().to_string(), me, "t1")
+        .unwrap();
+    let remove = |args: &[&str]| {
+        let args = [&["worktree", "remove", "--dry-run"][..], args].concat();
+        rtok_as(&tmp, &work, Some(me), &args, b"")
+    };
+
+    let out = remove(&["t1"]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(text.contains(&stored_claim_path(&done)), "{text}");
+    assert!(text.contains("files"), "{text}");
+    assert!(text.contains("branch t-done: would be deleted"), "{text}");
+    assert!(done.exists() && !run(&work, &["branch", "--list", "t-done"]).is_empty());
+    assert_eq!(store.open_worktree_claims().unwrap().len(), 1);
+
+    let out = remove(&["t1", "--json"]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(
+        v["files"].as_u64().unwrap() > 0 && v["bytes"].as_u64().is_some(),
+        "{v}"
+    );
+
+    let out = remove(&["../wt-open"]);
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("--keep-branch"),
+        "an unmerged branch is refused in a dry run too"
+    );
     let _ = std::fs::remove_dir_all(&tmp);
 }
 

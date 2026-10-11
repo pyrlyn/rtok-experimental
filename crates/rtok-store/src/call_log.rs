@@ -566,7 +566,33 @@ impl Store {
         self.model_usage(true)
     }
 
+    /// [`Self::usage_by_model_tier`] split by the `calls.kind` (the proxy lane) that produced
+    /// the usage (T385.10), so `rtok stats --price` can cost each lane at the model that
+    /// really served it. A usage row with no call reads back with `kind = None`.
+    pub fn usage_by_lane_model_tier(&self) -> Result<Vec<LaneModelUsage>> {
+        self.lane_model_usage(true)
+    }
+
     fn model_usage(&self, by_tier: bool) -> Result<Vec<ModelUsage>> {
+        let mut by_model: BTreeMap<String, ModelUsage> = BTreeMap::new();
+        for row in self.lane_model_usage(by_tier)? {
+            let u = row.usage;
+            let entry = by_model.entry(u.model.clone()).or_insert(ModelUsage {
+                model: u.model,
+                input: 0,
+                cache_create: 0,
+                cache_read: 0,
+                output: 0,
+            });
+            entry.input += u.input;
+            entry.cache_create += u.cache_create;
+            entry.cache_read += u.cache_read;
+            entry.output += u.output;
+        }
+        Ok(by_model.into_values().collect())
+    }
+
+    fn lane_model_usage(&self, by_tier: bool) -> Result<Vec<LaneModelUsage>> {
         type Row = (
             Option<String>,
             Option<String>,
@@ -591,7 +617,7 @@ impl Store {
                 sum_bigint(usage::output),
             ))
             .load(&mut *conn)?;
-        let mut by_model: BTreeMap<String, ModelUsage> = BTreeMap::new();
+        let mut merged: BTreeMap<(Option<String>, String), LaneModelUsage> = BTreeMap::new();
         for (model, kind, tier, input, cache_create, cache_read, output) in rows {
             let mut model = model.unwrap_or_else(|| "unknown".to_string());
             if by_tier && kind.as_deref() == Some(batch) {
@@ -599,19 +625,24 @@ impl Store {
             } else if by_tier && tier.as_deref() == Some(FLEX_SERVICE_TIER) {
                 model.push_str("@flex");
             }
-            let entry = by_model.entry(model.clone()).or_insert(ModelUsage {
-                model,
-                input: 0,
-                cache_create: 0,
-                cache_read: 0,
-                output: 0,
-            });
-            entry.input += input.unwrap_or(0);
-            entry.cache_create += cache_create.unwrap_or(0);
-            entry.cache_read += cache_read.unwrap_or(0);
-            entry.output += output.unwrap_or(0);
+            let entry = merged
+                .entry((kind.clone(), model.clone()))
+                .or_insert_with(|| LaneModelUsage {
+                    kind,
+                    usage: ModelUsage {
+                        model,
+                        input: 0,
+                        cache_create: 0,
+                        cache_read: 0,
+                        output: 0,
+                    },
+                });
+            entry.usage.input += input.unwrap_or(0);
+            entry.usage.cache_create += cache_create.unwrap_or(0);
+            entry.usage.cache_read += cache_read.unwrap_or(0);
+            entry.usage.output += output.unwrap_or(0);
         }
-        Ok(by_model.into_values().collect())
+        Ok(merged.into_values().collect())
     }
 
     /// Usage grouped by session, model and timestamp for `rtok agents usage` (T358.1), with

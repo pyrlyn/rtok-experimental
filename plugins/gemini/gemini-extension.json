@@ -1,6 +1,6 @@
 {
   "name": "rtok",
-  "version": "0.15.1",
+  "version": "0.17.0",
   "description": "rtok hooks and MCP for Gemini CLI: lossless token savings for tool output",
   "mcpServers": {
     "rtok": {

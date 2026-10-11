@@ -1,0 +1,11 @@
+{
+  "name": "rtok",
+  "version": "0.17.0",
+  "description": "rtok hooks for CodeBuddy Code and WorkBuddy: lossless token savings for tool output",
+  "homepage": "https://github.com/pyrlyn/rtok",
+  "repository": "https://github.com/pyrlyn/rtok",
+  "author": {
+    "name": "listepo",
+    "url": "https://github.com/listepo"
+  }
+}

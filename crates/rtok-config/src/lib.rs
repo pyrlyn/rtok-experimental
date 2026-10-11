@@ -85,6 +85,7 @@ pub const HOSTS: &[&str] = &[
     "devin",
     "roo",
     "qwen",
+    "codebuddy",
 ];
 
 /// Adapters `[tasks] adapter` accepts. `tasks::run::ADAPTERS` re-exports this.
@@ -457,8 +458,34 @@ section! {
 }
 
 section! {
-    /// `[proxy.routing]` — model routing (D9). No keys yet.
-    RoutingPolicy {}
+    /// `[proxy.routing]` — model routing (D9, I-101), opt-in. Only rtok's own `internal` calls
+    /// and the `bulk` lane can be routed; the `agent` lane never is, and `batch` and `files`
+    /// are never rewritten. A rule moves a call to another model only when `enabled`, the
+    /// request's model is one of the rule's `from` entries and the rule names the quality
+    /// bench behind the swap in `gate`. No rule ships by default.
+    RoutingPolicy {
+        enabled: bool = false,
+        bulk: RouteRule = RouteRule::default(),
+        internal: RouteRule = RouteRule::default(),
+    }
+}
+
+section! {
+    /// `[proxy.routing.<lane>]` — one lane's routing rule (T385.10).
+    RouteRule {
+        /// Request models this rule applies to: an exact id, or an id ending in `*` for a
+        /// prefix (`gpt-5*`). Empty = the rule is off, so no lane is ever routed wholesale.
+        from: Vec<String> = Vec::new(),
+        /// The model that serves a matching call (a cheaper one). Empty = the rule is off.
+        to: String = String::new(),
+        /// The provider slug recorded for a routed call, when `to` lives at another provider
+        /// than the wire's own (pair it with `[proxy.lanes.<lane>] upstream`); empty = the
+        /// wire's provider.
+        provider: String = String::new(),
+        /// Where the quality bench for this `from` → `to` swap is kept (a path, URL or run
+        /// id). rtok cannot judge answer quality, so the rule stays off while this is empty.
+        gate: String = String::new(),
+    }
 }
 
 section! {
@@ -760,6 +787,7 @@ section! {
         devin: SetupDevin = SetupDevin::default(),
         roo: SetupRoo = SetupRoo::default(),
         qwen: SetupQwen = SetupQwen::default(),
+        codebuddy: SetupCodebuddy = SetupCodebuddy::default(),
     }
 }
 
@@ -904,6 +932,16 @@ section! {
 }
 
 section! {
+    /// `[setup.codebuddy]` — CodeBuddy Code's config directory (`settings.json` `hooks`, the
+    /// MCP file, `plugins/`; `CODEBUDDY_CONFIG_DIR` moves it) and WorkBuddy Desktop's, which
+    /// embeds the same CLI (T560.2).
+    SetupCodebuddy {
+        dir: PathBuf = p("~/.codebuddy"),
+        workbuddy_dir: PathBuf = p("~/.workbuddy"),
+    }
+}
+
+section! {
     /// `[setup.antigravity]` — Antigravity 2.0 / IDE plugin root (`plugins_path`, rtok links
     /// `plugins/antigravity` there) and the CLI's staged-plugin root (`cli_plugins_path`,
     /// written only by `agy plugin install`; read to detect it) (T91.1).
@@ -951,6 +989,31 @@ section! {
         disk: TasksDisk = TasksDisk::default(),
         github: TasksGithub = TasksGithub::default(),
         gitlab: TasksGitlab = TasksGitlab::default(),
+        export: TasksExport = TasksExport::default(),
+    }
+}
+
+section! {
+    /// `[tasks.export]` — where `rtok task export` mirrors the disk tasks (T441.13.5).
+    TasksExport {
+        github: TasksExportGithub = TasksExportGithub::default(),
+        linear: TasksExportLinear = TasksExportLinear::default(),
+    }
+}
+
+section! {
+    /// `[tasks.export.linear]` — the Linear team whose issues mirror the tasks (T441.13.6).
+    TasksExportLinear {
+        /// The team's short key, e.g. `ENG`. Empty: `rtok task export linear` refuses to run.
+        team: String = String::new(),
+    }
+}
+
+section! {
+    /// `[tasks.export.github]` — the repository whose issues mirror the tasks.
+    TasksExportGithub {
+        /// `owner/name`. Empty: `[tasks.github] repo`, else the `origin` remote.
+        repo: String = String::new(),
     }
 }
 
@@ -1258,6 +1321,13 @@ section! {
         /// T329.17: seconds between the health checks of a process that hosts graph (`rtok mcp`,
         /// `rtok web`); 0 turns the check off.
         health_check_interval_s: u32 = 60,
+        /// T329.34: seconds a node stays warm on the web graph page's live canvas after a call.
+        live_heat_window_s: u32 = 300,
+        /// T329.34: most call events one second of the live panel lists; counters still count
+        /// every call.
+        live_max_events_per_s: u32 = 50,
+        /// T329.34: finished calls the live panel keeps in its feed.
+        live_feed_rows: u32 = 200,
         exclude: Vec<String> = vec![],
         include: Vec<String> = vec![],
         extensions: std::collections::HashMap<String, String> = std::collections::HashMap::new(),
@@ -1596,6 +1666,8 @@ impl Config {
             setup.cline.mcp_path,
             setup.gemini.dir,
             setup.qwen.dir,
+            setup.codebuddy.dir,
+            setup.codebuddy.workbuddy_dir,
             setup.codewhale.dir,
             setup.mimo.config_path,
             setup.antigravity.plugins_path,

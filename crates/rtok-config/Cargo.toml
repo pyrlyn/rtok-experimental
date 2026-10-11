@@ -18,7 +18,7 @@ toml_edit = { workspace = true } # `config set` keeps comments
 dotenvy = "0.15" # `.env` as a config layer, parse only (T12.5)
 serde = { workspace = true }
 thiserror = { workspace = true } # the config crate's public error enum
-similar = { workspace = true } # uncoloured unified diff until a surface registers paint
+change-preview = { workspace = true } # unified diff, colour and byte sizes for `--dry-run` output
 globset = { workspace = true } # `agents.junk.exclude` must compile
 url = { workspace = true } # `proxy.lanes.*.upstream` is an http(s) URL or empty
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }

@@ -25,8 +25,10 @@
   parsing are **planned** under `[proxy.batch]`.
 - Flex is OpenAI `service_tier` on sync Chat/Responses wires — inject/override in `prepare`
   (**planned**, `[proxy.flex]`), not a separate HTTP API.
-- Model routing (D9) and sticky upstream for prompt-cache affinity (I-84) are **planned**
-  under `[proxy.routing]`; hooks/MCP never see this traffic.
+- Model routing (D9, T385.10) swaps `model` for `internal` and `bulk` calls only
+  (`src/proxy/route.rs`, `Lane::route`), opt-in per lane rule with a named quality `gate` (I-101);
+  the `agent` lane is never routed. Sticky upstream (I-84) is still **planned**. Hooks/MCP never
+  see this traffic.
 - Extension points: new `Wire` / path matchers in `src/proxy/` for Batch observe; `prepare`
-  for Flex; routing policy beside `shape_request`. Do not teach hooks or MCP about LLM HTTP.
+  for Flex; routing rules in `src/proxy/route.rs`, applied first in `shape_request`. Do not teach hooks or MCP about LLM HTTP.
 

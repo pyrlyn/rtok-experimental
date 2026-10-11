@@ -192,11 +192,17 @@ pub(super) enum ProjectsCmd {
         /// Also remove the link the other way
         #[arg(long)]
         both: bool,
+        /// Show the links that would go; remove nothing
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Drop a project and its index rows; its files are never touched
     Remove {
         /// Project id or directory
         project: String,
+        /// Show the index rows and links that would go; remove nothing
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -260,12 +266,19 @@ pub(super) fn run(config_file: &Option<PathBuf>, action: GraphCmd) -> Result<()>
             crate::plugins::graph::status::run(&cfg, Some(root), json)?;
         }
         GraphCmd::Projects { action, json } => {
-            use crate::plugins::graph::projects::{Action, run};
+            use crate::plugins::graph::projects::{Action, preview, run};
+            let dry_run = matches!(
+                action,
+                Some(
+                    ProjectsCmd::Remove { dry_run: true, .. }
+                        | ProjectsCmd::Unlink { dry_run: true, .. }
+                )
+            );
             let action = match action {
                 None => Action::List,
                 Some(ProjectsCmd::Add { path }) => Action::Add(path),
                 Some(ProjectsCmd::Select { project }) => Action::Select(project),
-                Some(ProjectsCmd::Remove { project }) => Action::Remove(project),
+                Some(ProjectsCmd::Remove { project, .. }) => Action::Remove(project),
                 Some(ProjectsCmd::Link {
                     project,
                     from,
@@ -281,13 +294,19 @@ pub(super) fn run(config_file: &Option<PathBuf>, action: GraphCmd) -> Result<()>
                     project,
                     from,
                     both,
+                    ..
                 }) => Action::Unlink {
                     to: project,
                     from,
                     both,
                 },
             };
-            print!("{}", run(&cx, action, json)?);
+            let out = if dry_run {
+                preview(&cx, action, json)?
+            } else {
+                run(&cx, action, json)?
+            };
+            print!("{out}");
         }
         GraphCmd::Impact {
             name,

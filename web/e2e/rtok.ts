@@ -137,6 +137,22 @@ export class Rtok {
     return this.run(["mcp"], rpc.map((m) => JSON.stringify(m)).join("\n"));
   }
 
+  /**
+   * Makes the throwaway home a git checkout with a `[tasks]` section and tasks, through
+   * `rtok task`: `rtok web` runs there, so its board reads them. The last task is finished and
+   * the first is the parent of the second.
+   */
+  addTasks(titles: string[]) {
+    const git = spawnSync("git", ["init", "-q", "-b", "main"], { cwd: this.home, env: this.env() });
+    if (git.status !== 0) throw new Error(`git init: ${git.stderr}`);
+    this.run(["config", "set", "tasks.prefix", "E"], "");
+    const ids = titles.map((title, i) =>
+      this.run(["task", "create", title, ...(i === 1 ? ["--parent", "E1"] : [])], "").trim(),
+    );
+    this.run(["task", "status", ids[ids.length - 1]!, "done"], "");
+    return ids;
+  }
+
   /** Registers the throwaway home as a graph project, so the graph page has a picture to light. */
   addProject() {
     return this.run(["graph", "projects", "add", this.home], "");

@@ -27,6 +27,7 @@ import {
 } from "../pages/textFixtures";
 import { savingsDays } from "../pages/savingsFixtures";
 import { usageBoth, usagePage } from "../pages/usageFixtures";
+import { tasksReady } from "../pages/tasksFixtures";
 
 const shellStats = {
   cache_create: 1_200,
@@ -75,6 +76,7 @@ const session = "sample-session";
 export const sampleSnapshot: Snapshot = {
   type: "snapshot",
   agent_usage: usagePage(usageBoth),
+  tasks: tasksReady(),
   calls: [
     call(14, {
       surface: "proxy",

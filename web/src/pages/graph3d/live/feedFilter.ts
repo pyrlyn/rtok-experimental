@@ -6,7 +6,7 @@ import type { Finished } from "../../../api/snapshot.gen";
 
 /** Empty strings mean "all". The totals ignore it: it only narrows the rows the feed lists. */
 export interface FeedFilter {
-  session: string;
+  caller: string;
   tool: string;
   project: string;
 }
@@ -14,13 +14,11 @@ export interface FeedFilter {
 export function filterFeed(feed: readonly Finished[], f: FeedFilter): Finished[] {
   return feed.filter(
     (r) =>
-      (!f.session || r.session === f.session) &&
+      (!f.caller || r.caller === f.caller) &&
       (!f.tool || r.tool === f.tool) &&
       (!f.project || r.project === f.project),
   );
 }
 
-export const distinct = (
-  feed: readonly Finished[],
-  key: "session" | "tool" | "project",
-): string[] => [...new Set(feed.flatMap((r) => (r[key] ? [r[key]] : [])))].sort();
+export const distinct = (feed: readonly Finished[], key: "caller" | "tool" | "project"): string[] =>
+  [...new Set(feed.flatMap((r) => (r[key] ? [r[key]] : [])))].sort();

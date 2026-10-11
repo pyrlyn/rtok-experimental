@@ -1,7 +1,7 @@
 # Model routing (D9)
 
-**Status: planned / Later** — not the default v0.1 path. Config stub and
-docs only until a measurement Check exists. **Separate line of work from
+**Status: opt-in for `internal` and `bulk` calls only; agent-turn routing is planned / Later.**
+Off by default, no rule ships, and the `agent` lane is never routed. **Separate line of work from
 Batch and Flex** (`docs/batch-flex.md`): those change *how* or *when* a
 request is billed on the same (or async) surface; model routing changes
 *which* `model` string the sync chat wires forward.
@@ -29,61 +29,61 @@ rtok today is a middleware surface (hooks, MCP, API proxy) — **not** a
 model router by default. Agents (or the host) still pick the model; the
 proxy leaves `model` as the client sent it.
 
-## How it would work in rtok
+## How it works in rtok
 
-Only under `rtok proxy` (`src/proxy/`), on **sync** chat wires
-(`/v1/messages`, `/v1/chat/completions`, `/v1/responses`, Gemini
-`:generateContent`). Hooks and MCP never see LLM HTTP bodies, so they
-cannot implement D9.
+Only under `rtok proxy` (`src/proxy/`), on the JSON chat wires that carry `model` in the body
+(`/v1/messages`, `/v1/chat/completions`, `/v1/responses`). Hooks and MCP never see LLM HTTP
+bodies, so they cannot implement D9. Gemini names its model in the path, which routing does not
+rewrite, so a Gemini call is never routed.
 
-**Today**
+- **Which calls.** `internal` (rtok's own model calls) and the `bulk` lane
+  (`src/proxy/lane.rs`, `Lane::route`). Agent turns, `batch`, `files`, `embeddings` and `meta`
+  are never routed. Agent-turn routing needs the I-101 bench first and stays Later.
+- **Policy table.** `[proxy.routing]` (`enabled`, off) with one rule per lane
+  (`[proxy.routing.bulk]`, `[proxy.routing.internal]`): `from` (exact ids or `prefix*`), `to`,
+  `provider` and `gate`. A rule acts only when `from`, `to` and `gate` are all set. Moving the
+  lane to another provider's gateway is `[proxy.lanes.<lane>] upstream`.
+- **Quality gate (I-101).** rtok cannot see whether the cheaper model is good enough, so `gate`
+  must name the operator's bench for that swap; rtok does not read or judge it. It ships no
+  default rule and makes no claim about quality.
+- **Rewrite.** `shape_request` swaps the body's `model` before the call is recorded, so
+  `calls.model_id`, `usage.model` (and the provider, when the rule names one) are the model that
+  served the call. The log row of the call keeps `model route on the <lane> lane: <from> -> <to>`
+  and a `model_route` measurement row marks it (no token saving is claimed).
+- **Dollars.** `rtok stats --price` adds `cost by lane`, each lane priced at the models that
+  served it. Compare it for one workload with routing off and on; that difference is the only
+  saving rtok reports for routing.
 
-- Single upstream URL; `model` left as the client sent
-- No classifier; no policy table
-- Sticky *upstream pod/region* affinity (I-84 / §16.3 #1) is about
-  **prompt-cache hits**, not picking a cheaper model — related config flag
-  only
+No transparent sync→Batch conversion; routing does not enqueue Batch or set Flex
+`service_tier`. Those stay under `[proxy.batch]` / `[proxy.flex]`.
 
-**Planned** (after a D9 Check)
+## Configuration
 
-1. Optional policy / classifier decides a target model (or tier) for this
-   turn
-2. `shape_request` → **prepare** may **rewrite** the JSON `model` field
-   under `[proxy.routing]` when `enabled = true`
-3. Measurement Check attributes $ before/after so the policy stays honest
-4. Policy table / classifier shape: **not specified yet** (**TODO**)
-
-No transparent sync→Batch conversion; routing does not enqueue Batch or
-set Flex `service_tier`. Those stay under `[proxy.batch]` / `[proxy.flex]`.
-
-## Configuration (planned — not loaded by the binary yet)
-
-Unknown keys fail `rtok config validate` until the `Config` fields ship.
-Same stub as in `docs/batch-flex.md`:
+See [config.md](config.md#proxyrouting). Example:
 
 ```toml
-# Planned — not parsed today
 [proxy.routing]
-enabled = false         # model / tier routing (D9); off until a policy + Check exists
-sticky = true           # prefer one upstream for prompt-cache affinity (I-84)
-default_model = ""      # empty = leave client model
-# policy table / classifier: not specified yet (**TODO**)
+enabled = true
+
+[proxy.routing.bulk]
+from = ["claude-sonnet-*"]
+to = "claude-haiku-4-5"
+gate = "bench/bulk-haiku-2026-10.md"
 ```
 
-MVP for Batch/Flex may parse this as a **stub only** (`enabled = false`,
-no rewrite). Full policy + classifier is a follow-on plan (see roadmap
-S6 / T256), not part of Batch/Flex definition of done.
+Sticky upstream (`sticky`, I-84) is not part of this and is not a key yet.
 
 ## Status
 
 | Piece | Status |
 |-------|--------|
 | Decision D9 | recorded in `plan.md` |
-| Research §16.3 #3 | Later / Decision-shaped option |
-| `[proxy.routing]` keys documented | yes (this page + `docs/batch-flex.md`) |
-| Config parse stub | planned (optional S6) |
-| `model` rewrite in `prepare` | **planned / Later** — blocked on D9 Check |
-| Classifier / policy table | **TODO** — separate plan |
+| `[proxy.routing]` rules for `internal` and `bulk` | shipped, off by default |
+| `model` rewrite before the call is recorded | shipped (JSON-body wires) |
+| `cost by lane` in `rtok stats --price` | shipped |
+| Quality bench behind a swap (I-101) | **operator's**: a real bench needs real models and workload, which rtok does not ship |
+| Gemini (model in the path) | not routed |
+| Agent-turn routing | **Later** — blocked on the I-101 bench |
 | Sticky upstream (I-84) | Decision-shaped; may land with prompt-cache work independently |
 
 ## Related

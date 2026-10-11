@@ -51,6 +51,8 @@ After an rtok upgrade, `rtok agents update` brings every installed host up to da
 | [`devin`](https://github.com/pyrlyn/rtok/blob/main/src/agents/devin/README.md) | Devin | Desktop | yes | yes | — | `--yes` | measure, cmd, read, json_tree (off), archive, inject, guard, memory, graph, toon, docs (off) |
 | [`roo`](https://github.com/pyrlyn/rtok/blob/main/src/agents/roo/README.md) | Roo Code | Desktop | — | yes | — | — | read, json_tree (off), archive, memory, graph, toon, docs (off) |
 | [`qwen`](https://github.com/pyrlyn/rtok/blob/main/src/agents/qwen/README.md) | Qwen Code | CLI | yes | yes | — | `--yes` | measure, cmd, read, json_tree (off), archive, inject, guard, memory, graph, toon, docs (off) |
+| [`codebuddy`](https://github.com/pyrlyn/rtok/blob/main/src/agents/codebuddy/README.md) | CodeBuddy Code | CLI | yes | yes | — | `--yes` | measure, cmd, read, json_tree (off), archive, inject, guard, memory, graph, toon, docs (off) |
+| [`codebuddy`](https://github.com/pyrlyn/rtok/blob/main/src/agents/codebuddy/README.md) | WorkBuddy | Desktop | yes | yes | — | `--yes` | measure, cmd, read, json_tree (off), archive, inject, guard, memory, graph, toon, docs (off) |
 <!-- agents-table:end -->
 
 The table is generated from the host code (`src/agents/<host>/mod.rs` and the plugin catalogue) by `tests/agents_doc.rs`, which fails when it is stale. After changing a host, adding one, or changing a plugin's surfaces, regenerate it:

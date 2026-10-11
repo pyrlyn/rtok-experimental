@@ -2,24 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-//! Binary byte sizes for status lines (`1023 B`, `1.0 KB`, `1.5 MB`).
+//! Parsing of binary byte sizes (`10MB`, `1.5 GB`); printing them is `change_preview::human_bytes`.
 
-/// `1023 B`, `1.0 KB`, `1.5 MB` — one decimal past bytes, binary units.
-pub fn human_bytes(n: u64) -> String {
-    const KB: f64 = 1024.0;
-    let n = n as f64;
-    if n < KB {
-        return format!("{} B", n as u64);
-    }
-    for (unit, div) in [("KB", KB), ("MB", KB * KB), ("GB", KB * KB * KB)] {
-        if n < div * KB {
-            return format!("{:.1} {unit}", n / div);
-        }
-    }
-    format!("{:.1} TB", n / (KB * KB * KB * KB))
-}
-
-/// `10MB`, `1.5 GB` or a bare `512` (bytes): the inverse of [`human_bytes`], binary units.
+/// `10MB`, `1.5 GB` or a bare `512` (bytes): the inverse of [`change_preview::human_bytes`], binary units.
 pub fn parse_bytes(s: &str) -> Result<u64, String> {
     let t = s.trim().to_ascii_lowercase();
     let (num, unit) = t.split_at(
@@ -43,6 +28,7 @@ pub fn parse_bytes(s: &str) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use change_preview::human_bytes;
 
     #[test]
     fn sizes_parse_in_binary_units_and_bad_ones_are_named() {

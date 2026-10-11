@@ -13,8 +13,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 
 use super::{Entry, inventory_with, par_map};
-use crate::bytes::human_bytes;
 use crate::render::{Col, duration, table};
+use change_preview::human_bytes;
 
 /// First line of a valid `CACHEDIR.TAG` (<https://bford.info/cachedir/>); cargo writes one
 /// into `target/`. The tag, not a directory name, is what makes bytes "cache".

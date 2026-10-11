@@ -259,3 +259,37 @@ fn the_capability_record_a_request_made_shows_in_the_json_list() {
     assert_eq!(rec["config"], "auto");
     assert!(rec["next_probe_at"].as_i64().unwrap() > rec["checked_at"].as_i64().unwrap());
 }
+
+/// T416.4: `--dry-run` on `remove` and `unlink` prints what would go and changes nothing.
+#[test]
+fn dry_run_remove_and_unlink_preview_the_rows_and_change_nothing() {
+    let home = fixture("dry");
+    let (a, b) = (home.join("alpha"), home.join("beta"));
+    for d in [&a, &b] {
+        fs::create_dir_all(d).unwrap();
+        fs::write(d.join("lib.rs"), "fn used() {}\n").unwrap();
+        ok(&home, &["graph", "projects", "add", d.to_str().unwrap()]);
+    }
+    ok(&home, &["graph", "projects", "link", "2", "--from", "1"]);
+    let before = ok(&home, &["graph", "projects", "--json"]);
+
+    let unlink = ok(
+        &home,
+        &[
+            "graph",
+            "projects",
+            "unlink",
+            "2",
+            "--from",
+            "1",
+            "--dry-run",
+        ],
+    );
+    assert!(unlink.contains("would unlink alpha -> beta"), "{unlink}");
+    let remove = ok(&home, &["graph", "projects", "remove", "1", "--dry-run"]);
+    assert!(remove.contains("would remove"), "{remove}");
+    assert!(remove.contains("links: 1 out, 0 in"), "{remove}");
+    assert!(remove.contains("nothing removed"), "{remove}");
+
+    assert_eq!(ok(&home, &["graph", "projects", "--json"]), before);
+}

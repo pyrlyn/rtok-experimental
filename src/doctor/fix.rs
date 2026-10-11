@@ -357,7 +357,7 @@ fn fix_file(
             return fix;
         }
     };
-    fix.diff = crate::render::unified_diff(path, &raw, &body);
+    fix.diff = change_preview::unified_diff(path, &raw, &body);
     if !apply {
         return fix;
     }
@@ -421,6 +421,7 @@ pub fn render(r: &FixReport, apply: bool) -> String {
     if !apply {
         out.push_str("dry run: nothing is written. Add --yes to remove the entries below.\n");
     }
+    let mut planned = Vec::new();
     for f in &r.files {
         out.push_str(&format!("{}\n", f.source.display()));
         for p in &f.removed {
@@ -436,11 +437,20 @@ pub fn render(r: &FixReport, apply: bool) -> String {
             out.push_str(&format!("  backup {}\n", b.display()));
         }
         match &f.outcome {
-            Outcome::Planned => out.push_str(&f.diff),
+            Outcome::Planned => {
+                planned.push((f.source.clone(), f.diff.clone()));
+                if !crate::stat_preview::on() {
+                    out.push_str(&f.diff);
+                }
+            }
             Outcome::Written => out.push_str("  written\n"),
             Outcome::Skipped(why) => out.push_str(&format!("  skipped: {why}\n")),
             Outcome::Failed(why) => out.push_str(&format!("  failed: {why}\n")),
         }
+    }
+    if !planned.is_empty() {
+        out.push_str(&crate::stat_preview::show(&planned, ""));
+        out.push('\n');
     }
     for line in refusals(r) {
         out.push_str(&format!("{line}\n"));

@@ -165,6 +165,7 @@ _arguments "${_arguments_options[@]}" : /
 '--fix[Clean up broken hooks and duplicate hooks and MCP entries/: a terminal gets a checklist, a pipe the diff; --yes writes without asking]' /
 '--yes[With --fix/: write the changes (a copy goes to /`_backup//` first)]' /
 '--dry-run[With --fix --yes/: print the diffs and write nothing]' /
+'--stat[With --fix/: stat lines and totals instead of the diffs (a dry run)]' /
 '-h[Print help]' /
 '--help[Print help]' /
 && ret=0
@@ -223,6 +224,7 @@ _arguments "${_arguments_options[@]}" : /
 '--owner=[The owner an old lock names, as /`<provider> / <model>/`. Defaults to /`<host> / <model>/` of the agent]:OWNER:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--keep-branch[Remove an unmerged worktree too and keep its branch (a merged branch is kept as well)]' /
+'--dry-run[Show the path, branch, size and file count that would go; remove nothing]' /
 '--json[JSON instead of the text line]' /
 '-h[Print help]' /
 '--help[Print help]' /
@@ -252,6 +254,8 @@ _arguments "${_arguments_options[@]}" : /
 '--stale-lock=[Treat someone else'/''s lock as abandoned once its merged, clean worktree is untouched this long]:STALE_LOCK:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--yes[Apply; without it this is a dry run that changes nothing]' /
+'(--yes)--dry-run[Say the dry run out loud/: print what would go and change nothing (the default)]' /
+'--stat[The same preview as the dry run/: a removal'/''s line already is its stat]' /
 '--json[JSON instead of the table]' /
 '-h[Print help]' /
 '--help[Print help]' /
@@ -262,6 +266,8 @@ _arguments "${_arguments_options[@]}" : /
 '--idle=[Keep caches modified within this window (/`24h/`, /`7d/`)]:IDLE:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--yes[Apply; without it this is a dry run that changes nothing]' /
+'(--yes)--dry-run[Say the dry run out loud/: print what would go and change nothing (the default)]' /
+'--stat[The same preview as the dry run/: a removal'/''s line already is its stat]' /
 '--json[JSON instead of the table]' /
 '-h[Print help]' /
 '--help[Print help]' /
@@ -440,12 +446,43 @@ _arguments "${_arguments_options[@]}" : /
 ':level -- 0 to 4:_default' /
 && ret=0
 ;;
+(conflict)
+_arguments "${_arguments_options[@]}" : /
+'--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
+'--remove[Take the conflict off instead]' /
+'--json[Print the task as JSON]' /
+'-h[Print help]' /
+'--help[Print help]' /
+':id -- One task:_default' /
+':other -- The task it conflicts with:_default' /
+&& ret=0
+;;
+(parallel)
+_arguments "${_arguments_options[@]}" : /
+'--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
+'--off[Take the mark off instead]' /
+'--json[Print the task as JSON]' /
+'-h[Print help]' /
+'--help[Print help]' /
+':id -- Task id, e.g. `R12`:_default' /
+&& ret=0
+;;
 (sync)
 _arguments "${_arguments_options[@]}" : /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--json[JSON instead of the text]' /
 '-h[Print help]' /
 '--help[Print help]' /
+&& ret=0
+;;
+(export)
+_arguments "${_arguments_options[@]}" : /
+'--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
+'--dry-run[Print the planned creates, updates and closes and send nothing]' /
+'--json[JSON instead of the text]' /
+'-h[Print help]' /
+'--help[Print help]' /
+':backend -- Where to mirror the tasks:(github linear)' /
 && ret=0
 ;;
 (init)
@@ -509,7 +546,19 @@ _arguments "${_arguments_options[@]}" : /
 _arguments "${_arguments_options[@]}" : /
 && ret=0
 ;;
+(conflict)
+_arguments "${_arguments_options[@]}" : /
+&& ret=0
+;;
+(parallel)
+_arguments "${_arguments_options[@]}" : /
+&& ret=0
+;;
 (sync)
+_arguments "${_arguments_options[@]}" : /
+&& ret=0
+;;
+(export)
 _arguments "${_arguments_options[@]}" : /
 && ret=0
 ;;
@@ -649,6 +698,7 @@ _arguments "${_arguments_options[@]}" : /
 '--all[All variants (the default when neither /`--cli/` nor /`--desktop/` is given)]' /
 '--no-restart[Skip closing/reopening a running desktop app around the write]' /
 '--project[Add rtok to the project'/''s post-create script, so a worktree the host makes joins rtok (/`cursor/`, /`kilo/`, /`windsurf/`, /`devin/`); run it inside the repository]' /
+'--stat[With --dry-run/: stat lines and totals instead of the planned edits]' /
 '-h[Print help]' /
 '--help[Print help]' /
 ':host -- Host(s), comma-separated (`claude`, `cursor`, `codex`, `opencode`, `pi`, `zcode`, `kimi`, `copilot`, `aider`, `windsurf`, `zed`, `vscode`):_default' /
@@ -661,6 +711,7 @@ _arguments "${_arguments_options[@]}" : /
 '--no-restart[Skip closing/reopening a running desktop app around the write]' /
 '--yes[Also remove rtok entries you changed, without asking]' /
 '--project[Take rtok out of the project'/''s post-create script (/`cursor/`, /`kilo/`, /`windsurf/`, /`devin/`) instead of the host'/''s config]' /
+'--stat[With --dry-run/: stat lines and totals instead of the planned edits]' /
 '-h[Print help]' /
 '--help[Print help]' /
 ':host -- Host(s), comma-separated (`claude`, `cursor`, `codex`, `opencode`, `pi`, `zcode`, `kimi`, `copilot`, `aider`, `windsurf`, `zed`, `vscode`):_default' /
@@ -673,6 +724,7 @@ _arguments "${_arguments_options[@]}" : /
 '--no-restart[Skip closing/reopening a running desktop app around the write]' /
 '--yes[Also remove rtok entries you changed, without asking]' /
 '--project[Take rtok out of the project'/''s post-create script (/`cursor/`, /`kilo/`, /`windsurf/`, /`devin/`) instead of the host'/''s config]' /
+'--stat[With --dry-run/: stat lines and totals instead of the planned edits]' /
 '-h[Print help]' /
 '--help[Print help]' /
 ':host -- Host(s), comma-separated (`claude`, `cursor`, `codex`, `opencode`, `pi`, `zcode`, `kimi`, `copilot`, `aider`, `windsurf`, `zed`, `vscode`):_default' /
@@ -689,6 +741,7 @@ _arguments "${_arguments_options[@]}" : /
 '--no-restart[Skip closing/reopening a running desktop app around the write]' /
 '--force[Reinstall the plugin even when it is already at the available version]' /
 '--check[List outdated plugins only (same output as /`agents outdated/`)]' /
+'--stat[With --dry-run/: stat lines and totals instead of the planned edits]' /
 '-h[Print help]' /
 '--help[Print help]' /
 '::host -- Host(s), comma-separated; omitted = every host rtok is installed in:_default' /
@@ -835,6 +888,8 @@ _arguments "${_arguments_options[@]}" : /
 '--min-size=[Only items of at least this size (/`10MB/`); on /`clear/` this also limits what /`--yes/` removes]:SIZE:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--yes[Apply; without it this is a dry run that changes nothing]' /
+'(--yes)--dry-run[Say the dry run out loud/: print what would go and change nothing (the default)]' /
+'--stat[The same preview as the dry run/: a removal'/''s line already is its stat]' /
 '--json[JSON instead of the table]' /
 '--trash[Move to the OS trash instead of deleting]' /
 '-h[Print help (see more with '/''--help'/'')]' /
@@ -900,6 +955,7 @@ _arguments "${_arguments_options[@]}" : /
 ;;
 (send)
 _arguments "${_arguments_options[@]}" : /
+'--task=[The task this message is about (e.g. /`A12/`); the recipient can read just that thread]:ID:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--all-live[Every live agent of this project (same repository or cwd), except the sender]' /
 '-h[Print help]' /
@@ -910,6 +966,7 @@ _arguments "${_arguments_options[@]}" : /
 ;;
 (inbox)
 _arguments "${_arguments_options[@]}" : /
+'--task=[Only messages about this task (e.g. /`A12/`)]:ID:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--unread[Only messages not read yet]' /
 '--json[JSON instead of the framed text]' /
@@ -1064,6 +1121,7 @@ _arguments "${_arguments_options[@]}" : /
 '--all[All variants (the default when neither /`--cli/` nor /`--desktop/` is given)]' /
 '--no-restart[Skip closing/reopening a running desktop app around the write]' /
 '--project[Add rtok to the project'/''s post-create script, so a worktree the host makes joins rtok (/`cursor/`, /`kilo/`, /`windsurf/`, /`devin/`); run it inside the repository]' /
+'--stat[With --dry-run/: stat lines and totals instead of the planned edits]' /
 '-h[Print help]' /
 '--help[Print help]' /
 ':host -- Host(s), comma-separated (`claude`, `cursor`, `codex`, `opencode`, `pi`, `zcode`, `kimi`, `copilot`, `aider`, `windsurf`, `zed`, `vscode`):_default' /
@@ -1076,6 +1134,7 @@ _arguments "${_arguments_options[@]}" : /
 '--no-restart[Skip closing/reopening a running desktop app around the write]' /
 '--yes[Also remove rtok entries you changed, without asking]' /
 '--project[Take rtok out of the project'/''s post-create script (/`cursor/`, /`kilo/`, /`windsurf/`, /`devin/`) instead of the host'/''s config]' /
+'--stat[With --dry-run/: stat lines and totals instead of the planned edits]' /
 '-h[Print help]' /
 '--help[Print help]' /
 ':host -- Host(s), comma-separated (`claude`, `cursor`, `codex`, `opencode`, `pi`, `zcode`, `kimi`, `copilot`, `aider`, `windsurf`, `zed`, `vscode`):_default' /
@@ -1088,6 +1147,7 @@ _arguments "${_arguments_options[@]}" : /
 '--no-restart[Skip closing/reopening a running desktop app around the write]' /
 '--yes[Also remove rtok entries you changed, without asking]' /
 '--project[Take rtok out of the project'/''s post-create script (/`cursor/`, /`kilo/`, /`windsurf/`, /`devin/`) instead of the host'/''s config]' /
+'--stat[With --dry-run/: stat lines and totals instead of the planned edits]' /
 '-h[Print help]' /
 '--help[Print help]' /
 ':host -- Host(s), comma-separated (`claude`, `cursor`, `codex`, `opencode`, `pi`, `zcode`, `kimi`, `copilot`, `aider`, `windsurf`, `zed`, `vscode`):_default' /
@@ -1104,6 +1164,7 @@ _arguments "${_arguments_options[@]}" : /
 '--no-restart[Skip closing/reopening a running desktop app around the write]' /
 '--force[Reinstall the plugin even when it is already at the available version]' /
 '--check[List outdated plugins only (same output as /`agents outdated/`)]' /
+'--stat[With --dry-run/: stat lines and totals instead of the planned edits]' /
 '-h[Print help]' /
 '--help[Print help]' /
 '::host -- Host(s), comma-separated; omitted = every host rtok is installed in:_default' /
@@ -1250,6 +1311,8 @@ _arguments "${_arguments_options[@]}" : /
 '--min-size=[Only items of at least this size (/`10MB/`); on /`clear/` this also limits what /`--yes/` removes]:SIZE:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--yes[Apply; without it this is a dry run that changes nothing]' /
+'(--yes)--dry-run[Say the dry run out loud/: print what would go and change nothing (the default)]' /
+'--stat[The same preview as the dry run/: a removal'/''s line already is its stat]' /
 '--json[JSON instead of the table]' /
 '--trash[Move to the OS trash instead of deleting]' /
 '-h[Print help (see more with '/''--help'/'')]' /
@@ -1315,6 +1378,7 @@ _arguments "${_arguments_options[@]}" : /
 ;;
 (send)
 _arguments "${_arguments_options[@]}" : /
+'--task=[The task this message is about (e.g. /`A12/`); the recipient can read just that thread]:ID:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--all-live[Every live agent of this project (same repository or cwd), except the sender]' /
 '-h[Print help]' /
@@ -1325,6 +1389,7 @@ _arguments "${_arguments_options[@]}" : /
 ;;
 (inbox)
 _arguments "${_arguments_options[@]}" : /
+'--task=[Only messages about this task (e.g. /`A12/`)]:ID:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--unread[Only messages not read yet]' /
 '--json[JSON instead of the framed text]' /
@@ -1464,6 +1529,7 @@ _arguments "${_arguments_options[@]}" : /
 '--all[All variants (the default when neither /`--cli/` nor /`--desktop/` is given)]' /
 '--no-restart[Skip closing/reopening a running desktop app around the write]' /
 '--project[Add rtok to the project'/''s post-create script, so a worktree the host makes joins rtok (/`cursor/`, /`kilo/`, /`windsurf/`, /`devin/`); run it inside the repository]' /
+'--stat[With --dry-run/: stat lines and totals instead of the planned edits]' /
 '-h[Print help]' /
 '--help[Print help]' /
 ':host -- Host(s), comma-separated (`claude`, `cursor`, `codex`, `opencode`, `pi`, `zcode`, `kimi`, `copilot`, `aider`, `windsurf`, `zed`, `vscode`):_default' /
@@ -1556,6 +1622,7 @@ _arguments "${_arguments_options[@]}" : /
 '(--uninstall --list)--install[Write the script to the shell'/''s per-user completions directory]' /
 '(--list)--uninstall[Remove what /`--install/` wrote]' /
 '()--list[Print each shell, whether its completions are installed (yes/no) and the file]' /
+'--dry-run[With /`--install/`//`--uninstall/`/: show the file diff and write nothing]' /
 '-h[Print help (see more with '/''--help'/'')]' /
 '--help[Print help (see more with '/''--help'/'')]' /
 '::shell -- Shell to complete for (with `--install`/`--uninstall`/: default `$SHELL`):(bash zsh fish powershell elvish clink)' /
@@ -1597,6 +1664,7 @@ _arguments "${_arguments_options[@]}" : /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--force[Overwrite an existing file]' /
 '--dry-run[Print the diff it would write and exit]' /
+'--stat[With --dry-run/: stat lines and totals instead of the diff]' /
 '-h[Print help]' /
 '--help[Print help]' /
 && ret=0
@@ -1638,6 +1706,7 @@ _arguments "${_arguments_options[@]}" : /
 _arguments "${_arguments_options[@]}" : /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--dry-run[Print the diff it would write and exit]' /
+'--stat[With --dry-run/: stat lines and totals instead of the diff]' /
 '-h[Print help]' /
 '--help[Print help]' /
 ':key:_default' /
@@ -1773,6 +1842,7 @@ _arguments "${_arguments_options[@]}" : /
 '--budget=[Token budget; default /`/[plugins.memory/] sync_tokens/`]:BUDGET:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--dry-run[Print the unified diff and write nothing]' /
+'--stat[With --dry-run/: stat lines and totals instead of the diff]' /
 '--remove[Delete the managed block and nothing else]' /
 '--force[Overwrite a hand-edited block]' /
 '-h[Print help]' /
@@ -2009,6 +2079,7 @@ _arguments "${_arguments_options[@]}" : /
 '--from=[Unlink from this project instead of the selected one]:FROM:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--both[Also remove the link the other way]' /
+'--dry-run[Show the links that would go; remove nothing]' /
 '--json[JSON instead of a table]' /
 '-h[Print help]' /
 '--help[Print help]' /
@@ -2018,6 +2089,7 @@ _arguments "${_arguments_options[@]}" : /
 (remove)
 _arguments "${_arguments_options[@]}" : /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
+'--dry-run[Show the index rows and links that would go; remove nothing]' /
 '--json[JSON instead of a table]' /
 '-h[Print help]' /
 '--help[Print help]' /
@@ -2697,7 +2769,19 @@ _arguments "${_arguments_options[@]}" : /
 _arguments "${_arguments_options[@]}" : /
 && ret=0
 ;;
+(conflict)
+_arguments "${_arguments_options[@]}" : /
+&& ret=0
+;;
+(parallel)
+_arguments "${_arguments_options[@]}" : /
+&& ret=0
+;;
 (sync)
+_arguments "${_arguments_options[@]}" : /
+&& ret=0
+;;
+(export)
 _arguments "${_arguments_options[@]}" : /
 && ret=0
 ;;
@@ -4731,7 +4815,10 @@ _rtok__subcmd__help__subcmd__task_commands() {
 'release:Clear the assignee and set the task open. Only the holder, unless --force' /
 'dep:Record that this task waits on another. A cycle is refused and nothing is written' /
 'priority:Set priority from 0 (highest) to 4. 2 is the default and is not stored' /
+'conflict:Record that two tasks touch the same files, so they should not run at once. Symmetric; /`ready/` flags a task whose partner is in progress' /
+'parallel:Mark a task safe to run beside any other task' /
 'sync:Raise the id counters to the adapter'/''s highest ids and report drift; never writes the adapter' /
+'export:Mirror the disk tasks one way into an issue tracker; the files stay the source of truth. A second run with nothing changed sends no write' /
 'init:Write /`/[tasks/]/` into this checkout'/''s /`.rtok.toml/` and seed the counter from existing tasks' /
     )
     _describe -t commands 'rtok help task commands' commands "$@"
@@ -4740,6 +4827,11 @@ _rtok__subcmd__help__subcmd__task_commands() {
 _rtok__subcmd__help__subcmd__task__subcmd__claim_commands() {
     local commands; commands=()
     _describe -t commands 'rtok help task claim commands' commands "$@"
+}
+(( $+functions[_rtok__subcmd__help__subcmd__task__subcmd__conflict_commands] )) ||
+_rtok__subcmd__help__subcmd__task__subcmd__conflict_commands() {
+    local commands; commands=()
+    _describe -t commands 'rtok help task conflict commands' commands "$@"
 }
 (( $+functions[_rtok__subcmd__help__subcmd__task__subcmd__create_commands] )) ||
 _rtok__subcmd__help__subcmd__task__subcmd__create_commands() {
@@ -4750,6 +4842,11 @@ _rtok__subcmd__help__subcmd__task__subcmd__create_commands() {
 _rtok__subcmd__help__subcmd__task__subcmd__dep_commands() {
     local commands; commands=()
     _describe -t commands 'rtok help task dep commands' commands "$@"
+}
+(( $+functions[_rtok__subcmd__help__subcmd__task__subcmd__export_commands] )) ||
+_rtok__subcmd__help__subcmd__task__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'rtok help task export commands' commands "$@"
 }
 (( $+functions[_rtok__subcmd__help__subcmd__task__subcmd__init_commands] )) ||
 _rtok__subcmd__help__subcmd__task__subcmd__init_commands() {
@@ -4765,6 +4862,11 @@ _rtok__subcmd__help__subcmd__task__subcmd__list_commands() {
 _rtok__subcmd__help__subcmd__task__subcmd__next_commands() {
     local commands; commands=()
     _describe -t commands 'rtok help task next commands' commands "$@"
+}
+(( $+functions[_rtok__subcmd__help__subcmd__task__subcmd__parallel_commands] )) ||
+_rtok__subcmd__help__subcmd__task__subcmd__parallel_commands() {
+    local commands; commands=()
+    _describe -t commands 'rtok help task parallel commands' commands "$@"
 }
 (( $+functions[_rtok__subcmd__help__subcmd__task__subcmd__priority_commands] )) ||
 _rtok__subcmd__help__subcmd__task__subcmd__priority_commands() {
@@ -5162,7 +5264,10 @@ _rtok__subcmd__task_commands() {
 'release:Clear the assignee and set the task open. Only the holder, unless --force' /
 'dep:Record that this task waits on another. A cycle is refused and nothing is written' /
 'priority:Set priority from 0 (highest) to 4. 2 is the default and is not stored' /
+'conflict:Record that two tasks touch the same files, so they should not run at once. Symmetric; /`ready/` flags a task whose partner is in progress' /
+'parallel:Mark a task safe to run beside any other task' /
 'sync:Raise the id counters to the adapter'/''s highest ids and report drift; never writes the adapter' /
+'export:Mirror the disk tasks one way into an issue tracker; the files stay the source of truth. A second run with nothing changed sends no write' /
 'init:Write /`/[tasks/]/` into this checkout'/''s /`.rtok.toml/` and seed the counter from existing tasks' /
 'help:Print this message or the help of the given subcommand(s)' /
     )
@@ -5173,6 +5278,11 @@ _rtok__subcmd__task__subcmd__claim_commands() {
     local commands; commands=()
     _describe -t commands 'rtok task claim commands' commands "$@"
 }
+(( $+functions[_rtok__subcmd__task__subcmd__conflict_commands] )) ||
+_rtok__subcmd__task__subcmd__conflict_commands() {
+    local commands; commands=()
+    _describe -t commands 'rtok task conflict commands' commands "$@"
+}
 (( $+functions[_rtok__subcmd__task__subcmd__create_commands] )) ||
 _rtok__subcmd__task__subcmd__create_commands() {
     local commands; commands=()
@@ -5182,6 +5292,11 @@ _rtok__subcmd__task__subcmd__create_commands() {
 _rtok__subcmd__task__subcmd__dep_commands() {
     local commands; commands=()
     _describe -t commands 'rtok task dep commands' commands "$@"
+}
+(( $+functions[_rtok__subcmd__task__subcmd__export_commands] )) ||
+_rtok__subcmd__task__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'rtok task export commands' commands "$@"
 }
 (( $+functions[_rtok__subcmd__task__subcmd__help_commands] )) ||
 _rtok__subcmd__task__subcmd__help_commands() {
@@ -5196,7 +5311,10 @@ _rtok__subcmd__task__subcmd__help_commands() {
 'release:Clear the assignee and set the task open. Only the holder, unless --force' /
 'dep:Record that this task waits on another. A cycle is refused and nothing is written' /
 'priority:Set priority from 0 (highest) to 4. 2 is the default and is not stored' /
+'conflict:Record that two tasks touch the same files, so they should not run at once. Symmetric; /`ready/` flags a task whose partner is in progress' /
+'parallel:Mark a task safe to run beside any other task' /
 'sync:Raise the id counters to the adapter'/''s highest ids and report drift; never writes the adapter' /
+'export:Mirror the disk tasks one way into an issue tracker; the files stay the source of truth. A second run with nothing changed sends no write' /
 'init:Write /`/[tasks/]/` into this checkout'/''s /`.rtok.toml/` and seed the counter from existing tasks' /
 'help:Print this message or the help of the given subcommand(s)' /
     )
@@ -5207,6 +5325,11 @@ _rtok__subcmd__task__subcmd__help__subcmd__claim_commands() {
     local commands; commands=()
     _describe -t commands 'rtok task help claim commands' commands "$@"
 }
+(( $+functions[_rtok__subcmd__task__subcmd__help__subcmd__conflict_commands] )) ||
+_rtok__subcmd__task__subcmd__help__subcmd__conflict_commands() {
+    local commands; commands=()
+    _describe -t commands 'rtok task help conflict commands' commands "$@"
+}
 (( $+functions[_rtok__subcmd__task__subcmd__help__subcmd__create_commands] )) ||
 _rtok__subcmd__task__subcmd__help__subcmd__create_commands() {
     local commands; commands=()
@@ -5216,6 +5339,11 @@ _rtok__subcmd__task__subcmd__help__subcmd__create_commands() {
 _rtok__subcmd__task__subcmd__help__subcmd__dep_commands() {
     local commands; commands=()
     _describe -t commands 'rtok task help dep commands' commands "$@"
+}
+(( $+functions[_rtok__subcmd__task__subcmd__help__subcmd__export_commands] )) ||
+_rtok__subcmd__task__subcmd__help__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'rtok task help export commands' commands "$@"
 }
 (( $+functions[_rtok__subcmd__task__subcmd__help__subcmd__help_commands] )) ||
 _rtok__subcmd__task__subcmd__help__subcmd__help_commands() {
@@ -5236,6 +5364,11 @@ _rtok__subcmd__task__subcmd__help__subcmd__list_commands() {
 _rtok__subcmd__task__subcmd__help__subcmd__next_commands() {
     local commands; commands=()
     _describe -t commands 'rtok task help next commands' commands "$@"
+}
+(( $+functions[_rtok__subcmd__task__subcmd__help__subcmd__parallel_commands] )) ||
+_rtok__subcmd__task__subcmd__help__subcmd__parallel_commands() {
+    local commands; commands=()
+    _describe -t commands 'rtok task help parallel commands' commands "$@"
 }
 (( $+functions[_rtok__subcmd__task__subcmd__help__subcmd__priority_commands] )) ||
 _rtok__subcmd__task__subcmd__help__subcmd__priority_commands() {
@@ -5281,6 +5414,11 @@ _rtok__subcmd__task__subcmd__list_commands() {
 _rtok__subcmd__task__subcmd__next_commands() {
     local commands; commands=()
     _describe -t commands 'rtok task next commands' commands "$@"
+}
+(( $+functions[_rtok__subcmd__task__subcmd__parallel_commands] )) ||
+_rtok__subcmd__task__subcmd__parallel_commands() {
+    local commands; commands=()
+    _describe -t commands 'rtok task parallel commands' commands "$@"
 }
 (( $+functions[_rtok__subcmd__task__subcmd__priority_commands] )) ||
 _rtok__subcmd__task__subcmd__priority_commands() {

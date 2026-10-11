@@ -10,6 +10,7 @@ stdout = """
 +
 +[proxy]
 +port = 8791
+1 file changed, 3 insertions(+)
 """
 
 # Hermetic by construction: isolated HOME/RTOK_HOME, inherit = false.

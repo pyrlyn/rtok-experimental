@@ -47,7 +47,7 @@ $ cat plugins/claude/.rtok-plugin-version
 | `version` | SemVer; равна версии в `Cargo.toml` этого коммита. Некорректная версия — ошибка, называющая файл. |
 | `source` | Необязательное поле, зарезервировано для локальной установки (`github`, `local`, `marketplace`). В закоммиченных файлах его никогда нет. |
 
-Хосты с файлом: `claude`, `codex`, `copilot`, `cursor`, `devin`, `gemini`, `grok`, `kimi`,
+Хосты с файлом: `claude`, `codebuddy`, `codex`, `copilot`, `cursor`, `devin`, `gemini`, `grok`, `kimi`,
 `opencode`, `pi`, `zcode`. У `cline` нет собственного манифеста, а в манифесте `antigravity` нет
 поля версии, поэтому ни у одного из них файла нет. Та же версия записывается в поле `version` каждого манифеста
 (`plugins/claude/.claude-plugin/plugin.json` и остальные), поэтому хост, который кеширует по

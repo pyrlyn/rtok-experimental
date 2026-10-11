@@ -67,6 +67,7 @@ pub fn add(cx: &Runtime, agent: &AgentDetail, args: &Value) -> Result<String> {
         None,
         cx.config.plugins.graph.auto_add_projects,
     )?;
+    crate::agents::task_list::write_for(&cwd, &plan.path, &plan.task);
     Ok(json!({
         "path": plan.path,
         "branch": plan.branch,

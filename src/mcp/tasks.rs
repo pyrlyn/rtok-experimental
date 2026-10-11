@@ -14,7 +14,7 @@ use crate::plugin::{Runtime, ToolDef};
 use crate::tasks::run::{Project, filter, require_agent};
 use crate::tasks::{NewTask, Status, TaskId};
 
-pub fn defs() -> [ToolDef; 10] {
+pub fn defs() -> [ToolDef; 12] {
     [
         ToolDef {
             name: "task_create",
@@ -65,6 +65,16 @@ pub fn defs() -> [ToolDef; 10] {
             name: "task_priority",
             description: "Set priority from 0 (highest) to 4. 2 is the default and is not stored.",
             input_schema: json!({"type":"object","properties":{"id":{"type":"string"},"level":{"type":"integer"}},"required":["id","level"]}),
+        },
+        ToolDef {
+            name: "task_conflict",
+            description: "Record that id and other touch the same files, so they should not run at once (symmetric; remove takes it off). task_ready flags a task whose conflict partner is in progress.",
+            input_schema: json!({"type":"object","properties":{"id":{"type":"string"},"other":{"type":"string"},"remove":{"type":"boolean"}},"required":["id","other"]}),
+        },
+        ToolDef {
+            name: "task_parallel",
+            description: "Mark a task safe to run beside any other task; on false takes the mark off.",
+            input_schema: json!({"type":"object","properties":{"id":{"type":"string"},"on":{"type":"boolean","description":"default true"}},"required":["id"]}),
         },
     ]
 }
@@ -138,6 +148,17 @@ pub fn call(cx: &Runtime, name: &str, args: &Value) -> Result<String> {
                 bail!("`blocker` is required");
             };
             serde_json::to_value(project.block(&id(args)?, &blocker.parse()?)?)?
+        }
+        "task_conflict" => {
+            let Some(other) = arg(args, "other") else {
+                bail!("`other` is required");
+            };
+            let remove = args["remove"].as_bool().unwrap_or(false);
+            serde_json::to_value(project.conflict(&id(args)?, &other.parse()?, remove)?)?
+        }
+        "task_parallel" => {
+            let on = args["on"].as_bool().unwrap_or(true);
+            serde_json::to_value(project.set_parallel(&id(args)?, on)?)?
         }
         "task_priority" => {
             let Some(level) = args["level"].as_u64() else {

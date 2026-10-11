@@ -307,7 +307,7 @@ mod tests {
         cx.record(&row("tags.callers", None)).unwrap();
         call.end(&Ok("(tags; lsp: down)\na.rs:1 f".to_string()));
         let events = cx.store.graph_events_after(0, 10).unwrap();
-        let summary = crate::web::live::coalesce(events).unwrap().summary;
+        let summary = crate::web::live::coalesce(events, 100).unwrap().summary;
         let ledger = cx.store.graph_measurements_after("mcp-1", 0).unwrap();
         let of = |kind: &str| ledger.iter().filter(|r| r.kind == kind).count() as u32;
         assert_eq!(

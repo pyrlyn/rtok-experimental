@@ -402,6 +402,7 @@ diesel::table! {
 
 // 0026 (T287): messages between agents and the user. `from_agent` NULL = the user at a
 // terminal; `body` is capped and cleaned by `Store::send_message`.
+// 0046 (T441.13.1): `task`, the task the message is about.
 diesel::table! {
     messages (id) {
         id -> Integer,
@@ -411,6 +412,7 @@ diesel::table! {
         created_at -> BigInt,
         delivered_at -> Nullable<BigInt>,
         read_at -> Nullable<BigInt>,
+        task -> Nullable<Text>,
     }
 }
 

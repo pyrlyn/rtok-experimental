@@ -74,6 +74,10 @@ pub(super) struct Args {
     /// With --fix --yes: print the diffs and write nothing
     #[arg(long, requires = "yes")]
     pub(super) dry_run: bool,
+    // T416.3
+    /// With --fix: stat lines and totals instead of the diffs (a dry run)
+    #[arg(long, requires = "fix")]
+    pub(super) stat: bool,
     /// With --fix: limit it to these problems (repeatable; default: all of them)
     #[arg(long, requires = "fix", value_enum)]
     pub(super) only: Vec<FixClass>,
@@ -89,10 +93,12 @@ pub(super) fn run(config_file: &Option<PathBuf>, args: Args) -> Result<()> {
             fix: true,
             yes,
             dry_run,
+            stat,
             only,
             agent,
             ..
         } => {
+            crate::stat_preview::set(stat);
             let agent = doctor_host(agent.as_deref())?;
             let cfg = Config::load_with(config_file.as_deref(), doctor_flags(instructions))?;
             let kinds: Vec<&str> = if only.is_empty() {

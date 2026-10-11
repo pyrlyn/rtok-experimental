@@ -9,6 +9,7 @@
 //! totals for the same calls. A freeze holds the picture only: the latest store keeps taking
 //! batches, so nothing is lost when it lifts.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
@@ -17,18 +18,22 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Paragraph, Row, Table};
+use ratatui::widgets::{Cell, Paragraph, Row, Table};
 
 use super::theme::{self, ACCENT, ERR, WARN};
 use super::view::time_of;
+use crate::config::{Config, Graph};
 use crate::web::calls_store::{
-    CallsStore, FeedFilter, Finished, Totals, WINDOWS, clock_ms, distinct, filter_feed,
+    CallsStore, DrawnNode, FeedFilter, Finished, OUTSIDE_SCOPE, Totals, WINDOWS, clock_ms,
+    distinct, filter_feed, outside_scope, spark_label,
 };
 use crate::web::live::{self, CallBatch, Reader};
 
 /// Tool bars the pane draws at most; the rest of a tall tool list is cut, not scrolled.
 const MAX_BARS: usize = 4;
 const BAR_WIDTH: u64 = 16;
+/// Rows the pane needs before it draws the two sparklines: below that the feed keeps its rows.
+const SPARKS_FROM: u16 = 14;
 
 struct Held {
     store: CallsStore,
@@ -38,31 +43,54 @@ struct Held {
 /// The pane's state. The clock arrives through [`Self::poll`], like the rest of the TUI state.
 pub(super) struct LiveCalls {
     db_path: PathBuf,
+    graph: Graph,
+    /// The newest event id when the TUI started: the totals count the events above it, read from
+    /// the store when the reader starts, so they do not depend on when the Graph tab was first
+    /// opened.
+    started: Option<i64>,
     /// Started on the first look at the Graph tab, as the web's poller starts on the first
     /// subscribed socket; `None` until then.
-    feed: Option<mpsc::Receiver<CallBatch>>,
+    feed: Option<mpsc::Receiver<(CallBatch, i64)>>,
     latest: CallsStore,
     held: Option<Held>,
     window: usize,
     filter: FeedFilter,
     now: i64,
+    /// The nodes of a one-project view and the count the cap left out of it. The Graph tab draws
+    /// no such view yet, so these stay empty and the folded counter shows nothing; the page's
+    /// counter is [`CallsStore::folded_counters`], which this pane calls on them.
+    drawn: Vec<DrawnNode>,
+    more: usize,
 }
 
-/// One thread on the web's reader; it ends when the TUI drops the receiver.
-fn spawn_reader(path: PathBuf) -> Option<mpsc::Receiver<CallBatch>> {
+/// One thread on the web's reader; it ends when the TUI drops the receiver. Batches come with
+/// the time to fold them at: the replay of the calls since `started` carries their own times.
+fn spawn_reader(
+    path: PathBuf,
+    graph: Graph,
+    started: Option<i64>,
+) -> Option<mpsc::Receiver<(CallBatch, i64)>> {
     let (tx, rx) = mpsc::channel();
     std::thread::Builder::new()
         .name("rtok-tui-calls".into())
         .spawn(move || {
             let mut reader = None;
+            let mut since = started;
             loop {
                 // Open before the first sleep: events written while it runs must not be skipped.
                 if reader.is_none() {
-                    reader = Reader::open(&path);
+                    reader = Reader::open(&path, &graph);
+                    if let (Some(r), Some(from)) = (reader.as_mut(), since.take()) {
+                        for item in r.replay(from) {
+                            if tx.send(item).is_err() {
+                                return;
+                            }
+                        }
+                    }
                 }
                 std::thread::sleep(live::POLL);
                 if let Some(batch) = reader.as_mut().and_then(Reader::poll)
-                    && tx.send(batch).is_err()
+                    && tx.send((batch, clock_ms())).is_err()
                 {
                     return;
                 }
@@ -73,28 +101,39 @@ fn spawn_reader(path: PathBuf) -> Option<mpsc::Receiver<CallBatch>> {
 }
 
 impl LiveCalls {
-    pub(super) fn new(db_path: PathBuf) -> Self {
+    pub(super) fn new(cfg: &Config) -> Self {
         Self {
-            db_path,
+            db_path: cfg.core.db_path.clone(),
+            graph: cfg.plugins.graph.clone(),
+            started: live::head_of(&cfg.core.db_path),
             feed: None,
-            latest: CallsStore::default(),
+            latest: CallsStore::with(&cfg.plugins.graph),
             held: None,
             window: 1,
             filter: FeedFilter::default(),
             now: clock_ms(),
+            drawn: Vec::new(),
+            more: 0,
         }
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_drawn(&mut self, drawn: Vec<DrawnNode>, more: usize) {
+        self.drawn = drawn;
+        self.more = more;
     }
 
     /// Takes what the reader found and drops calls whose process is gone. `active` is whether the
     /// Graph tab is up; the reader is not started before that.
     pub(super) fn poll(&mut self, active: bool) {
         if active && self.feed.is_none() {
-            self.feed = spawn_reader(self.db_path.clone());
+            self.feed = spawn_reader(self.db_path.clone(), self.graph.clone(), self.started);
         }
         self.now = clock_ms();
-        let batches: Vec<CallBatch> = self.feed.iter().flat_map(|rx| rx.try_iter()).collect();
-        for batch in &batches {
-            self.latest.fold(batch, self.now);
+        let batches: Vec<(CallBatch, i64)> =
+            self.feed.iter().flat_map(|rx| rx.try_iter()).collect();
+        for (batch, at) in &batches {
+            self.latest.fold(batch, *at);
         }
         self.latest.sweep(self.now);
     }
@@ -139,7 +178,7 @@ impl LiveCalls {
             KeyCode::Char('w') => {
                 self.window = (self.window + 1) % WINDOWS.len();
             }
-            KeyCode::Char('a') => cycle(&mut self.filter.session, feed, |r| Some(&r.session)),
+            KeyCode::Char('a') => cycle(&mut self.filter.caller, feed, |r| Some(&r.caller)),
             KeyCode::Char('t') => cycle(&mut self.filter.tool, feed, |r| Some(&r.tool)),
             KeyCode::Char('o') => cycle(&mut self.filter.project, feed, |r| r.project.as_deref()),
             _ => return false,
@@ -180,6 +219,23 @@ fn compact(n: i64) -> String {
     } else {
         n.to_string()
     }
+}
+
+/// One block per slot, scaled to the series' own maximum; an empty slot is the lowest bar, so the
+/// line keeps its length.
+fn blocks(values: &[i64]) -> String {
+    const BARS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    let top = values.iter().copied().max().unwrap_or(0).max(1);
+    values
+        .iter()
+        .map(|&v| {
+            if v <= 0 {
+                BARS[0]
+            } else {
+                BARS[(v * 7 + top - 1) as usize / top as usize]
+            }
+        })
+        .collect()
 }
 
 /// `30 ms`, `1.5 s`: the web page's `millis`.
@@ -237,8 +293,21 @@ fn result_cell(r: &Finished) -> String {
     }
 }
 
+/// The project, with the page's mark beside it when the call crosses out of the scope.
+fn project_cell(r: &Finished, scope: Option<&HashSet<String>>) -> Cell<'static> {
+    let project = r.project.clone().unwrap_or_else(|| "-".into());
+    if outside_scope(scope, r.project.as_deref()) {
+        Cell::from(Line::from(vec![
+            Span::raw(format!("{project} ")),
+            Span::styled(OUTSIDE_SCOPE, Style::new().fg(WARN)),
+        ]))
+    } else {
+        Cell::from(project)
+    }
+}
+
 impl LiveCalls {
-    fn metric_lines(&self, t: &Totals, bars: usize) -> Vec<Line<'static>> {
+    fn metric_lines(&self, t: &Totals, bars: usize, sparks: bool) -> Vec<Line<'static>> {
         let store = self.shown();
         let saved = t.before - t.after;
         let mut windows: Vec<Span> = WINDOWS
@@ -313,7 +382,24 @@ impl LiveCalls {
             Span::styled("projects with hits ", theme::muted()),
             Span::raw(t.projects_hit.to_string()),
         ]);
+        let spark = store.spark(self.window, self.shown_now());
+        let trend = |what: &str, values: Vec<i64>| {
+            Line::from(vec![
+                Span::styled(
+                    format!("{:<34}", spark_label(what, spark.span_ms)),
+                    theme::muted(),
+                ),
+                Span::styled(blocks(&values), Style::new().fg(ACCENT)),
+            ])
+        };
         let mut lines = vec![Line::from(windows), kpi, metrics, answer];
+        if sparks {
+            lines.push(trend(
+                "calls",
+                spark.calls.iter().map(|&n| n as i64).collect(),
+            ));
+            lines.push(trend("tokens saved", spark.saved.clone()));
+        }
         let mut tools: Vec<_> = t.tools.iter().collect();
         tools.sort_by(|a, b| b.1.calls.cmp(&a.1.calls).then(a.0.cmp(b.0)));
         let top = tools.first().map_or(1, |(_, v)| v.calls).max(1);
@@ -343,14 +429,18 @@ impl LiveCalls {
         lines
     }
 
-    pub(super) fn render(&self, frame: &mut Frame, area: Rect) {
+    /// `scope` is the names of the projects the live part is scoped to (see
+    /// [`crate::web::calls_store::scope_names`]); a call on any other is marked.
+    pub(super) fn render(&self, frame: &mut Frame, area: Rect, scope: Option<&HashSet<String>>) {
         let t = self.shown().window_totals(self.window, self.shown_now());
         // The Graph page gives the pane 13 rows at 24; the bars yield so the feed keeps its rows.
-        let bars = MAX_BARS.min(usize::from(area.height).saturating_sub(11));
-        let mut lines = self.metric_lines(&t, bars);
+        // The sparklines yield first, then the bars, for the same reason.
+        let sparks = area.height >= SPARKS_FROM;
+        let spare = usize::from(area.height).saturating_sub(if sparks { 13 } else { 11 });
+        let mut lines = self.metric_lines(&t, MAX_BARS.min(spare), sparks);
         let mut filters = Vec::new();
         for (name, value) in [
-            ("caller [a]", &self.filter.session),
+            ("caller [a]", &self.filter.caller),
             ("tool [t]", &self.filter.tool),
             ("project [o]", &self.filter.project),
         ] {
@@ -360,6 +450,18 @@ impl LiveCalls {
             ));
         }
         lines.push(Line::from(filters));
+        let folded = self
+            .shown()
+            .folded_counters(&self.drawn, self.more, scope, self.shown_now());
+        if !folded.is_empty() {
+            let mut spans = vec![Span::styled("folded calls  ", theme::muted())];
+            spans.extend(
+                folded
+                    .iter()
+                    .map(|f| Span::raw(format!("{} · {} folded  ", f.label, f.calls))),
+            );
+            lines.push(Line::from(spans));
+        }
         let [top, feed] =
             Layout::vertical([Constraint::Length(lines.len() as u16), Constraint::Min(0)])
                 .areas(area);
@@ -372,12 +474,12 @@ impl LiveCalls {
         );
         let table_rows = rows.iter().map(|r| {
             let row = Row::new([
-                time_of(r.at / 1000),
-                r.tool.clone(),
-                r.target.clone().unwrap_or_else(|| "-".into()),
-                r.session.chars().take(8).collect(),
-                r.project.clone().unwrap_or_else(|| "-".into()),
-                result_cell(r),
+                Cell::from(time_of(r.at / 1000)),
+                Cell::from(r.tool.clone()),
+                Cell::from(r.target.clone().unwrap_or_else(|| "-".into())),
+                Cell::from(r.caller.clone()),
+                project_cell(r, scope),
+                Cell::from(result_cell(r)),
             ]);
             if r.ok {
                 row
@@ -391,7 +493,7 @@ impl LiveCalls {
                 Constraint::Length(8),
                 Constraint::Length(9),
                 Constraint::Min(10),
-                Constraint::Length(8),
+                Constraint::Length(16),
                 Constraint::Min(8),
                 Constraint::Min(20),
             ],
@@ -416,6 +518,7 @@ mod tests {
     use crate::store::MeasurementSample;
     use crate::tui::app::{App, KEYS, tests::config};
     use crate::tui::view;
+    use crate::web::calls_store::SPARK_SLOTS;
     use crate::web::calls_store::fixtures::{T, batch, end, event};
 
     fn graph_app() -> App {
@@ -442,6 +545,104 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    /// The pane alone, with the scope the Graph page would pass.
+    fn pane(app: &App, scope: Option<&HashSet<String>>) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(150, 30)).unwrap();
+        terminal
+            .draw(|f| app.live().render(f, f.area(), scope))
+            .unwrap();
+        let buf = terminal.backend().buffer().clone();
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn the_sparklines_draw_the_store_buckets_under_the_pages_names() {
+        let mut app = graph_app();
+        let now = T + 600_000;
+        app.live_mut()
+            .feed_batch(&batch(vec![end("old", 100, 30)], 0), T);
+        app.live_mut()
+            .feed_batch(&batch(vec![end("a", 40, 10), end("b", 8, 8)], 0), now);
+        for (key, label) in [(None, "5 min"), (Some('w'), "15 min")] {
+            if let Some(c) = key {
+                press(&mut app, c);
+            }
+            let spark = app.live().latest.spark(app.live().window, now);
+            let s = screen(&app);
+            for (what, values) in [
+                (
+                    "calls",
+                    spark.calls.iter().map(|&n| n as i64).collect::<Vec<_>>(),
+                ),
+                ("tokens saved", spark.saved.clone()),
+            ] {
+                let want = format!("{what} over the last {label}");
+                assert!(s.contains(&want), "missing `{want}` in\n{s}");
+                let line = s.lines().find(|l| l.contains(&want)).unwrap();
+                let drawn: String = line
+                    .split(&want)
+                    .nth(1)
+                    .unwrap()
+                    .trim()
+                    .chars()
+                    .take(SPARK_SLOTS)
+                    .collect();
+                assert_eq!(drawn, blocks(&values), "{what}");
+                // Five minutes back the old call is out; the two new ones sit in the newest slot.
+                if label == "5 min" && what == "calls" {
+                    assert_eq!(drawn, format!("{}█", "▁".repeat(SPARK_SLOTS - 1)));
+                }
+            }
+        }
+        assert_eq!(blocks(&[0, 1, 4, 8]), "▁▂▅█");
+    }
+
+    #[test]
+    fn a_call_outside_the_scope_is_marked_as_on_the_page() {
+        let mut app = graph_app();
+        app.live_mut().feed_batch(&first_batch(), T);
+        let inside = HashSet::from(["rtok".to_owned()]);
+        assert!(!pane(&app, Some(&inside)).contains(OUTSIDE_SCOPE));
+        assert!(!pane(&app, None).contains(OUTSIDE_SCOPE));
+        let other = HashSet::from(["elsewhere".to_owned()]);
+        let s = pane(&app, Some(&other));
+        assert!(s.contains("rtok outside scope"), "{s}");
+    }
+
+    #[test]
+    fn folded_targets_count_on_their_nearest_visible_ancestor_or_the_group() {
+        let mut app = graph_app();
+        app.live_mut().feed_batch(&first_batch(), T);
+        assert!(
+            !pane(&app, None).contains("folded calls"),
+            "no cap, no counter"
+        );
+        let node = |label: &str, root: &str| DrawnNode {
+            label: label.into(),
+            root: root.into(),
+        };
+        app.live_mut().set_drawn(vec![node("web", "src/web")], 4);
+        let s = pane(&app, None);
+        assert!(
+            s.contains("folded calls") && s.contains("+4 more · 3 folded"),
+            "{s}"
+        );
+        app.live_mut()
+            .set_drawn(vec![node("tree", "open_index")], 4);
+        let s = pane(&app, None);
+        assert!(
+            s.contains("tree · 3 folded") && !s.contains("+4 more"),
+            "{s}"
+        );
     }
 
     fn press(app: &mut App, c: char) {
@@ -539,7 +740,7 @@ mod tests {
         assert_eq!(millis(1500.0), "1.5 s");
         let app = graph_app();
         let t = app.live().latest.window_totals(1, T);
-        let line = app.live().metric_lines(&t, 0)[2].to_string();
+        let line = app.live().metric_lines(&t, 0, false)[2].to_string();
         assert!(
             line.starts_with("latency p50 -  symbols returned 0 of 0"),
             "{line}"
@@ -589,13 +790,13 @@ mod tests {
         press(&mut app, 'w');
         assert!(
             screen(&app).contains("calls 3 (1 failed)"),
-            "since open sums all"
+            "since start sums all"
         );
     }
 
     #[test]
     fn every_graph_key_in_the_table_is_handled() {
-        let mut live = LiveCalls::new(std::path::PathBuf::new());
+        let mut live = LiveCalls::new(&config());
         // The Graph page also lists the project keys (T476); the pane's rows all name the calls.
         let pane = KEYS
             .iter()
@@ -614,7 +815,7 @@ mod tests {
     fn rows_the_poller_finds_in_the_store_reach_the_pane() {
         let mut cfg = config();
         cfg.tui.tab = "graph".into();
-        let mut live = LiveCalls::new(cfg.core.db_path.clone());
+        let mut live = LiveCalls::new(&cfg);
         live.poll(true);
         // The reader arms itself at the newest event and says nothing when it has, so calls are
         // written until one is seen: whichever lands after the arming reaches the pane.
@@ -635,5 +836,41 @@ mod tests {
             (all.before, all.after),
             (100 * all.calls as i64, 30 * all.calls as i64)
         );
+    }
+
+    #[test]
+    fn the_caller_column_shows_the_name_the_store_gave_else_the_session() {
+        let mut app = graph_app();
+        let mut b = first_batch();
+        b.callers
+            .insert("session-abcdef".into(), "claude 3f9a1c2e".into());
+        app.live_mut().feed_batch(&b, T);
+        let s = screen(&app);
+        assert!(s.contains("claude 3f9a1c2e"), "{s}");
+        let mut other = end("z", 8, 4);
+        other.session = "mcp-1234567".into();
+        app.live_mut().feed_batch(&batch(vec![other], 0), T + 1);
+        assert!(screen(&app).contains("mcp-1234"));
+    }
+
+    /// The pane counts the calls made since the TUI started, even when the Graph tab was opened
+    /// after them.
+    #[test]
+    fn calls_made_before_the_graph_tab_opened_are_counted() {
+        let mut cfg = config();
+        cfg.tui.tab = "graph".into();
+        let mut live = LiveCalls::new(&cfg);
+        let store = crate::store::Store::open(&cfg.core.db_path).unwrap();
+        for e in [event("early"), end("early", 100, 30)] {
+            store.insert_graph_event(&e).unwrap();
+        }
+        live.poll(true);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        while live.latest.all.calls == 0 && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+            live.poll(true);
+        }
+        assert_eq!(live.latest.all.calls, 1);
+        assert_eq!(live.latest.feed[0].target.as_deref(), Some("open_index"));
     }
 }

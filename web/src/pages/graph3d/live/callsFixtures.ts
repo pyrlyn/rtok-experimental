@@ -12,6 +12,7 @@ export const running = (call: string, over: Partial<Running> = {}): Running => (
   target: "open_index",
   project: "rtok",
   session: "session-abcdef",
+  caller: "claude 3f9a1c2e",
   at: NOW,
   ...over,
 });
@@ -28,6 +29,7 @@ export const done = (
   target: "open_index",
   project: "rtok",
   session: "session-abcdef",
+  caller: "claude 3f9a1c2e",
   ok: true,
   error: null,
   backend: "tags",
@@ -39,7 +41,7 @@ export const done = (
   ...over,
 });
 
-export const LABELS = ["1 min", "5 min", "15 min", "since open"];
+export const LABELS = ["1 min", "5 min", "15 min", "since start"];
 
 /** What the server would total for `feed`; `over` sets the figures that come from the batch summary. */
 export function windowOf(
@@ -83,6 +85,7 @@ export function view(over: Partial<CallsView> & { totals?: Partial<WindowView> }
     now: NOW,
     running: [],
     feed,
+    heat_window_s: 300,
     windows: LABELS.map((label) => windowOf(label, feed, totals)),
     ...rest,
   };

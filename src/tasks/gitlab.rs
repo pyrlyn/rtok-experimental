@@ -69,7 +69,7 @@ impl Issue {
             _ if self.has(IN_PROGRESS) => Status::InProgress,
             _ => Status::Open,
         };
-        let (priority, assignee, blocked_by) = meta::read_meta(&self.labels);
+        let meta = meta::read_meta(&self.labels);
         Some(Task {
             title: task_title(&id, &self.title),
             description: self.description.unwrap_or_default().trim().to_string(),
@@ -83,9 +83,11 @@ impl Issue {
                 url: self.web_url,
                 node_id: None,
             }),
-            priority,
-            assignee,
-            blocked_by,
+            priority: meta.priority,
+            assignee: meta.assignee,
+            blocked_by: meta.blocked_by,
+            conflicts_with: meta.conflicts_with,
+            parallel: meta.parallel,
             id,
         })
     }
@@ -360,6 +362,10 @@ impl TaskAdapter for GitlabAdapter {
         updated
             .into_task()
             .with_context(|| format!("gitlab tasks: {} lost its label", task.id))
+    }
+
+    fn stores_markers(&self) -> bool {
+        true
     }
 
     fn max_id(&self, prefix: &str) -> Result<Option<TaskId>> {
@@ -784,5 +790,90 @@ mod tests {
         put.assert();
         assert_eq!(saved.assignee.as_deref(), Some("agent-1"));
         assert_eq!(saved.status, Status::InProgress);
+    }
+
+    #[test]
+    fn save_stores_conflict_and_parallel_markers_and_reads_them_back() {
+        let server = MockServer::start();
+        let gl = adapter(&server);
+        by_label(
+            &server,
+            "rtok:A1",
+            "all",
+            json!([issue(
+                1,
+                "A1",
+                "opened",
+                &["bug", "rtok:conflicts:A9", "rtok:parallel"]
+            )]),
+        );
+        let put = server.mock(|when, then| {
+            when.method("PUT")
+                .path(format!("{ISSUES}/1"))
+                .json_body(json!({
+                    "remove_labels": "rtok:conflicts:A9,rtok:parallel",
+                    "add_labels": "rtok:conflicts:A2,rtok:conflicts:A3",
+                }));
+            then.status(200).json_body(issue(
+                1,
+                "A1",
+                "opened",
+                &["bug", "rtok:conflicts:A2", "rtok:conflicts:A3"],
+            ));
+        });
+        let mut task = gl.get(&id("A1")).unwrap().unwrap();
+        assert_eq!(task.conflicts_with, vec![id("A9")]);
+        assert!(task.parallel);
+        task.conflicts_with = vec![id("A2"), id("A3")];
+        task.parallel = false;
+        let saved = gl.save(&task).unwrap();
+        put.assert();
+        assert_eq!(saved.conflicts_with, vec![id("A2"), id("A3")]);
+        assert!(!saved.parallel);
+        assert!(gl.stores_markers());
+    }
+
+    #[test]
+    fn task_conflict_writes_both_issues_and_task_parallel_sets_the_label() {
+        let server = MockServer::start();
+        for (n, task) in [(1, "A1"), (2, "A2")] {
+            by_label(
+                &server,
+                &format!("rtok:{task}"),
+                "all",
+                json!([issue(n, task, "opened", &["bug"])]),
+            );
+        }
+        let edge = |n: u64, task: &str, peer: &str| {
+            let label = format!("rtok:conflicts:{peer}");
+            server.mock(|when, then| {
+                when.method("PUT")
+                    .path(format!("{ISSUES}/{n}"))
+                    .json_body(json!({"add_labels": label}));
+                then.status(200)
+                    .json_body(issue(n, task, "opened", &["bug", &label]));
+            })
+        };
+        let (first, second) = (edge(1, "A1", "A2"), edge(2, "A2", "A1"));
+        let project = Project::with_adapter(
+            "gitlab.com/me/app".into(),
+            std::env::temp_dir(),
+            "A".into(),
+            Box::new(adapter(&server)),
+        );
+        let task = project.conflict(&id("A1"), &id("A2"), false).unwrap();
+        first.assert();
+        second.assert();
+        assert_eq!(task.conflicts_with, vec![id("A2")]);
+
+        let parallel = server.mock(|when, then| {
+            when.method("PUT")
+                .path(format!("{ISSUES}/1"))
+                .json_body(json!({"add_labels": "rtok:parallel"}));
+            then.status(200)
+                .json_body(issue(1, "A1", "opened", &["bug", "rtok:parallel"]));
+        });
+        assert!(project.set_parallel(&id("A1"), true).unwrap().parallel);
+        parallel.assert();
     }
 }

@@ -630,6 +630,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "change-preview"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79afe5aba12959b75109736b1d0af509e9863ee57fb5c7d3985a3f0b40edc561"
+dependencies = [
+ "owo-colors",
+ "serde",
+ "similar 3.2.0",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4270,12 +4281,13 @@ dependencies = [
 
 [[package]]
 name = "rtok"
-version = "0.15.1"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
  "axum",
  "base64 0.23.1",
+ "change-preview",
  "clap",
  "clap_complete",
  "clap_mangen",
@@ -4328,7 +4340,6 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "shlex 2.0.1",
- "similar 3.2.0",
  "subtle",
  "tokio",
  "tokio-tungstenite 0.30.0",
@@ -4375,6 +4386,7 @@ name = "rtok-config"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "change-preview",
  "dotenvy",
  "figment",
  "globset",
@@ -4383,7 +4395,6 @@ dependencies = [
  "rtok-hook",
  "rtok-plugin-sdk",
  "serde",
- "similar 3.2.0",
  "thiserror 2.0.20",
  "toml_edit 0.25.15+spec-1.1.0",
  "url",
@@ -4453,8 +4464,10 @@ dependencies = [
 name = "rtok-sys"
 version = "0.0.1"
 dependencies = [
+ "indicatif",
  "libc",
  "rustix",
+ "serde_json",
  "windows-sys 0.61.2",
  "workspace-hack",
 ]

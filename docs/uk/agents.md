@@ -55,6 +55,8 @@ lang: uk
 | [`devin`](https://github.com/pyrlyn/rtok/blob/main/src/agents/devin/README.md) | Devin | Desktop | yes | yes | — | `--yes` | measure, cmd, read, json_tree (off), archive, inject, guard, memory, graph, toon, docs (off) |
 | [`roo`](https://github.com/pyrlyn/rtok/blob/main/src/agents/roo/README.md) | Roo Code | Desktop | — | yes | — | — | read, json_tree (off), archive, memory, graph, toon, docs (off) |
 | [`qwen`](https://github.com/pyrlyn/rtok/blob/main/src/agents/qwen/README.md) | Qwen Code | CLI | yes | yes | — | `--yes` | measure, cmd, read, json_tree (off), archive, inject, guard, memory, graph, toon, docs (off) |
+| [`codebuddy`](https://github.com/pyrlyn/rtok/blob/main/src/agents/codebuddy/README.md) | CodeBuddy Code | CLI | yes | yes | — | `--yes` | measure, cmd, read, json_tree (off), archive, inject, guard, memory, graph, toon, docs (off) |
+| [`codebuddy`](https://github.com/pyrlyn/rtok/blob/main/src/agents/codebuddy/README.md) | WorkBuddy | Desktop | yes | yes | — | `--yes` | measure, cmd, read, json_tree (off), archive, inject, guard, memory, graph, toon, docs (off) |
 <!-- agents-table:end -->
 
 Таблицю генерує з коду хостів (`src/agents/<host>/mod.rs` і каталогу плагінів) тест `tests/agents_doc.rs`, який падає, коли вона застаріла. Після зміни хоста, додавання нового чи зміни інтерфейсів плагіна згенеруйте її заново:

@@ -15,7 +15,6 @@ use rtok::config::Config;
 use rtok::plugin::Runtime;
 use rtok::plugins::graph::events::Call;
 use rtok::testutil::config_file_in;
-use rtok::web::calls_store::FEED_ROWS;
 use rtok::web::{DashState, app};
 use rtok_plugin_sdk::Measurement;
 use serde_json::{Value, json};
@@ -39,9 +38,15 @@ impl Drop for Server {
 }
 
 async fn serve(label: &str) -> Server {
+    serve_after(label, |_| {}).await
+}
+
+/// `before` runs on the store before the server starts, like calls made before `rtok web`.
+async fn serve_after(label: &str, before: impl FnOnce(&Config)) -> Server {
     let dir = std::env::temp_dir().join(format!("rtok-live-{label}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let cfg = config_file_in(&dir);
+    before(&cfg);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind");
@@ -134,6 +139,10 @@ async fn a_call_from_another_process_reaches_the_socket_and_equals_its_stats_row
     assert_eq!(row["tool"], "callers");
     assert_eq!(row["backend"], "lsp");
     assert_eq!(row["session"], "mcp-other");
+    assert_eq!(
+        row["caller"], "mcp-othe",
+        "the store knows no agent or host for it"
+    );
     assert_eq!(row["ok"], true);
 
     // The totals are the very rows `rtok stats --plugin graph` lists.
@@ -177,7 +186,10 @@ async fn a_burst_of_500_calls_arrives_in_bounded_frames_and_the_socket_stays_res
             "calls" => {
                 frames += 1;
                 let v = &f["calls"];
-                assert!(v["feed"].as_array().unwrap().len() <= FEED_ROWS);
+                assert!(
+                    v["feed"].as_array().unwrap().len()
+                        <= s.cfg.plugins.graph.live_feed_rows as usize
+                );
                 // Every frame is the whole state: the last window is the total so far.
                 ends = v["windows"][3]["calls"].as_u64().unwrap();
                 est_before = v["windows"][3]["before"].as_i64().unwrap();
@@ -199,47 +211,84 @@ async fn a_burst_of_500_calls_arrives_in_bounded_frames_and_the_socket_stays_res
 }
 
 #[tokio::test]
-async fn nothing_is_replayed_to_a_new_socket_or_a_restarted_server() {
-    let s = serve("replay").await;
-    let other = Runtime::open(s.cfg.clone(), "mcp-old").unwrap();
-    one_call(&other, "before_any_socket", "x");
+async fn the_totals_count_from_the_server_start_and_a_reload_reads_them_from_the_store() {
+    let s = serve_after("replay", |cfg| {
+        let old = Runtime::open(cfg.clone(), "mcp-old").unwrap();
+        one_call(&old, "before_the_server", "x");
+    })
+    .await;
+    let other = Runtime::open(s.cfg.clone(), "mcp-new").unwrap();
+    one_call(&other, "unsubscribed", "x");
 
     // Not subscribed: no calls frame, only snapshots.
     let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{}/ws", s.addr))
         .await
         .unwrap();
-    one_call(&other, "unsubscribed", "x");
     while let Some(f) = frame(&mut ws, Duration::from_millis(800)).await {
         assert_ne!(f["type"], "calls", "an unsubscribed socket got call events");
     }
     drop(ws);
 
-    // Subscribed: the ack's totals start empty (the old calls are not counted), and only a new
-    // call reaches them.
+    // The first page counts the call made after the server started, not the one before it.
     let (mut ws, ack) = subscribed(&s).await;
-    assert_eq!(ack["calls"]["windows"][3]["calls"], 0, "{ack}");
+    assert_eq!(ack["calls"]["windows"][3]["calls"], 1, "{ack}");
+    assert_eq!(ack["calls"]["feed"][0]["target"], "unsubscribed");
     one_call(&other, "after", "x");
-    let seen = loop {
-        let f = frame(&mut ws, Duration::from_secs(1))
+    loop {
+        let f = frame(&mut ws, Duration::from_secs(5))
             .await
             .expect("the new call");
-        if f["type"] == "calls" && f["calls"]["windows"][3]["calls"] == 1 {
-            break f["calls"]["feed"].as_array().unwrap().clone();
+        if f["type"] == "calls" && f["calls"]["windows"][3]["calls"] == 2 {
+            break;
         }
-    };
-    assert!(seen.iter().all(|r| r["target"] == "after"), "{seen:?}");
+    }
 
-    // A reconnect after a gap starts from zero again: the call written while no socket
-    // listened is not counted.
+    // A reload: the poller stops with the last socket, a call lands in the gap, and the new
+    // page's totals are the store's sums since the server started, in the windows too.
     drop(ws);
     tokio::time::sleep(Duration::from_millis(700)).await;
     one_call(&other, "during_the_gap", "x");
-    let (mut ws, _) = subscribed(&s).await;
-    while let Some(f) = frame(&mut ws, Duration::from_millis(800)).await {
-        if f["type"] == "calls" {
-            assert_eq!(f["calls"]["feed"], json!([]), "replayed: {f}");
-        }
+    let (_ws, ack) = subscribed(&s).await;
+    let total = &ack["calls"]["windows"][3];
+    assert_eq!(total["calls"], 3, "{ack}");
+    assert_eq!(total["before"], 3 * 1000);
+    assert_eq!(
+        ack["calls"]["windows"][1]["calls"], 3,
+        "the 5 min window too"
+    );
+    assert_eq!(ack["calls"]["feed"][0]["target"], "during_the_gap");
+    assert_eq!(ack["calls"]["feed"].as_array().unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn the_feed_names_the_agent_and_host_and_falls_back_to_the_session() {
+    let s = serve("callers").await;
+    let store = rtok::store::Store::open(&s.cfg.core.db_path).unwrap();
+    let claude = store.host_id("claude").unwrap().expect("seeded host");
+    let agent = store
+        .register_agent(claude, "host-session-1", None, None, None)
+        .unwrap();
+    // An `rtok mcp` process has a session row with its host and no agent row of its own.
+    store
+        .upsert_session("mcp-4242", Some(claude), None, None, Some("mcp"))
+        .unwrap();
+    for session in ["host-session-1", "mcp-4242", "mcp-unknown"] {
+        one_call(
+            &Runtime::open(s.cfg.clone(), session).unwrap(),
+            session,
+            "x",
+        );
     }
+    let (_ws, ack) = subscribed(&s).await;
+    assert_eq!(ack["calls"]["feed"].as_array().unwrap().len(), 3, "{ack}");
+    let caller = |target: &str| -> String {
+        let feed = ack["calls"]["feed"].as_array().unwrap();
+        let row = feed.iter().find(|r| r["target"] == target).unwrap();
+        row["caller"].as_str().unwrap().to_owned()
+    };
+    assert_eq!(caller("host-session-1"), format!("claude {}", &agent[..8]));
+    assert_eq!(caller("mcp-4242"), "claude mcp-4242");
+    assert_eq!(caller("mcp-unknown"), "mcp-unkn");
 }
 
 #[tokio::test]

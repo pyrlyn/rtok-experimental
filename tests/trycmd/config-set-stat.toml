@@ -1,0 +1,14 @@
+bin.name = "rtok"
+args = "--config tests/trycmd/input/bench-config.toml config set proxy.port 8791 --dry-run --stat"
+stdout = """
+ tests/trycmd/input/bench-config.toml | 3 +++
+1 file changed, 3 insertions(+)
+"""
+
+# Hermetic by construction: isolated HOME/RTOK_HOME, inherit = false.
+[env]
+inherit = false
+
+[env.add]
+HOME = "target/tmp/t416-3-config-set-stat"
+RTOK_HOME = "target/tmp/t416-3-config-set-stat"

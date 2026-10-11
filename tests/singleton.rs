@@ -43,6 +43,9 @@ fn plugin_tree(host: &str) -> (&str, bool) {
         "zcode" => ("zcode", false),
         "kimi" => ("kimi", false),
         "grok" => ("grok", false),
+        // T275.2: the Command Code tree is files the installer links, never a bundle the host
+        // loads; its `scripts/mcp.sh` is a by-hand command, so it serves no MCP by itself.
+        "commandcode" => ("commandcode", false),
         _ => (host, true),
     }
 }

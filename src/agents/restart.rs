@@ -626,6 +626,7 @@ mod tests {
             "VS Code" => "Visual Studio Code",
             "VS Code - Insiders" => "Visual Studio Code - Insiders",
             "Windsurf" => "Windsurf",
+            "WorkBuddy" => "WorkBuddy",
             "ZCode" => "ZCode",
             "Zed" => "Zed",
             other => panic!("desktop variant `{other}` has no expected-name row (T141) — add one"),

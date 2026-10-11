@@ -1,6 +1,6 @@
 {
   "name": "rtok",
-  "version": "0.15.1",
+  "version": "0.17.0",
   "description": "rtok hooks and MCP for Claude Code: lossless token savings for tool output",
   "homepage": "https://github.com/pyrlyn/rtok",
   "repository": "https://github.com/pyrlyn/rtok",

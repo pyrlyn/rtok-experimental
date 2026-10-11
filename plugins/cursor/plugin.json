@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "rtok",
-  "version": "0.15.1",
+  "version": "0.17.0",
   "description": "Portable rtok hooks for Cursor CLI and other Agent Plugin hosts"
 }

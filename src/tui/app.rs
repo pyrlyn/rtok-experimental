@@ -247,7 +247,7 @@ impl App {
             skills: SkillsState::default(),
             doctor_fix: DoctorFix::new(Engine::machine()),
             junk: JunkClear::new(junk_clear::Engine::machine()),
-            live: LiveCalls::new(cfg.core.db_path.clone()),
+            live: LiveCalls::new(cfg),
             config: ConfigState::default(),
             projects: projects::ProjectsState::default(),
             compare: Compare::default(),

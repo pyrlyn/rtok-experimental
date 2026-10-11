@@ -12,14 +12,17 @@ pub(super) struct Args {
     /// Shell to complete for (with `--install`/`--uninstall`: default `$SHELL`)
     pub(super) shell: Option<crate::completions::Shell>,
     /// Write the script to the shell's per-user completions directory
-    #[arg(long, conflicts_with_all = ["uninstall", "list"])]
+    #[arg(long, conflicts_with_all = ["uninstall", "list"], group = "install_or_uninstall")]
     pub(super) install: bool,
     /// Remove what `--install` wrote
-    #[arg(long, conflicts_with = "list")]
+    #[arg(long, conflicts_with = "list", group = "install_or_uninstall")]
     pub(super) uninstall: bool,
     /// Print each shell, whether its completions are installed (yes/no) and the file
     #[arg(long, conflicts_with = "shell")]
     pub(super) list: bool,
+    /// With `--install`/`--uninstall`: show the file diff and write nothing
+    #[arg(long, requires = "install_or_uninstall")]
+    pub(super) dry_run: bool,
 }
 
 pub(super) fn run(_config_file: &Option<PathBuf>, args: Args) -> Result<()> {
@@ -28,6 +31,7 @@ pub(super) fn run(_config_file: &Option<PathBuf>, args: Args) -> Result<()> {
         install,
         uninstall,
         list,
+        dry_run,
     } = args;
     use crate::completions::install::{self as inst, Places};
     use crate::completions::picker;
@@ -37,7 +41,19 @@ pub(super) fn run(_config_file: &Option<PathBuf>, args: Args) -> Result<()> {
     } else if install || uninstall {
         let places = Places::from_env()?;
         let shell = places.pick(shell)?;
-        if install {
+        if dry_run {
+            let preview = if install {
+                inst::preview_install(shell, super::Cli::command(), &places)?
+            } else {
+                inst::preview_uninstall(shell, &places)?
+            };
+            let text = change_preview::paint(&preview.render(change_preview::Mode::Diff));
+            vec![if text.is_empty() {
+                "nothing to change".to_string()
+            } else {
+                text.trim_end().to_string()
+            }]
+        } else if install {
             inst::install(shell, super::Cli::command(), &places)?
         } else {
             inst::uninstall(shell, &places)?

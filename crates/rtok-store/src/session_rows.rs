@@ -98,9 +98,9 @@ impl Store {
             .optional()?)
     }
 
-    /// Test-only: one session's `(host_id slug, project, cwd)` — T25.0's Check reads the row
-    /// a hook run left rather than re-deriving it from `upsert_session`'s arguments.
-    #[cfg(any(test, feature = "test-util"))]
+    /// One session's `(host_id slug, project, cwd)` — T25.0's Check reads the row a hook run
+    /// left rather than re-deriving it from `upsert_session`'s arguments, and the live Graph
+    /// calls feed (T329.34) names a session by its host when no agent row exists.
     pub fn session_row(&self, id: &str) -> Result<Option<SessionRow>> {
         let mut conn = self.lock()?;
         sessions::table

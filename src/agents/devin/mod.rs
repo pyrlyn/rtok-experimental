@@ -167,10 +167,7 @@ pub fn mcp_path(cfg: &Config) -> PathBuf {
 const PLUGIN_HOOK_TIMEOUT_S: u64 = 5;
 
 fn command(bin: &str, event: &str) -> String {
-    if cfg!(windows) || bin != "rtok" {
-        return format!("{bin} hook {event} --host devin");
-    }
-    plugin_command(event)
+    super::claude::command_for("devin", bin, event)
 }
 
 /// The POSIX resolver the plugin's `hooks.json` carries on every OS (the file is one
@@ -182,11 +179,7 @@ fn plugin_command(event: &str) -> String {
 /// The POSIX resolver's `exec rtok hook <event> --host devin;` marker, or a bare
 /// `<rtok-bin> hook <event> --host devin` (Windows, absolute path).
 fn is_ours(cmd: &str, event: &str) -> bool {
-    let suffix = format!(" hook {event} --host devin");
-    if let Some(bin) = cmd.strip_suffix(&suffix) {
-        return super::is_rtok_bin(super::unquote_bin(bin));
-    }
-    cmd.contains(&format!("exec rtok hook {event} --host devin;"))
+    super::claude::is_ours_for("devin", cmd, event)
 }
 
 /// The plugin's `hooks.json`: top-level event names, no `"hooks"` wrapper.

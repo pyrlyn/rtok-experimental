@@ -51,12 +51,45 @@ pub struct Removed {
     pub path: String,
     pub branch: Option<String>,
     pub note: String,
+    /// Set by a dry run: what the removal would free. Absent after a real removal.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub files: Option<u64>,
+}
+
+impl Removed {
+    /// The dry-run text: the shared removal line and totals, then what happens to the branch.
+    pub fn preview_text(&self) -> String {
+        let body = crate::removal_preview::render([(
+            self.path.as_str(),
+            self.bytes.unwrap_or_default(),
+            self.files.unwrap_or_default(),
+        )]);
+        format!("{body}{}\n", self.note)
+    }
 }
 
 /// Remove the worktree at `target` (a path, else a task id) for `who`. Refuses a dirty
 /// worktree, anyone else's lock on one that is not [`super::Entry::done`], the one holding
 /// `cwd`, and an unmerged branch unless `keep_branch`.
 pub fn run(cwd: &Path, target: &str, who: &Caller, keep_branch: bool) -> Result<Removed> {
+    remove_or_preview(cwd, target, who, keep_branch, false)
+}
+
+/// [`run`] with every refusal and none of the effects: reports the size and file count the
+/// removal would free and what happens to the branch.
+pub fn preview(cwd: &Path, target: &str, who: &Caller, keep_branch: bool) -> Result<Removed> {
+    remove_or_preview(cwd, target, who, keep_branch, true)
+}
+
+fn remove_or_preview(
+    cwd: &Path,
+    target: &str,
+    who: &Caller,
+    keep_branch: bool,
+    dry_run: bool,
+) -> Result<Removed> {
     let real = |p: &Path| crate::fs::canon(p);
     let as_path = cwd.join(target);
     let named = as_path.exists();
@@ -121,7 +154,23 @@ pub fn run(cwd: &Path, target: &str, who: &Caller, keep_branch: bool) -> Result<
         }
         _ => {}
     }
-    let mut note = detach(main, record, entry.merged && !keep_branch)?;
+    let drop_branch = entry.merged && !keep_branch;
+    if dry_run {
+        let (bytes, files) = crate::removal_preview::size_of(&path);
+        let note = match (&record.branch, drop_branch) {
+            (Some(b), true) => format!("branch {b}: would be deleted (merged)"),
+            (Some(b), false) => format!("branch {b}: would be kept"),
+            (None, _) => "detached HEAD: no branch".into(),
+        };
+        return Ok(Removed {
+            path: path.display().to_string(),
+            branch: record.branch.clone(),
+            note,
+            bytes: Some(bytes),
+            files: Some(files),
+        });
+    }
+    let mut note = detach(main, record, drop_branch)?;
     if let Some(held) = held {
         note.push_str(&format!("; finished, so the lock by {held} was opened"));
     }
@@ -129,6 +178,8 @@ pub fn run(cwd: &Path, target: &str, who: &Caller, keep_branch: bool) -> Result<
         path: path.display().to_string(),
         branch: record.branch.clone(),
         note,
+        bytes: None,
+        files: None,
     })
 }
 
@@ -143,10 +194,7 @@ pub fn for_agent(
     (agent, owner_flag): (Option<&AgentDetail>, Option<String>),
     keep_branch: bool,
 ) -> Result<Removed> {
-    let owner = match (owner_flag, agent) {
-        (None, None) => None,
-        (flag, agent) => Some(claim::owner(flag, agent, store)?),
-    };
+    let owner = caller_owner(store, owner_flag, agent)?;
     let who = Caller {
         agent: agent.map(|a| a.id.as_str()),
         owner: owner.as_deref(),
@@ -156,6 +204,33 @@ pub fn for_agent(
         crate::log::stderr_ln(&format!("warning: claim not released: {e:#}"));
     }
     Ok(done)
+}
+
+fn caller_owner(
+    store: Option<&Store>,
+    owner_flag: Option<String>,
+    agent: Option<&AgentDetail>,
+) -> Result<Option<String>> {
+    match (owner_flag, agent) {
+        (None, None) => Ok(None),
+        (flag, agent) => Ok(Some(claim::owner(flag, agent, store)?)),
+    }
+}
+
+/// [`for_agent`] that only previews: the same refusals, no removal and no claim release.
+pub fn preview_for_agent(
+    store: Option<&Store>,
+    cwd: &Path,
+    target: &str,
+    (agent, owner_flag): (Option<&AgentDetail>, Option<String>),
+    keep_branch: bool,
+) -> Result<Removed> {
+    let owner = caller_owner(store, owner_flag, agent)?;
+    let who = Caller {
+        agent: agent.map(|a| a.id.as_str()),
+        owner: owner.as_deref(),
+    };
+    preview(cwd, target, &who, keep_branch)
 }
 
 /// A task id names the lock's task or the branch `<task>[-<slug>]`, case aside.

@@ -32,6 +32,7 @@ build never blocks the host.
 | `rtok memory import <file>` | import notes as JSONL, deduped by body hash |
 | `rtok otel flush\|status` | export the ledgers over OTLP/HTTP, or report the watermarks |
 | `rtok task create\|list\|show\|status\|next\|ready\|claim\|release\|dep\|priority\|sync\|init` | the project's plan in its `[tasks]` adapter; `claim` takes a ready task, `dep` records a blocker, `sync` raises the id counters and reports drift |
+| `rtok task export github\|linear [--dry-run] [--json]` | mirror the disk tasks one way into GitHub Issues or Linear; a second run with nothing changed sends no write |
 | `rtok bench` | A/B two host configurations on fixed tasks |
 
 ## The graph page
@@ -93,7 +94,8 @@ scene, or a plain list (the choice is remembered; without WebGL the page shows 2
   parts resizes them (drag, arrow keys, double-click for 50/50) and is remembered; "Hide live
   graph" hides the picture and ends the `/ws` subscription, and is remembered too. The page
   subscribes only while the live graph is shown. Below it: running calls, calls and failures, tokens sent, tokens without rtok and saved,
-  per-tool bars and backend shares, over the last 1, 5 or 15 minutes or since the page opened.
+  per-tool bars and backend shares, over the last 1, 5 or 15 minutes or since `rtok web` started: the totals are read from the store, so a page reload shows the same
+  figures (the store keeps the newest 5000 call events, so a call older than that is gone from them).
   Totals come from each frame's `summary` and the `graph` measurement rows, so a window equals
   `rtok stats` over the same calls (the per-tool bars and backend shares cover the calls a frame
   lists). The page also counts symbols asked (and how many calls crossed more than one project),
@@ -103,11 +105,14 @@ scene, or a plain list (the choice is remembered; without WebGL the page shows 2
   they list (the caller sites quoted under a changed symbol in `graph_diff` are not rows of the
   diff) and the projects with a hit, as the graph backends counted them while building the answer; latency (median
   and 95th percentile) is measured on the calls frames list, the newest 1000. "Freeze" holds the picture and counts what arrives meanwhile; "Unfreeze" catches up
-  with every call. The feed keeps the newest 200 finished calls, can be filtered by caller (the
-  session id), tool and project, shows failed calls in red and marks a call that never ended
-  after two minutes as interrupted.
+  with every call. The feed keeps the newest `live_feed_rows` (200) finished calls, can be filtered by caller (the
+  agent and host the store names for the session, such as `claude 3f9a1c2e`; an `rtok mcp` process shows
+  its host and process id, and a session the store does not know shows its id), tool and project, shows failed calls in red and marks a call that never ended
+  after two minutes as interrupted. `[plugins.graph]` `live_heat_window_s` (300), `live_max_events_per_s` (50;
+  call events a second the panel lists, the counters still count every call) and `live_feed_rows` (200)
+  are read when the live part starts.
   The "calls" card and the "saved" card each carry a sparkline of the server's 30 slots over the
-  chosen window (the last 15 minutes for "since open"), from the same buckets the totals add up,
+  chosen window (the last 15 minutes for "since start"), from the same buckets the totals add up,
   named "calls over the last 5 min" and "tokens saved over the last 5 min". When the page has a
   scope (the drilled project, else the selected one, with everything its links reach), a feed row
   for a project outside it carries an "outside scope" mark and does not light the canvas. In the

@@ -126,3 +126,45 @@ fn all_live_reaches_this_project_only_and_an_ended_agent_is_refused() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("no other live agent"));
     let _ = fs::remove_dir_all(&home);
 }
+
+/// T441.13.1: `--task` tags a message, the frame names the task, `inbox --task` reads one
+/// thread and leaves the rest unread, and a text that is not a task id is refused.
+#[test]
+fn a_task_tag_threads_messages_and_a_bad_id_is_refused() {
+    let home = tmp("task");
+    let a = hook(&home, "SessionStart", "t441-a", &home);
+    let b = hook(&home, "SessionStart", "t441-b", &home);
+
+    ok(rtok(
+        &home,
+        Some(&a),
+        &["send", &b, "--task", "a12", "about twelve"],
+        "",
+    ));
+    ok(rtok(&home, Some(&a), &["send", &b, "about nothing"], ""));
+
+    let thread = ok(rtok(&home, Some(&b), &["inbox", "--task", "A12"], ""));
+    assert!(thread.contains("\nTask: A12\n> about twelve\n"), "{thread}");
+    assert!(!thread.contains("about nothing"), "{thread}");
+
+    // Only the thread was marked read; the untagged message is still waiting.
+    let rest = ok(rtok(&home, Some(&b), &["inbox", "--unread", "--json"], ""));
+    let v: serde_json::Value = serde_json::from_str(&rest).unwrap();
+    assert_eq!(v.as_array().unwrap().len(), 1);
+    assert!(
+        v[0].get("task").is_none(),
+        "an absent task is not serialized"
+    );
+    let all = ok(rtok(&home, None, &["inbox", &b, "--json"], ""));
+    let v: serde_json::Value = serde_json::from_str(&all).unwrap();
+    assert_eq!(v[0]["task"], "A12");
+
+    let out = rtok(
+        &home,
+        Some(&a),
+        &["send", &b, "--task", "not-an-id", "x"],
+        "",
+    );
+    assert_eq!(out.status.code(), Some(1));
+    let _ = fs::remove_dir_all(&home);
+}

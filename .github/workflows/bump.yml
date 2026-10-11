@@ -46,13 +46,9 @@ jobs:
       level: ${{ inputs.level }}
       dry-run: ${{ inputs.dry-run }}
       release-untagged-head: ${{ inputs.release-untagged-head }}
-      # Every release is a dev build (Cargo `dev` profile, see [profile.dist] in
-      # Cargo.toml), published as a prerelease. This repository's decision, not pyrlyn/ci's.
-      prerelease: true
-      release-title-suffix: " (dev build)"
-      release-notes-header: |-
-        > [!WARNING]
-        > Dev build: compiled with the Cargo `dev` profile (unoptimized, with debug info) and published as a prerelease.
+      # Regular Releases only: a stable version is never published as a prerelease, and the
+      # Releases list carries no "dev build" entries (a `-` version is the only prerelease).
+      prerelease: false
       release-script: tools/release.sh
       mise-install-args: rust git-cliff
       # Reports `gate` (the protect-main required check) when dispatched.
