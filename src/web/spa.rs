@@ -126,12 +126,13 @@ impl Assets {
     }
 }
 
-/// `root/name` only when `name` stays inside `root`: plain components, no `..`, no root.
+/// Reject lexical traversal and symlinks that would expose files outside the SPA directory.
 fn safe_join(root: &Path, name: &str) -> Option<PathBuf> {
     let rel = Path::new(name);
-    rel.components()
-        .all(|c| matches!(c, Component::Normal(_)))
-        .then(|| root.join(rel))
+    if !rel.components().all(|c| matches!(c, Component::Normal(_))) {
+        return None;
+    }
+    rtok_config::root::contain(root, rel).ok()
 }
 
 /// The file name a URL path asks for: each segment percent-decoded exactly once. `None` for text
@@ -349,6 +350,33 @@ mod tests {
         assert!(safe_join(root, "../etc/passwd").is_none());
         assert!(safe_join(root, "assets/../../x").is_none());
         assert!(safe_join(root, "/etc/passwd").is_none());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn directory_assets_refuse_symlink_escapes_but_keep_internal_links() {
+        use std::os::unix::fs::symlink;
+
+        let dir = crate::testutil::tmp_dir("spa-symlink-boundary");
+        let root = dir.join("dist");
+        let outside = dir.join("private");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(root.join("app.js"), "public").unwrap();
+        std::fs::write(outside.join("secret.js"), "secret").unwrap();
+        symlink(outside.join("secret.js"), root.join("leak.js")).unwrap();
+        symlink(&outside, root.join("assets")).unwrap();
+        symlink(outside.join("secret.js"), root.join("app.js.br")).unwrap();
+        symlink(root.join("app.js"), root.join("alias.js")).unwrap();
+        let assets = Assets::Dir(root);
+
+        for name in ["leak.js", "assets/secret.js", "app.js.br"] {
+            assert!(assets.read(name).await.is_none(), "served {name}");
+        }
+        for name in ["app.js", "alias.js"] {
+            assert_eq!(assets.read(name).await.unwrap().bytes.as_ref(), b"public");
+        }
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
