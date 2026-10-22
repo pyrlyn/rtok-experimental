@@ -53,9 +53,9 @@ archive ids, which makes A11 easier to hit. To take a task, give it a T-id, a ro
 | A11 | medium | HTTP `expand` is always on and resolves any archive by an 8-char prefix | 2, 3 | planned |
 | A12 | low | WASM guests have a fuel limit but no memory limit | 1 | fixed in T962 |
 | A13 | low | Log rotation lock sits in the shared temp dir under a predictable name | 1, 2 | planned |
-| A14 | low | Existing log files and `~/.rtok` keep their old loose modes | 3 | planned |
-| A15 | low | Proxy buffers up to 256 MiB per request with no global cap when lanes are off | 1 | planned |
-| A16 | low | `[otel] content = true` by default; a generic `OTEL_EXPORTER_OTLP_ENDPOINT` ships prompts | 3 | planned |
+| A14 | low | Existing log files and `~/.rtok` keep their old loose modes | 3 | fixed in T965 |
+| A15 | low | Proxy buffers up to 256 MiB per request with no global cap when lanes are off | 1 | fixed in T965 |
+| A16 | low | `[otel] content = true` by default; a generic `OTEL_EXPORTER_OTLP_ENDPOINT` ships prompts | 3 | fixed in T965 |
 
 Tests added for A1 to A8: `walk_filter_drops_credential_files_only_when_denied`,
 `secret_names_are_recognised`, `upstream_errors_never_carry_the_query_key`,
