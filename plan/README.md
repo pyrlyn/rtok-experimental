@@ -51,7 +51,7 @@ archive ids, which makes A11 easier to hit. To take a task, give it a T-id, a ro
 | A9 | info | Web handler comments said the Origin check alone guards apply | 3 | fixed |
 | A10 | high | A checkout's `.rtok.toml` or `.env` can redirect data and keys or run a command | 2, 3 | planned |
 | A11 | medium | HTTP `expand` is always on and resolves any archive by an 8-char prefix | 2, 3 | planned |
-| A12 | low | WASM guests have a fuel limit but no memory limit | 1 | planned |
+| A12 | low | WASM guests have a fuel limit but no memory limit | 1 | fixed in T962 |
 | A13 | low | Log rotation lock sits in the shared temp dir under a predictable name | 1, 2 | planned |
 | A14 | low | Existing log files and `~/.rtok` keep their old loose modes | 3 | planned |
 | A15 | low | Proxy buffers up to 256 MiB per request with no global cap when lanes are off | 1 | planned |
