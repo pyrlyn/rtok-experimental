@@ -19,16 +19,31 @@ Lowest to highest. Later layers override earlier ones key by key.
    embedded in the binary).
 2. **User file** — `~/.rtok/config.toml` (directory overridable with `RTOK_HOME`; file
    overridable with `RTOK_CONFIG=<path>` or `--config <path>`).
-3. **Project file** — `<git root>/.rtok.toml`, if present. Same schema; typically only
-   `[plugins.read] allow_paths`, `[plugins.cmd] rules`, `[plugins.inject] modes`.
+3. **Project file** — `<git root>/.rtok.toml`, if present. Uses the config schema with
+   the trust restrictions below; for example, `[plugins.read] default_mode` and
+   `[plugins.inject] budget_tokens` remain project settings.
 4. **`.env` files** — `RTOK_*` lines (same names as the environment layer) from the nearest
-   `.env` at or above the working directory, then `~/.rtok/.env`; the project file wins.
+   `.env` at or above the working directory, then `~/.rtok/.env`; allowed project keys win.
+   The project file has the same trust restrictions as project TOML. The home file is trusted;
+   a rejected project key does not hide a value in the home file.
    Parsed only, never exported: commands run through `rtok run` do not inherit them, and other
    keys in a project's `.env` are ignored. A malformed file is reported on stderr and skipped.
 5. **Environment** — `RTOK_<SECTION>_<KEY>` in upper snake case, e.g. `RTOK_PROXY_PORT=8791`,
    `RTOK_PLUGINS_CMD_REWRITE=false`, `RTOK_STATS_SINCE=7d`. Lists are comma-separated.
    Existing short names stay as aliases: `RTOK_UPSTREAM`, `RTOK_OPENAI_UPSTREAM`.
 6. **Command-line flags** — `rtok proxy --port 8791`.
+
+Project files cannot configure `core`, `otel`, `proxy`, `mcp`, `web` (or legacy `dashboard`),
+`log`, `demon`, `agents`, `setup`, `doctor`, `stats`, `report`, `bench`, `filter`,
+`worktree`, or the `memory`, `compress`, `graph`, `docs`, `guard` and `wasm` plugin sections.
+They also cannot set `plugins.cmd.shell`, `plugins.cmd.rules`, `plugins.cmd.rules_dir`,
+`plugins.read.allow_paths`, `plugins.inject.modes_dir` or `tasks.gitlab.url`.
+These settings control network destinations, credentials, execution or host filesystem
+access. Legacy aliases receive the same restrictions. Each rejected setting produces a
+warning naming its file and key, without its value; `config show --sources` marks the retained
+safe value as `ignored (project)` when no higher layer overrides it. Set these options in
+the user config, `~/.rtok/.env`, process environment or an explicitly chosen `--config` file.
+Selecting `--config` is an explicit trust decision, including when its file is in a checkout.
 
 Rules:
 

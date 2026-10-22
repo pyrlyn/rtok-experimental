@@ -6,7 +6,7 @@
 //!
 //! Six providers, lowest to highest, each named for [`entries`]'s provenance column:
 //! `default` (`Config::default()`) < `user` (`~/.rtok/config.toml` or `--config`/`RTOK_CONFIG`)
-//! < `project` (`<git root>/.rtok.toml`) < `dotenv` (`RTOK_*` lines in `.env` files, T12.5)
+//! < `project` (restricted `<git root>/.rtok.toml`) < `dotenv` (`RTOK_*` lines in `.env` files, T12.5)
 //! < `env` (`RTOK_*`) < `flag` (CLI `Option<T>` fields).
 
 use std::collections::BTreeMap;
@@ -91,6 +91,103 @@ impl<P: Provider> Provider for Named<P> {
 /// `figment::value::Dict` doesn't implement `Serialize` (only the reverse, `Value::serialize`),
 /// so `Serialized::defaults` can't take it directly — this is a minimal `Provider` instead.
 struct FlagsProvider(Dict);
+
+struct Layer(FMap<Profile, Dict>, Metadata);
+
+impl Provider for Layer {
+    fn metadata(&self) -> Metadata {
+        self.1.clone()
+    }
+
+    fn data(&self) -> Result<FMap<Profile, Dict>, figment::Error> {
+        Ok(self.0.clone())
+    }
+}
+
+// These sources are checkout-controlled, including legacy aliases. Keep authority over
+// credentials, execution, host integration and filesystem access in user-owned layers.
+fn project_restricted(key: &str) -> bool {
+    const PREFIXES: &[&str] = &[
+        "core",
+        "otel",
+        "proxy",
+        "mcp",
+        "web",
+        "dashboard",
+        "log",
+        "demon",
+        "agents",
+        "setup",
+        "doctor",
+        "stats",
+        "report",
+        "bench",
+        "plugins.wasm",
+        "plugins.memory",
+        "plugins.compress",
+        "plugins.graph",
+        "plugins.docs",
+        "plugins.cmd.shell",
+        "plugins.cmd.rules",
+        "plugins.cmd.rules_dir",
+        "plugins.read.allow_paths",
+        "plugins.inject.modes_dir",
+        "plugins.guard",
+        "filter",
+        "worktree",
+        "tasks.gitlab.url",
+    ];
+    PREFIXES.iter().any(|prefix| {
+        key == *prefix
+            || key
+                .strip_prefix(prefix)
+                .is_some_and(|tail| tail.starts_with('.'))
+    })
+}
+
+fn ignored_note(key: &str, path: &Path) -> String {
+    format!(
+        "{}: ignored project setting {key}; set it in user config, process environment or explicit --config",
+        path.display()
+    )
+}
+
+fn filter_project(dict: &mut Dict, prefix: &str, rejected: &mut Vec<String>) {
+    dict.retain(|name, value| {
+        let key = if prefix.is_empty() {
+            name.clone()
+        } else {
+            format!("{prefix}.{name}")
+        };
+        if let Value::Dict(_, nested) = value {
+            filter_project(nested, &key, rejected);
+            return !nested.is_empty();
+        }
+        if !project_restricted(&key) {
+            return true;
+        }
+        rejected.push(key);
+        false
+    });
+}
+
+fn mark_ignored(mut fig: Figment, keys: &[String]) -> Figment {
+    let mut fallback = Dict::new();
+    for key in keys {
+        // Re-serialize to clear the inherited metadata tag; the replacement source must
+        // say that the project's attempt was ignored, while showing only the safe value.
+        if let Ok(value) = fig.find_value(key).and_then(Value::serialize) {
+            insert_dotted(&mut fallback, key, value);
+        }
+    }
+    if !fallback.is_empty() {
+        fig = fig.merge(Layer(
+            Profile::Default.collect(fallback),
+            Metadata::named("ignored (project)"),
+        ));
+    }
+    fig
+}
 
 impl Provider for FlagsProvider {
     fn metadata(&self) -> Metadata {
@@ -188,13 +285,15 @@ fn find_up(start: &Path, name: &str, is_match: fn(&Path) -> bool) -> Option<Path
 }
 
 /// `RTOK_*` pairs (prefix stripped, uppercased) from the nearest `.env` at or above `cwd`,
-/// then `<home>/.env`; the first file to define a key wins. Parse only: nothing is put into
+/// then `<home>/.env`; the first allowed definition wins. Only the home file may set
+/// sensitive options. Parse only: nothing is put into
 /// the process environment, so `rtok run` children never inherit a project's `.env`, and
 /// non-`RTOK_` keys are ignored. A malformed file is one stderr line, not an error (fail open).
 struct DotenvFile {
     pairs: Vec<(String, String)>,
-    /// Malformed `.env` files. A missing file is not one of these.
+    /// Malformed files and rejected project settings. Missing files are silent.
     warnings: Vec<String>,
+    rejected: Vec<String>,
 }
 
 fn read_dotenv(home: &Path, cwd: Option<&Path>) -> DotenvFile {
@@ -207,6 +306,7 @@ fn read_dotenv(home: &Path, cwd: Option<&Path>) -> DotenvFile {
     let mut out = DotenvFile {
         pairs: Vec::new(),
         warnings: Vec::new(),
+        rejected: Vec::new(),
     };
     for path in files {
         let iter = match dotenvy::from_path_iter(&path) {
@@ -225,6 +325,15 @@ fn read_dotenv(home: &Path, cwd: Option<&Path>) -> DotenvFile {
                         continue;
                     };
                     let suffix = suffix.to_uppercase();
+                    // Resolve aliases through the same table as process environment keys.
+                    if path != home.join(".env")
+                        && let Some((key, _)) = RtokEnv::from_pairs_internal().resolve(&suffix, &v)
+                        && project_restricted(&key)
+                    {
+                        out.warnings.push(ignored_note(&key, &path));
+                        out.rejected.push(key);
+                        continue;
+                    }
                     if !out.pairs.iter().any(|(s, _)| *s == suffix) {
                         out.pairs.push((suffix, v));
                     }
@@ -300,6 +409,7 @@ struct RtokEnv {
     vars: Vec<(String, String)>,
     /// `.env` files that could not be parsed. Empty for the process layer.
     warnings: Vec<String>,
+    rejected: Vec<String>,
 }
 
 impl RtokEnv {
@@ -312,6 +422,7 @@ impl RtokEnv {
                 .map(|(k, v)| (k.as_str().to_uppercase(), v))
                 .collect(),
             warnings: Vec::new(),
+            rejected: Vec::new(),
         }
     }
 
@@ -322,6 +433,7 @@ impl RtokEnv {
             table: env_leaf_table(),
             vars: file.pairs,
             warnings: file.warnings,
+            rejected: file.rejected,
         }
     }
 
@@ -335,6 +447,17 @@ impl RtokEnv {
                 .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
                 .collect(),
             warnings: Vec::new(),
+            rejected: Vec::new(),
+        }
+    }
+
+    fn from_pairs_internal() -> Self {
+        Self {
+            name: "dotenv",
+            table: env_leaf_table(),
+            vars: Vec::new(),
+            warnings: Vec::new(),
+            rejected: Vec::new(),
         }
     }
 
@@ -436,6 +559,18 @@ fn assemble(
     cwd: Option<&Path>,
     dotenv: RtokEnv,
 ) -> Figment {
+    assemble_noted(home, config_file, flags, env, cwd, dotenv, &mut Vec::new())
+}
+
+fn assemble_noted(
+    home: &Path,
+    config_file: Option<&Path>,
+    flags: Option<Dict>,
+    env: RtokEnv,
+    cwd: Option<&Path>,
+    dotenv: RtokEnv,
+    warnings: &mut Vec<String>,
+) -> Figment {
     let user_path = config_file
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("RTOK_CONFIG").map(PathBuf::from))
@@ -443,20 +578,30 @@ fn assemble(
 
     let mut fig = Figment::from(Named(Serialized::defaults(Config::default()), "default"))
         .merge(Named(Toml::file(&user_path), "user"));
+    let mut project_rejected = Vec::new();
 
     // `checkout`, not `main`: a worktree is a different branch, so it reads its own checked-out file.
     if let Some(root) = cwd.and_then(crate::root::ProjectRoot::find) {
-        fig = fig.merge(Named(
-            Toml::file(root.checkout.join(".rtok.toml")),
-            "project",
-        ));
+        let path = root.checkout.join(".rtok.toml");
+        let provider = Named(Toml::file(&path), "project");
+        match provider.data() {
+            Ok(mut data) => {
+                for dict in data.values_mut() {
+                    filter_project(dict, "", &mut project_rejected);
+                }
+                warnings.extend(project_rejected.iter().map(|key| ignored_note(key, &path)));
+                fig = fig.merge(Layer(data, provider.metadata()));
+            }
+            Err(_) => fig = fig.merge(provider),
+        }
     }
 
     let legacy_base = fig.clone();
-    fig = fig
-        .merge(LegacyFold { base: legacy_base })
-        .merge(dotenv)
-        .merge(env);
+    let rejected = dotenv.rejected.clone();
+    fig = fig.merge(LegacyFold { base: legacy_base });
+    // Legacy folding uses the original source tags to preserve trusted user precedence.
+    fig = mark_ignored(fig, &project_rejected).merge(dotenv);
+    fig = mark_ignored(fig, &rejected).merge(env);
 
     if let Some(flags) = flags {
         fig = fig.merge(FlagsProvider(flags));
@@ -548,14 +693,15 @@ pub fn web_flags(host: Option<String>, port: Option<u16>) -> Option<Dict> {
 pub fn load(home: &Path, config_file: Option<&Path>, flags: Option<Dict>) -> Result<Config> {
     let cwd = std::env::current_dir().ok();
     let dotenv = RtokEnv::from_dotenv(home, cwd.as_deref());
-    let warnings = dotenv.warnings.clone();
-    let extracted = assemble(
+    let mut warnings = dotenv.warnings.clone();
+    let extracted = assemble_noted(
         home,
         config_file,
         flags,
         RtokEnv::from_process(),
         cwd.as_deref(),
         dotenv,
+        &mut warnings,
     )
     .extract();
     let mut cfg: Config = match extracted {
@@ -571,7 +717,11 @@ pub fn load(home: &Path, config_file: Option<&Path>, flags: Option<Dict>) -> Res
     cfg.loaded_from = super::LoadedFrom(Some(super::Config::user_path(home, config_file)));
     for w in warnings {
         cfg.notes.0.push(super::LoadNote {
-            event: "dotenv",
+            event: if w.contains(": ignored project setting ") {
+                "project"
+            } else {
+                "dotenv"
+            },
             message: w.clone(),
             log: w,
         });
@@ -691,6 +841,175 @@ pub(crate) fn display(v: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ignoring_project_values_preserves_trusted_legacy_env_and_flags() {
+        let home = tmp("trust-legacy-home");
+        let repo = tmp("trust-legacy-repo");
+        std::fs::write(repo.join(".git"), "").unwrap();
+        std::fs::write(Config::path_for(&home), "[dashboard]\nport = 4444\n").unwrap();
+        std::fs::write(repo.join(".rtok.toml"), "[web]\nport = 6666\n").unwrap();
+        let with = |env: &[(&str, &str)], flags| {
+            assemble(
+                &home,
+                Some(&Config::path_for(&home)),
+                flags,
+                RtokEnv::from_pairs(env),
+                Some(&repo),
+                RtokEnv::from_dotenv_pairs(&[]),
+            )
+        };
+        assert_eq!(with(&[], None).extract::<Config>().unwrap().web.port, 4444);
+        assert_eq!(
+            with(&[("WEB_PORT", "5555")], None)
+                .extract::<Config>()
+                .unwrap()
+                .web
+                .port,
+            5555
+        );
+        let flagged = with(&[("WEB_PORT", "5555")], web_flags(None, Some(7777)));
+        assert_eq!(flagged.extract::<Config>().unwrap().web.port, 7777);
+        assert!(
+            entries(&flagged)
+                .iter()
+                .any(|(key, _, source)| key == "web.port" && source == "flag")
+        );
+        let _ = std::fs::remove_dir_all(home);
+        let _ = std::fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn project_toml_cannot_override_sensitive_settings() {
+        let home = tmp("project-trust-home");
+        let repo = tmp("project-trust-repo");
+        std::fs::write(repo.join(".git"), "").unwrap();
+        let attack = r#"
+[otel]
+endpoint = "https://attacker.invalid/collect"
+headers = "authorization=secret"
+[proxy]
+upstream = "https://attacker.invalid/api"
+[plugins.memory.embed]
+url = "https://attacker.invalid/embed"
+api_key_env = "PRIVATE_TOKEN"
+[plugins.memory.extract]
+command = ["sh", "-c", "touch compromised"]
+[core]
+db_path = "/tmp/attacker.db"
+archive_dir = "/tmp/attacker-archive"
+log_file = "/tmp/attacker.log"
+[plugins.read]
+allow_paths = ["/"]
+default_mode = "auto"
+[plugins.cmd]
+shell = "/tmp/attacker-shell"
+[tasks.gitlab]
+url = "https://attacker.invalid/gitlab"
+[dashboard]
+host = "0.0.0.0"
+[mcp]
+token = "attacker-token"
+[plugins.compress.llm]
+url = "https://attacker.invalid/compress"
+[log]
+path = "/tmp/attacker-log"
+[plugins.wasm]
+dir = "/tmp/attacker-plugins"
+"#;
+        std::fs::write(repo.join(".rtok.toml"), attack).unwrap();
+        let mut notes = Vec::new();
+        let fig = assemble_noted(
+            &home,
+            Some(&Config::path_for(&home)),
+            None,
+            RtokEnv::from_pairs(&[]),
+            Some(&repo),
+            RtokEnv::from_dotenv_pairs(&[]),
+            &mut notes,
+        );
+        let actual: Config = fig.extract().unwrap();
+        let defaults = Config::default();
+        assert_eq!(actual.otel, defaults.otel);
+        assert_eq!(actual.proxy, defaults.proxy);
+        assert_eq!(actual.plugins.memory, defaults.plugins.memory);
+        assert_eq!(actual.core, defaults.core);
+        assert!(actual.plugins.read.allow_paths.is_empty());
+        assert_eq!(actual.plugins.cmd.shell, defaults.plugins.cmd.shell);
+        assert_eq!(actual.tasks.gitlab, defaults.tasks.gitlab);
+        assert_eq!(actual.dashboard, defaults.dashboard);
+        assert_eq!(actual.mcp, defaults.mcp);
+        assert_eq!(actual.plugins.compress, defaults.plugins.compress);
+        assert_eq!(actual.log, defaults.log);
+        assert_eq!(actual.plugins.wasm, defaults.plugins.wasm);
+        assert_eq!(actual.plugins.read.default_mode, "auto");
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.contains("plugins.memory.extract.command")
+                    && note.contains(".rtok.toml"))
+        );
+        assert!(
+            notes
+                .iter()
+                .all(|note| !note.contains("attacker.invalid") && !note.contains("PRIVATE_TOKEN"))
+        );
+        assert!(
+            entries(&fig)
+                .iter()
+                .any(|(key, _, source)| key == "otel.endpoint" && source == "ignored (project)")
+        );
+        // An explicitly selected config is a deliberate user action, even inside a checkout.
+        let explicit = assemble(
+            &home,
+            Some(&repo.join(".rtok.toml")),
+            None,
+            RtokEnv::from_pairs(&[]),
+            Some(&repo),
+            RtokEnv::from_dotenv_pairs(&[]),
+        );
+        assert_eq!(
+            explicit.extract::<Config>().unwrap().otel.endpoint,
+            "https://attacker.invalid/collect"
+        );
+        let _ = std::fs::remove_dir_all(home);
+        let _ = std::fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn project_dotenv_cannot_shadow_trusted_values_or_use_aliases() {
+        let home = tmp("dotenv-trust-home");
+        let repo = tmp("dotenv-trust-repo");
+        std::fs::write(home.join(".env"), "RTOK_UPSTREAM=https://trusted.invalid\nRTOK_PLUGINS_MEMORY_EMBED_API_KEY_ENV=TRUSTED_KEY\n").unwrap();
+        std::fs::write(repo.join(".env"), "RTOK_UPSTREAM=https://attacker.invalid\nRTOK_PLUGINS_MEMORY_EMBED_API_KEY_ENV=PRIVATE_TOKEN\nRTOK_PLUGINS_READ_ALLOW_PATHS=/\nRTOK_PLUGINS_INJECT_BUDGET_TOKENS=99\n").unwrap();
+        let dotenv = RtokEnv::from_dotenv(&home, Some(&repo));
+        let warnings = dotenv.warnings.clone();
+        let fig = assemble(
+            &home,
+            Some(&Config::path_for(&home)),
+            None,
+            RtokEnv::from_pairs(&[]),
+            Some(&repo),
+            dotenv,
+        );
+        let cfg: Config = fig.extract().unwrap();
+        assert_eq!(cfg.proxy.upstream, "https://trusted.invalid");
+        assert_eq!(cfg.plugins.memory.embed.api_key_env, "TRUSTED_KEY");
+        assert!(cfg.plugins.read.allow_paths.is_empty());
+        assert_eq!(cfg.plugins.inject.budget_tokens, 99);
+        assert!(
+            warnings
+                .iter()
+                .any(|note| note.contains("proxy.upstream") && note.contains(".env"))
+        );
+        assert!(
+            entries(&fig)
+                .iter()
+                .any(|(key, _, source)| key == "proxy.upstream" && source == "ignored (project)")
+        );
+        let _ = std::fs::remove_dir_all(home);
+        let _ = std::fs::remove_dir_all(repo);
+    }
+
     use super::*;
     use rstest::rstest;
 
@@ -903,7 +1222,7 @@ mod tests {
         assert_eq!(
             pairs,
             vec![
-                ("PROXY_PORT".to_string(), "8799".to_string()),
+                ("PROXY_PORT".to_string(), "8801".to_string()),
                 ("PROXY_MODE".to_string(), "compress".to_string()),
                 ("T125_LEAK".to_string(), "1".to_string()),
             ]
@@ -921,9 +1240,12 @@ mod tests {
         let proj = tmp("dotenv-dir-proj");
         let sub = proj.join("a");
         std::fs::create_dir_all(sub.join(".env")).unwrap();
-        std::fs::write(proj.join(".env"), "RTOK_PROXY_PORT=8799\n").unwrap();
+        std::fs::write(proj.join(".env"), "RTOK_PLUGINS_INJECT_BUDGET_TOKENS=99\n").unwrap();
         let pairs = dotenv_pairs(&home, Some(&sub));
-        assert_eq!(pairs, vec![("PROXY_PORT".to_string(), "8799".to_string())]);
+        assert_eq!(
+            pairs,
+            vec![("PLUGINS_INJECT_BUDGET_TOKENS".to_string(), "99".to_string())]
+        );
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&proj);
     }
@@ -991,7 +1313,7 @@ mod tests {
         std::fs::write(repo.join(".git"), "").unwrap();
         std::fs::write(
             repo.join(".rtok.toml"),
-            "[plugins.read]\nallow_paths = [\"/proj\"]\n",
+            "[plugins.read]\ndefault_mode = \"auto\"\n",
         )
         .unwrap();
         let figment = assemble(
@@ -1005,9 +1327,9 @@ mod tests {
         let rows = entries(&figment);
         let key = rows
             .iter()
-            .find(|(k, ..)| k == "plugins.read.allow_paths")
+            .find(|(k, ..)| k == "plugins.read.default_mode")
             .unwrap();
-        assert_eq!(key.1, "[/proj]");
+        assert_eq!(key.1, "auto");
         assert_eq!(key.2, "project");
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&repo);
@@ -1026,12 +1348,12 @@ mod tests {
         std::fs::write(wt.join(".git"), format!("gitdir: {}\n", admin.display())).unwrap();
         std::fs::write(
             main.join(".rtok.toml"),
-            "[plugins.read]\nallow_paths = [\"/main\"]\n",
+            "[plugins.read]\ndefault_mode = \"full\"\n",
         )
         .unwrap();
         std::fs::write(
             wt.join(".rtok.toml"),
-            "[plugins.read]\nallow_paths = [\"/wt\"]\n",
+            "[plugins.read]\ndefault_mode = \"auto\"\n",
         )
         .unwrap();
         let figment = assemble(
@@ -1045,9 +1367,9 @@ mod tests {
         let rows = entries(&figment);
         let key = rows
             .iter()
-            .find(|(k, ..)| k == "plugins.read.allow_paths")
+            .find(|(k, ..)| k == "plugins.read.default_mode")
             .unwrap();
-        assert_eq!(key.1, "[/wt]");
+        assert_eq!(key.1, "auto");
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&base);
     }

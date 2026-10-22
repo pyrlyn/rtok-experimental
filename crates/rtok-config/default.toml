@@ -1,5 +1,7 @@
 # rtok configuration. Every CLI flag has a key here; flags and RTOK_* env vars override.
 # Precedence: defaults < this file < <git root>/.rtok.toml < env < flags.
+# Project TOML and project .env cannot set sensitive destinations, commands or paths;
+# see docs/config.md for restrictions. Use this user file or explicit --config for those.
 # Docs: docs/config.md. Check: `rtok config validate`. Where a value came from: `rtok config show --sources`.
 # Assignments are commented out so a key left untouched follows the current default,
 # not the default from the day this file was written. Uncomment a line to pin it.

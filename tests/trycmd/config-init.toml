@@ -4,9 +4,11 @@ stdout = """
 target/tmp/t60-2-config-init.toml
 --- a/target/tmp/t60-2-config-init.toml
 +++ b/target/tmp/t60-2-config-init.toml
-@@ -0,0 +1,606 @@
+@@ -0,0 +1,608 @@
 +# rtok configuration. Every CLI flag has a key here; flags and RTOK_* env vars override.
 +# Precedence: defaults < this file < <git root>/.rtok.toml < env < flags.
++# Project TOML and project .env cannot set sensitive destinations, commands or paths;
++# see docs/config.md for restrictions. Use this user file or explicit --config for those.
 +# Docs: docs/config.md. Check: `rtok config validate`. Where a value came from: `rtok config show --sources`.
 +# Assignments are commented out so a key left untouched follows the current default,
 +# not the default from the day this file was written. Uncomment a line to pin it.
@@ -611,7 +613,7 @@ target/tmp/t60-2-config-init.toml
 +[plugins.wasm]
 +# enabled = false
 +# dir = "~/.rtok/plugins"
-1 file changed, 606 insertions(+)
+1 file changed, 608 insertions(+)
 """
 
 # Hermetic by construction: isolated HOME/RTOK_HOME, inherit = false.
