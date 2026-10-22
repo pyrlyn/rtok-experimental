@@ -1363,6 +1363,10 @@ export interface Report {
    */
   overlaps?: string[];
   /**
+   * Old or unsafe Unix data permissions; repair is explicit through doctor --fix.
+   */
+  permissions?: Finding[];
+  /**
    * Hooks that lead nowhere or cannot be checked (T331.1); the list later detectors extend.
    */
   problems?: Problem[];
@@ -1486,6 +1490,17 @@ export interface ServerInfo {
 export interface ToolSearch {
   source?: string | null;
   state: ToolSearchState;
+}
+/**
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "Finding".
+ */
+export interface Finding {
+  before: number | null;
+  error: string | null;
+  path: string;
+  repaired: boolean;
+  target: number | null;
 }
 /**
  * One finding of a doctor config check. The list is shared by every T331 detector.

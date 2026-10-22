@@ -420,6 +420,8 @@ async fn health_stays_fast_while_a_large_request_is_recorded() {
     let (addr, _state, task) = proxy_server("t205-health", |cfg| {
         cfg.proxy.upstream = server.base_url();
         cfg.proxy.mode = "compress".to_string();
+        // This latency fixture deliberately exceeds the normal 8 MiB request limit.
+        cfg.proxy.max_body_bytes = (64 * 1024 * 1024).try_into().unwrap();
         cfg.plugins.compress.enabled = true;
     })
     .await;

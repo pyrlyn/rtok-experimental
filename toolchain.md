@@ -129,7 +129,7 @@ Project programs and direct packages from the manifests.
 | owo-colors | local | https://crates.io/crates/owo-colors | Rust dependency |
 | pathdiff | local | https://crates.io/crates/pathdiff | Relative path between two paths |
 | percent-encoding | local | https://crates.io/crates/percent-encoding | T574: decode percent-escaped SPA asset URL paths |
-| printpdf | local | https://crates.io/crates/printpdf | Rust dependency |
+| printpdf | local | https://crates.io/crates/printpdf | Native PDF only; default HTML/azul features disabled to drop unused bincode chain; version unchanged |
 | proptest | local | https://crates.io/crates/proptest | T331.5: property test that `doctor --fix` leaves every byte outside the removed hook unchanged |
 | portable-pty | local | https://crates.io/crates/portable-pty | T331.7: pseudo-terminal for the `doctor --fix` checklist test (dev-dependency) |
 | ratatui | local | https://crates.io/crates/ratatui | TUI |

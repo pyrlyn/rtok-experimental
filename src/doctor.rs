@@ -30,6 +30,7 @@ pub mod fix;
 pub mod hooks;
 mod mcp_dupes;
 mod mcp_fix;
+pub mod permissions;
 pub mod probe;
 pub mod web;
 
@@ -85,6 +86,9 @@ pub struct Report {
     /// Hooks that lead nowhere or cannot be checked (T331.1); the list later detectors extend.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub problems: Vec<hooks::Problem>,
+    /// Old or unsafe Unix data permissions; repair is explicit through doctor --fix.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permissions: Vec<permissions::Finding>,
     /// What the graph health check raised for linked projects: missing, unreachable, backend
     /// down, link broken (T329.17). Read from the store the checking processes write.
     #[cfg(feature = "graph")]
@@ -237,6 +241,7 @@ impl Report {
         }
         out.push_str(&hooks::render(&self.problems));
         out.push_str(&dupes::render_mcp(&self.problems));
+        out.push_str(&permissions::render(&self.permissions));
         out.push_str("mcp\n");
         for s in &self.mcp {
             out.push_str(&format!(
@@ -654,6 +659,7 @@ pub fn page(cfg: &Config) -> Result<Report> {
             })
             .collect(),
         problems: checks(cfg),
+        permissions: permissions::check(cfg, false),
         #[cfg(feature = "graph")]
         graph_alerts: graph_alerts(cfg),
         #[cfg(feature = "graph")]
@@ -1689,6 +1695,7 @@ pub(crate) fn report_fixture() -> Report {
         tools_rewrite_advice: None,
         agents: Vec::new(),
         problems: Vec::new(),
+        permissions: Vec::new(),
         config_notes: Vec::new(),
         #[cfg(feature = "graph")]
         graph_alerts: Vec::new(),

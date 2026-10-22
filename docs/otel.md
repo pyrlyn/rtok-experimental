@@ -16,7 +16,7 @@ Off until an endpoint resolves.
 endpoint      = "http://localhost:4318"   # OTLP/HTTP base URL; "" = $OTEL_EXPORTER_OTLP_ENDPOINT
 headers       = ""                        # "k=v,k2=v2"; "" = $OTEL_EXPORTER_OTLP_HEADERS
 service_name  = "rtok"
-content       = true                      # message bodies, tool arguments and results on spans
+content       = false                     # set true only if you want message bodies, tool arguments and results on spans
 content_bytes = 65536                     # per attribute; past it, `rtok.archive.id` → `rtok expand <id>`
 flush_secs    = 5                         # proxy / mcp flush interval, and the POST timeout
 ```
@@ -79,9 +79,10 @@ records on the same trace. Three cumulative sums go to `/v1/metrics`: `rtok.toke
 (by `gen_ai.token.type` and model; provider-billed only, so a response the semantic cache
 served is left out), `rtok.tokens.saved` (by plugin) and `rtok.calls`.
 
-Set `content = false` to keep the shape and the counts but send no prompts, arguments or
-results. With `content = true`, anything longer than `content_bytes` is cut and the span names
-the archive id, so the full bytes stay retrievable with `rtok expand <id>`.
+Message content, tool arguments and results are omitted by default, even when an endpoint is
+configured. Set `content = true` only if you want those values exported. With content enabled,
+anything longer than `content_bytes` is cut and the span names the archive id, so the full bytes
+stay retrievable with `rtok expand <id>`.
 
 ## Backends
 

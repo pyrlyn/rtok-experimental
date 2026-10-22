@@ -89,6 +89,8 @@
 # openai_upstream = "https://api.openai.com"         # RTOK_OPENAI_UPSTREAM
 # gemini_upstream = "https://generativelanguage.googleapis.com"  # RTOK_GEMINI_UPSTREAM
 # timeout_s       = 600                 # upstream request timeout
+# max_body_bytes  = 8388608             # request limit and retained response prefix (8 MiB); larger responses still stream
+# max_in_flight   = 8                    # global requests including lanes-off/plain mode; excess gets 429
 # include_usage   = true                # OpenAI streaming: add stream_options.include_usage when missing
 # context_management = false            # Anthropic /v1/messages only: add clear_tool_uses edit + beta header (opt-in)
 # dry_run         = false               # --dry-run: print effective [proxy] settings and exit, don't serve
@@ -112,7 +114,7 @@
 # flex                = false           # OpenAI service_tier = "flex" on this lane; see [proxy.flex]
 # timeout_s           = 0               # read timeout for this lane; 0 = proxy.timeout_s, but 900 or more with flex = true (OpenAI's Flex guide uses 15 min)
 # upstream            = ""              # base URL for every request on this lane, any wire; "" = proxy.upstream / openai_upstream / gemini_upstream
-# max_in_flight       = 0               # requests upstream at once; 0 = no cap (the agent lane is never capped)
+# max_in_flight       = 0               # requests upstream at once; 0 = no per-lane cap (global cap still applies)
 # max_queued          = 8               # with max_in_flight: requests that wait for a slot; one more gets 429 + Retry-After
 
 [proxy.lanes.embeddings]              # same keys as bulk
@@ -124,7 +126,7 @@
 # flex                = false
 # timeout_s           = 0
 # upstream            = ""
-# max_in_flight       = 0
+# max_in_flight       = 0               # no per-lane cap; the global cap still applies
 # max_queued          = 8
 
 [proxy.lanes.meta]                    # same keys as bulk (models, token counting)
@@ -136,7 +138,7 @@
 # flex                = false
 # timeout_s           = 0
 # upstream            = ""
-# max_in_flight       = 0
+# max_in_flight       = 0               # no per-lane cap; the global cap still applies
 # max_queued          = 8
 
 [proxy.lanes.internal]                # same keys as bulk (rtok's own model calls)
@@ -148,7 +150,7 @@
 # flex                = false
 # timeout_s           = 0
 # upstream            = ""
-# max_in_flight       = 0
+# max_in_flight       = 0               # no per-lane cap; the global cap still applies
 # max_queued          = 8
 
 [proxy.batch]                         # provider Batch result files
@@ -447,7 +449,7 @@
 # endpoint      = ""                    # OTLP/HTTP base URL, e.g. "http://localhost:4318"; "" = $OTEL_EXPORTER_OTLP_ENDPOINT
 # headers       = ""                    # "k=v,k2=v2", e.g. "signoz-ingestion-key=…"; "" = $OTEL_EXPORTER_OTLP_HEADERS
 # service_name  = "rtok"                # resource service.name
-# content       = true                  # gen_ai.input/output.messages, tool arguments and results on spans
+# content       = false                 # opt in to gen_ai.input/output.messages, tool arguments and results on spans
 # content_bytes = 65536                 # per attribute; beyond it rtok.archive.id → `rtok expand <id>`
 # flush_secs    = 5                     # proxy / mcp flush interval, and the POST timeout
 

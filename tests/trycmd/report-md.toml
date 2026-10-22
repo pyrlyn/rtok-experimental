@@ -126,7 +126,7 @@ Every effective key with its origin — the `config show --sources` page.
 | mcp.public_url |  | default |
 | mcp.token |  | default |
 | mcp.tools | [] | default |
-| otel.content | true | default |
+| otel.content | false | default |
 | otel.content_bytes | 65536 | default |
 | otel.endpoint |  | default |
 | otel.flush_secs | 5 | default |
@@ -302,6 +302,8 @@ Every effective key with its origin — the `config show --sources` page.
 | proxy.lanes.meta.tools_rewrite | false | default |
 | proxy.lanes.meta.toon | false | default |
 | proxy.lanes.meta.upstream |  | default |
+| proxy.max_body_bytes | 8388608 | default |
+| proxy.max_in_flight | 8 | default |
 | proxy.mode | passthrough | default |
 | proxy.openai_upstream | https://api.openai.com | default |
 | proxy.port | 8790 | default |
@@ -471,7 +473,7 @@ Every effective key with its origin — the `config show --sources` page.
 | worktree.seed | true | default |
 | worktree.seed_dirs | [target, node_modules] | default |
 
-425 keys.
+427 keys.
 
 ## Doctor
 
@@ -482,6 +484,7 @@ hooks 0
 hooks check none found
 duplicate hooks none found
 duplicate mcp servers none found
+...
 mcp
   rtok (41 tools, ~1137 desc tokens) [CWD]/target/[..]
 proxy 

@@ -1394,6 +1394,46 @@
         "transparent"
       ]
     },
+    "Finding": {
+      "type": "object",
+      "properties": {
+        "before": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "repaired": {
+          "type": "boolean"
+        },
+        "target": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "path",
+        "before",
+        "target",
+        "repaired",
+        "error"
+      ]
+    },
     "Finished": {
       "type": "object",
       "properties": {
@@ -3043,6 +3083,13 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "permissions": {
+          "description": "Old or unsafe Unix data permissions; repair is explicit through doctor --fix.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
           }
         },
         "problems": {

@@ -158,6 +158,8 @@ upstream        = "https://api.anthropic.com"      # RTOK_UPSTREAM; ланцюж
 openai_upstream = "https://api.openai.com"         # RTOK_OPENAI_UPSTREAM (D11)
 gemini_upstream = "https://generativelanguage.googleapis.com"  # RTOK_GEMINI_UPSTREAM (T51.3)
 timeout_s       = 600                 # тайм-аут запиту до upstream
+max_body_bytes  = 8388608             # ліміт запиту й збережений префікс відповіді (8 МіБ); великі відповіді продовжують передаватися
+max_in_flight   = 8                    # загальний ліміт, включно з режимом без lanes; надлишкові запити отримують 429
 include_usage   = true                # потокова передача OpenAI: додати stream_options.include_usage, якщо його немає (T11.2)
 context_management = false            # лише Anthropic /v1/messages: додати правку clear_tool_uses + бета-заголовок (T51.2, вмикається явно)
 dry_run         = false               # --dry-run: вивести фактичні налаштування [proxy] і вийти, не обслуговуючи запити
@@ -182,7 +184,7 @@ semantic_cache      = false           # plugins.proxy.semantic_cache, читан
 flex                = false           # OpenAI service_tier = "flex" on this lane; see [proxy.flex]
 timeout_s           = 0               # таймаут читання для цієї смуги; 0 = proxy.timeout_s, але не менше 900 при flex = true (гайд OpenAI щодо Flex бере 15 хв)
 upstream            = ""              # базовий URL для кожного запиту цієї смуги, будь-який wire; "" = proxy.upstream / openai_upstream / gemini_upstream
-max_in_flight       = 0               # запитів до upstream одночасно; 0 = без ліміту (смуга agent не обмежується ніколи)
+max_in_flight       = 0               # запитів до upstream одночасно; 0 = без ліміту цієї смуги (загальний ліміт діє)
 max_queued          = 8               # з max_in_flight: скільки запитів чекають на слот; наступний отримує 429 + Retry-After
 
 [proxy.lanes.embeddings]              # ті самі ключі, що в bulk
@@ -194,7 +196,7 @@ semantic_cache      = false
 flex                = false
 timeout_s           = 0
 upstream            = ""
-max_in_flight       = 0
+max_in_flight       = 0               # без ліміту цієї смуги; загальний ліміт діє
 max_queued          = 8
 
 [proxy.lanes.meta]                    # ті самі ключі, що в bulk (models, підрахунок токенів)
@@ -206,7 +208,7 @@ semantic_cache      = false
 flex                = false
 timeout_s           = 0
 upstream            = ""
-max_in_flight       = 0
+max_in_flight       = 0               # без ліміту цієї смуги; загальний ліміт діє
 max_queued          = 8
 
 [proxy.lanes.internal]                # ті самі ключі, що в bulk (власні виклики моделі rtok)
@@ -218,7 +220,7 @@ semantic_cache      = false
 flex                = false
 timeout_s           = 0
 upstream            = ""
-max_in_flight       = 0
+max_in_flight       = 0               # без ліміту цієї смуги; загальний ліміт діє
 max_queued          = 8
 
 [proxy.batch]                         # файли результатів провайдерського Batch
@@ -506,7 +508,7 @@ team = ""                             # короткий ключ команди
 endpoint      = ""                    # базова URL-адреса OTLP/HTTP, наприклад "http://localhost:4318"; "" = $OTEL_EXPORTER_OTLP_ENDPOINT
 headers       = ""                    # "k=v,k2=v2", наприклад "signoz-ingestion-key=…"; "" = $OTEL_EXPORTER_OTLP_HEADERS
 service_name  = "rtok"                # service.name ресурсу
-content       = true                  # gen_ai.input/output.messages, аргументи й результати інструментів у спанах
+content       = false                 # явно увімкніть, щоб надсилати тіла повідомлень, аргументи й результати у спанах
 content_bytes = 65536                 # на атрибут; понад це — rtok.archive.id → `rtok expand <id>`
 flush_secs    = 5                     # інтервал скидання для proxy / mcp і тайм-аут POST
 
@@ -720,15 +722,17 @@ Gemini `:batchGenerateContent`), `files`, `embeddings` і `meta` (`/v1/models`,
 | `flex` | немає | `false` | OpenAI `service_tier = "flex"` для викликів chat і responses, див. [`[proxy.flex]`](#proxyflex) |
 | `timeout_s` | `proxy.timeout_s` | `0` | таймаут читання цієї смуги в секундах; `0` = `proxy.timeout_s`, але не менше 900 при `flex = true` (настанова OpenAI щодо Flex піднімає таймаут SDK до 15 хвилин: запити Flex частіше впираються в таймаут) |
 | `upstream` | `proxy.upstream`, `openai_upstream`, `gemini_upstream` | `""` | базовий URL для кожного запиту цієї смуги, хоч би який wire (шлюз або локальний сервер, що їх розуміє); `""` = власний upstream wire |
-| `max_in_flight` | немає | `0` | скільки запитів цієї смуги одночасно в upstream, рахуючи до кінця потоку відповіді; `0` = без ліміту |
+| `max_in_flight` | немає | `0` | скільки запитів цієї смуги одночасно в upstream, рахуючи до кінця потоку відповіді; `0` = без ліміту цієї смуги, загальний ліміт усе одно діє |
 | `max_queued` | немає | `8` | з `max_in_flight`: скільки запитів чекають на слот; наступний отримує `429` з `Retry-After: 1` і до upstream не доходить |
 
-Кожна смуга має власні слоти й власну чергу, а смуга `agent` не має ні того, ні іншого: сплеск
-bulk заповнює лише свою смугу й ніколи не затримує хід агента. Запит, якому відмовила повна
-черга, отримує `rate_limit_error` у форматі Anthropic, на який SDK провайдерів відповідають
-паузою та повтором; рядка в `calls` він не пише (до upstream він не дійшов), лише рядок `warn`
-у лог. Коли проксі вимкнено (`proxy.enabled`, `core.enabled` або `plugins.proxy.enabled`
-дорівнюють false), запити не обмежуються й не стають у чергу. `batch` і `files` не мають
+Кожна смуга має власні слоти й власну чергу; `max_in_flight = 0` вимикає лише ліміт цієї смуги.
+Загальний ліміт діє для всіх запитів, зокрема `agent`, plain mode та вимкнених смуг; слот
+утримується до завершення потоку відповіді. Запит, якому відмовив будь-який переповнений ліміт,
+отримує `rate_limit_error` у форматі Anthropic, на який SDK провайдерів відповідають паузою та
+повтором; рядка в `calls` він не пише (до upstream він не дійшов). Переповнена черга смуги також
+пише рядок `warn`; загальний ліміт не створює окремий запис для кожної відмови. Коли проксі
+вимкнено (`proxy.enabled`, `core.enabled` або `plugins.proxy.enabled` дорівнюють false), ліміти й
+черги смуг обходяться, але загальна межа ресурсів залишається. `batch` і `files` не мають
 `upstream`: створення, опитування й результати Batch-задачі завжди йдуть до провайдера, якому
 вона належить.
 

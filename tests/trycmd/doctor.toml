@@ -5,6 +5,7 @@ hooks 0
 hooks check none found
 duplicate hooks none found
 duplicate mcp servers none found
+...
 mcp
   rtok ([..] tools, ~[..] desc tokens) [..]
 proxy 
@@ -116,6 +117,7 @@ agents
 ...
 """
 
+# Permission findings vary with Unix umask; commands_e2e covers their modes and repair.
 # Hermetic by construction: isolated HOME/RTOK_HOME, inherit = false.
 [env]
 inherit = false

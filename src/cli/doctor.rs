@@ -28,11 +28,15 @@ pub(super) enum FixClass {
     BrokenHooks,
     DuplicateHooks,
     DuplicateMcp,
+    Permissions,
 }
 
 impl FixClass {
     fn kind(self) -> &'static str {
-        crate::doctor::fix::KINDS[self as usize]
+        match self {
+            Self::Permissions => "permissions",
+            _ => crate::doctor::fix::KINDS[self as usize],
+        }
     }
 }
 
@@ -65,10 +69,10 @@ pub(super) struct Args {
     /// JSON instead of the table
     #[arg(long, conflicts_with = "fix")]
     pub(super) json: bool,
-    /// Clean up broken hooks and duplicate hooks and MCP entries: a terminal gets a checklist, a pipe the diff; --yes writes without asking
+    /// Repair hooks, MCP entries and private data permissions; --yes applies, a pipe previews
     #[arg(long)]
     pub(super) fix: bool,
-    /// With --fix: write the changes (a copy goes to `.backup_configs/` first)
+    /// With --fix: apply changes (config edits are backed up; permissions change in place)
     #[arg(long, requires = "fix")]
     pub(super) yes: bool,
     /// With --fix --yes: print the diffs and write nothing
@@ -100,6 +104,14 @@ pub(super) fn run(config_file: &Option<PathBuf>, args: Args) -> Result<()> {
         } => {
             crate::stat_preview::set(stat);
             let agent = doctor_host(agent.as_deref())?;
+            anyhow::ensure!(
+                agent.is_none() || !only.contains(&FixClass::Permissions),
+                "--only permissions checks rtok data, not a host; omit --agent"
+            );
+            anyhow::ensure!(
+                cfg!(unix) || !only.contains(&FixClass::Permissions),
+                "permission-bit repair is Unix-only; Windows ACLs require manual review"
+            );
             let cfg = Config::load_with(config_file.as_deref(), doctor_flags(instructions))?;
             let kinds: Vec<&str> = if only.is_empty() {
                 crate::doctor::fix::KINDS.to_vec()
@@ -108,9 +120,20 @@ pub(super) fn run(config_file: &Option<PathBuf>, args: Args) -> Result<()> {
             };
             // A terminal and no `--yes`: the user picks what goes. Pipes and CI keep the dry run.
             let mut terminal = Terminal;
-            let ask = (!yes && io::stdin().is_terminal() && io::stdout().is_terminal())
+            let ask = (!yes && !stat && io::stdin().is_terminal() && io::stdout().is_terminal())
                 .then_some(&mut terminal as &mut dyn crate::doctor::checklist::Prompt);
-            let (text, code) = crate::doctor::fix::run(&cfg, yes && !dry_run, agent, &kinds, ask);
+            let (mut text, mut code) = if kinds.iter().any(|k| *k != "permissions") {
+                crate::doctor::fix::run(&cfg, yes && !dry_run && !stat, agent, &kinds, ask)
+            } else {
+                (String::new(), 0)
+            };
+            if agent.is_none() && (only.is_empty() || only.contains(&FixClass::Permissions)) {
+                // Permission repair is explicit; a hook checklist cannot consent to chmod.
+                let (permission_text, permission_code) =
+                    crate::doctor::permissions::run(&cfg, yes && !dry_run && !stat);
+                text.push_str(&permission_text);
+                code = code.max(permission_code);
+            }
             print!("{text}");
             if code != 0 {
                 std::process::exit(code);

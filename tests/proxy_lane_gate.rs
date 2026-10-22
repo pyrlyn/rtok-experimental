@@ -150,7 +150,7 @@ async fn agent_turn_is_not_queued_behind_a_bulk_burst() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn proxy_switched_off_caps_nothing() {
+async fn proxy_switched_off_skips_lane_caps() {
     let (bulk_up, held) = Held::start().await;
     let (addr, state, _task) = proxy_server("lane-gate-off", |cfg| {
         cfg.proxy.enabled = false;
@@ -176,4 +176,101 @@ async fn proxy_switched_off_caps_nothing() {
     for request in burst {
         assert_eq!(request.await.expect("join"), reqwest::StatusCode::OK);
     }
+}
+
+#[rstest::rstest]
+#[case(false)]
+#[case(true)]
+#[tokio::test(flavor = "multi_thread")]
+async fn global_cap_applies_without_lanes_and_in_plain_mode(#[case] plain: bool) {
+    let (upstream, held) = Held::start().await;
+    let (addr, _, _task) = proxy_server(&format!("global-gate-{plain}"), |cfg| {
+        cfg.proxy.upstream = upstream;
+        cfg.proxy.enabled = !plain;
+        cfg.proxy.lanes.enabled = false;
+        cfg.proxy.max_in_flight = 1.try_into().unwrap();
+    })
+    .await;
+    let first_addr = addr.clone();
+    let first = tokio::spawn(async move {
+        post(&first_addr, "/v1/messages", None)
+            .await
+            .bytes()
+            .await
+            .unwrap()
+    });
+    until("global slot", || held.arrived() == 1).await;
+    let refused = post(&addr, "/v1/messages", None).await;
+    assert_eq!(refused.status(), 429);
+    assert_eq!(refused.headers()["retry-after"], "1");
+    assert_eq!(held.arrived(), 1);
+    drop(refused);
+    held.release.add_permits(1);
+    assert_eq!(first.await.unwrap().as_ref(), b"{}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn request_body_limit_rejects_before_forwarding_and_response_stays_whole() {
+    let upstream = MockServer::start();
+    let mock = upstream.mock(|_, then| {
+        then.status(200).body("x".repeat(8192));
+    });
+    let (addr, _, _task) = proxy_server("body-limits", |cfg| {
+        cfg.proxy.upstream = upstream.base_url();
+        cfg.proxy.max_body_bytes = 128.try_into().unwrap();
+    })
+    .await;
+    let client = reqwest::Client::new();
+    let refused = client
+        .post(format!("http://{addr}/v1/messages"))
+        .body("x".repeat(129))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), 413);
+    assert_eq!(mock.calls(), 0);
+    let forwarded = post(&addr, "/v1/messages", None).await;
+    assert_eq!(forwarded.status(), 200);
+    assert_eq!(forwarded.bytes().await.unwrap().len(), 8192);
+    assert_eq!(mock.calls(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn global_slot_lasts_through_streaming_and_releases_on_disconnect() {
+    use futures_util::{StreamExt, stream};
+    let upstream = Router::new().fallback(|| async {
+        axum::body::Body::from_stream(
+            stream::once(async {
+                Ok::<_, std::io::Error>(axum::body::Bytes::from_static(b"first"))
+            })
+            .chain(stream::pending()),
+        )
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let upstream_task = tokio::spawn(axum::serve(listener, upstream).into_future());
+    let (addr, _, _task) = proxy_server("global-stream", |cfg| {
+        cfg.proxy.upstream = base;
+        cfg.proxy.enabled = false;
+        cfg.proxy.lanes.enabled = false;
+        cfg.proxy.max_in_flight = 1.try_into().unwrap();
+    })
+    .await;
+    let mut first = post(&addr, "/v1/messages", None).await;
+    assert_eq!(first.chunk().await.unwrap().unwrap().as_ref(), b"first");
+    assert_eq!(post(&addr, "/v1/messages", None).await.status(), 429);
+    drop(first);
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let response = post(&addr, "/v1/messages", None).await;
+            if response.status() == 200 {
+                break;
+            }
+            assert_eq!(response.status(), 429);
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("disconnect frees the slot even when upstream sends no more chunks");
+    upstream_task.abort();
 }

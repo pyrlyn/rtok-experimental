@@ -118,6 +118,14 @@ export function doctorChecks(d: Report | null, pending = false): Check[] {
       field: "proxy_openai",
     },
   ];
+  for (const finding of d.permissions ?? []) {
+    checks.push({
+      st: "warn",
+      label: "private data permissions",
+      detail: `${finding.path}: ${finding.error ?? `${finding.before?.toString(8)} → ${finding.target?.toString(8)}; preview with rtok doctor --fix --only permissions`}`,
+      field: "permissions[]",
+    });
+  }
   if (d.mcp_tool_search_disabled) {
     checks.push({
       st: "warn",

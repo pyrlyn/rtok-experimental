@@ -80,12 +80,6 @@ pub mod semantic_cache;
 pub mod tools_rewrite;
 pub mod wire;
 
-/// Request bodies are JSON and bounded by the Anthropic/OpenAI API limits; cap the
-/// in-memory read well above them. Also caps how much of a streamed response the tee
-/// task buffers for recording (see `handle`) — one constant for both, since both exist
-/// only to bound memory, not to reject legitimate traffic.
-const MAX_BODY_BYTES: usize = 256 * 1024 * 1024;
-
 /// How many rtok proxies a request has passed through (T442). A second pass must not
 /// rewrite or record the request again, and a proxy whose upstream is itself must not
 /// recurse forever, so every forwarded request carries the count.
@@ -126,6 +120,7 @@ pub struct ProxyState {
     lane_upstreams: HashMap<lane::Lane, String>,
     /// Lanes with a `max_in_flight` cap (T385.7); the rest, `agent` always, go straight on.
     gates: HashMap<lane::Lane, gate::Gate>,
+    global_gate: gate::Gate,
     upstream: String,
     /// Where the OpenAI wires go; Anthropic paths keep using `upstream` (D11).
     openai_upstream: String,
@@ -193,6 +188,8 @@ impl ProxyState {
             lane_clients,
             lane_upstreams,
             gates,
+            global_gate: gate::Gate::new(u32::from(cfg.proxy.max_in_flight.get()), 0)
+                .context("proxy.max_in_flight must be positive")?,
             upstream: cfg.proxy.upstream.trim_end_matches('/').to_string(),
             openai_upstream: cfg.proxy.openai_upstream.trim_end_matches('/').to_string(),
             gemini_upstream: cfg.proxy.gemini_upstream.trim_end_matches('/').to_string(),
@@ -315,6 +312,25 @@ async fn proxy(State(state): State<Arc<ProxyState>>, req: Request<Body>) -> Axum
 }
 
 async fn handle(state: Arc<ProxyState>, req: Request<Body>) -> AxumResponse {
+    let Some(slot) = state.global_gate.enter().await else {
+        return queue_full("proxy at global max_in_flight");
+    };
+    let slot = Arc::new(slot);
+    let response = handle_bounded(state, req, slot.clone()).await;
+    let (parts, body) = response.into_parts();
+    // Keep the slot through downstream backpressure, including cached responses.
+    let stream = body.into_data_stream().map(move |chunk| {
+        let _held = &slot;
+        chunk
+    });
+    Response::from_parts(parts, Body::from_stream(stream))
+}
+
+async fn handle_bounded(
+    state: Arc<ProxyState>,
+    req: Request<Body>,
+    global_slot: Arc<gate::Slot>,
+) -> AxumResponse {
     let start = Instant::now();
     let method = req.method().clone();
     let query = req.uri().query().map(str::to_string);
@@ -348,8 +364,8 @@ async fn handle(state: Arc<ProxyState>, req: Request<Body>) -> AxumResponse {
     }
 
     // The lane's in-flight cap (T385.7), taken before the body is read so a queued request
-    // holds no body in memory. Plain mode is rtok switched off, which never turns a request
-    // away. The slot rides with the response stream and frees when that stream ends.
+    // holds no body in memory. Plain mode skips lane policy; the global resource bound
+    // still applies. The lane slot rides with the upstream response stream.
     let slot = match state.gates.get(&req_lane) {
         Some(gate) if !state.plain() => match gate.enter().await {
             Some(slot) => Some(slot),
@@ -365,9 +381,10 @@ async fn handle(state: Arc<ProxyState>, req: Request<Body>) -> AxumResponse {
         _ => None,
     };
 
-    let request_body = match axum::body::to_bytes(body, MAX_BODY_BYTES).await {
+    let max_body_bytes = state.cfg.proxy.max_body_bytes.get() as usize;
+    let request_body = match read_body(body, max_body_bytes).await {
         Ok(b) => b,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, &e.to_string()),
+        Err((status, message)) => return error_response(status, &message),
     };
 
     let wire = wire::for_path(&path);
@@ -378,7 +395,7 @@ async fn handle(state: Arc<ProxyState>, req: Request<Body>) -> AxumResponse {
     let (request_body, recorded, context_armed, flex_retry) = if plain {
         (request_body, None, false, None)
     } else {
-        // Request bookkeeping is CPU-bound (serde parse of up to `MAX_BODY_BYTES`,
+        // Request bookkeeping is CPU-bound (serde parse of up to `max_body_bytes`,
         // tokenizer estimates, sync store writes) — run it off the tokio worker so a
         // large body never delays `/health` or other in-flight streams (T205). `Bytes`
         // clone is O(1) (a refcounted view, not a copy), so keeping `original_body`
@@ -387,7 +404,9 @@ async fn handle(state: Arc<ProxyState>, req: Request<Body>) -> AxumResponse {
         let path_bg = path.clone();
         let headers_bg = headers.clone();
         let original_body = request_body.clone();
+        let shaping_slot = global_slot.clone();
         match tokio::task::spawn_blocking(move || {
+            let _held = shaping_slot;
             shape_request(
                 &state_bg,
                 wire,
@@ -565,12 +584,16 @@ async fn handle(state: Arc<ProxyState>, req: Request<Body>) -> AxumResponse {
         // partial body is never taken for a response worth caching (T323).
         let mut complete = true;
         let mut stream = body_stream;
-        while let Some(chunk) = stream.next().await {
+        loop {
+            let chunk = tokio::select! {
+                _ = tx.closed() => { complete = false; break; }
+                chunk = stream.next() => match chunk { Some(chunk) => chunk, None => break },
+            };
             match chunk {
                 Ok(bytes) => {
-                    total_bytes += bytes.len();
-                    if buf.len() < MAX_BODY_BYTES {
-                        let room = MAX_BODY_BYTES - buf.len();
+                    total_bytes = total_bytes.saturating_add(bytes.len());
+                    if !plain && buf.len() < max_body_bytes {
+                        let room = max_body_bytes - buf.len();
                         buf.extend_from_slice(&bytes[..bytes.len().min(room)]);
                     }
                     if tx.send(Ok(bytes)).await.is_err() {
@@ -608,6 +631,8 @@ async fn handle(state: Arc<ProxyState>, req: Request<Body>) -> AxumResponse {
             // this point, so a panicked/cancelled task only drops bookkeeping, never the
             // response itself — same fail-open shape as the rest of this module.
             let _ = tokio::task::spawn_blocking(move || {
+                // Blocking work keeps its buffers even if the HTTP task is cancelled.
+                let _held = global_slot;
                 finish(
                     &recorder,
                     &recorded,
@@ -640,6 +665,23 @@ async fn handle(state: Arc<ProxyState>, req: Request<Body>) -> AxumResponse {
         Ok(r) => r,
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
+}
+
+/// Bound actual streamed bytes; malformed streams remain a 400.
+async fn read_body(body: Body, limit: usize) -> Result<Bytes, (StatusCode, String)> {
+    let mut stream = body.into_data_stream();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+        if chunk.len() > limit - bytes.len() {
+            return Err((
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "proxy.max_body_bytes exceeded".into(),
+            ));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(Bytes::from(bytes))
 }
 
 /// One non-plain request's bookkeeping: `record`, `compress` (in `compress` mode), then
@@ -1108,7 +1150,7 @@ fn record_usage(
 /// `usage` + provider `tokens` when the response carried a usage block. All best-effort.
 ///
 /// `response_total_bytes` is the true response size; `response_body` may be a shorter,
-/// capped buffer (see `handle`'s tee task and `MAX_BODY_BYTES`) — a truncated buffer means
+/// capped buffer (see `handle`'s tee task and `proxy.max_body_bytes`) — a truncated buffer means
 /// `call_io` and usage parsing only see the retained prefix, never that they panic on it.
 ///
 /// `complete` is whether the body arrived whole (T323): a cut or capped body is recorded but
@@ -1151,7 +1193,7 @@ fn finish(
     }
     if response_total_bytes > response_body.len() {
         // The true size, since call_io's recorded response_bytes reflects only what was
-        // retained under MAX_BODY_BYTES — surface the gap instead of under-reporting it.
+        // retained under proxy.max_body_bytes — surface the gap instead of under-reporting it.
         log(
             state,
             &session,
@@ -1159,7 +1201,7 @@ fn finish(
             "error",
             &format!(
                 "response body truncated for recording: {response_total_bytes} bytes \
-                 received, {} retained (MAX_BODY_BYTES); call_io and usage reflect only \
+                 received, {} retained (proxy.max_body_bytes); call_io and usage reflect only \
                  the retained bytes",
                 response_body.len()
             ),
@@ -1398,6 +1440,28 @@ fn error_response(status: StatusCode, message: &str) -> AxumResponse {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn body_bound_counts_chunks_and_preserves_stream_errors() {
+        use super::*;
+        let chunks = futures_util::stream::iter([
+            Ok::<_, io::Error>(Bytes::from_static(b"ab")),
+            Ok(Bytes::from_static(b"cd")),
+        ]);
+        assert_eq!(
+            read_body(Body::from_stream(chunks), 3).await.unwrap_err().0,
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+        let broken = futures_util::stream::iter([Err::<Bytes, _>(io::Error::other("broken body"))]);
+        assert_eq!(
+            read_body(Body::from_stream(broken), 3).await.unwrap_err().0,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            read_body(Body::from("abc"), 3).await.unwrap(),
+            Bytes::from_static(b"abc")
+        );
+    }
+
     use super::*;
     use rstest::rstest;
     use std::time::Duration;

@@ -167,13 +167,13 @@ _arguments "${_arguments_options[@]}" : /
 ;;
 (doctor)
 _arguments "${_arguments_options[@]}" : /
-'*--only=[With --fix/: limit it to these problems (repeatable; default/: all of them)]:ONLY:(broken-hooks duplicate-hooks duplicate-mcp)' /
+'*--only=[With --fix/: limit it to these problems (repeatable; default/: all of them)]:ONLY:(broken-hooks duplicate-hooks duplicate-mcp permissions)' /
 '--agent=[Check (and with --fix, repair) the hooks of one host only (an id of /`rtok agents list/`)]:HOST:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--instructions[Also run the instruction-file audit]' /
 '(--fix)--json[JSON instead of the table]' /
-'--fix[Clean up broken hooks and duplicate hooks and MCP entries/: a terminal gets a checklist, a pipe the diff; --yes writes without asking]' /
-'--yes[With --fix/: write the changes (a copy goes to /`.backup_configs//` first)]' /
+'--fix[Repair hooks, MCP entries and private data permissions; --yes applies, a pipe previews]' /
+'--yes[With --fix/: apply changes (config edits are backed up; permissions change in place)]' /
 '--dry-run[With --fix --yes/: print the diffs and write nothing]' /
 '--stat[With --fix/: stat lines and totals instead of the diffs (a dry run)]' /
 '-h[Print help]' /
