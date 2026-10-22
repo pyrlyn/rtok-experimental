@@ -73,14 +73,29 @@ pub fn fetch_range(cx: &Runtime, id: &str, lines: Option<&str>) -> Result<Option
 /// T661: a hex prefix of at least 8 chars (the trailer prints 8) names the one archive
 /// that starts with it. A full id, or a prefix with no match, passes through unchanged so
 /// the caller reports it as unknown; two matches is an error naming the ambiguity.
+/// A restricted runtime instead resolves only its own grants, including full IDs, and
+/// never reveals candidates from the global archive or falls back to a global lookup.
 pub fn resolve_id(cx: &Runtime, id: &str) -> Result<String> {
-    if id.len() >= 64 || id.len() < MIN_PREFIX || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
+    let scoped = cx.scoped_archive_ids(id);
+    let restricted = scoped.is_some();
+    if id.len() > 64 || id.len() < MIN_PREFIX || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
+        if restricted {
+            bail!(unknown_id_message(id));
+        }
         return Ok(id.to_string());
     }
-    let hits = cx.store.archive_ids_with_prefix(id, 2)?;
+    if id.len() == 64 && !restricted {
+        return Ok(id.to_string());
+    }
+    let hits = match scoped {
+        Some(ids) => ids,
+        None => cx.store.archive_ids_with_prefix(id, 2)?,
+    };
     match hits.as_slice() {
         [one] => Ok(one.clone()),
+        [] if restricted => bail!(unknown_id_message(id)),
         [] => Ok(id.to_string()),
+        _ if restricted => bail!("archive id prefix {id} is ambiguous; use a longer prefix"),
         _ => bail!("{}", ambiguous_message(id, &hits)),
     }
 }

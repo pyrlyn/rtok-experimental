@@ -145,6 +145,7 @@ tools                   = []          # [] = усі інструменти вв�
 max_description_tokens  = 60          # перевіряється тестом (T4.1)
 max_result_chars        = 20000       # понад це — head/tail + id архіву
 http                    = "127.0.0.1:8791"  # `rtok mcp --http` без адреси; тримайте на loopback
+# Через HTTP expand доступні лише дані, архівовані цим запущеним сервером; перезапуск скидає доступ.
 http_tools              = ["read", "search", "tree"]  # список дозволених для HTTP, замість `tools`; `expand` завжди лишається в переліку; інструменти, що діють від імені агента (`whoami`, `agent_send`, `worktree_add`, …), — ніколи
 token                   = ""          # bearer-токен для --http; краще RTOK_MCP_TOKEN; порожній — --http не запускається (T401)
 public_url              = ""          # URL тунелю (https://…); лише його хост і origin приймаються ззовні

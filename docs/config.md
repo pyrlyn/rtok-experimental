@@ -144,6 +144,7 @@ tools                   = []          # [] = all tools from enabled plugins; els
 max_description_tokens  = 60          # enforced by a test (T4.1)
 max_result_chars        = 20000       # above this, head/tail + archive id
 http                    = "127.0.0.1:8791"  # `rtok mcp --http` with no address; keep it on loopback
+# HTTP expand can retrieve only payloads archived by this running server; restarting resets access.
 http_tools              = ["read", "search", "tree"]  # HTTP allow-list, used instead of `tools`; `expand` always stays listed; tools that act as the calling agent (`whoami`, `agent_send`, `worktree_add`, …) never are
 token                   = ""          # bearer token for --http; prefer RTOK_MCP_TOKEN; empty = --http refuses to start (T401)
 public_url              = ""          # tunnel URL (https://…); its host and origin are the only foreign ones accepted

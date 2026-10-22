@@ -13,7 +13,7 @@
 //! [`Measurement`] row does not exist. Default method bodies do nothing, so a plugin
 //! implements only the surfaces it declares in its [`Manifest`].
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -114,6 +114,9 @@ pub struct Runtime {
     /// `Some` while [`Runtime::defer_measurements`] is on: `record` queues here and
     /// [`Runtime::flush_measurements`] writes the queue in one transaction.
     deferred: Mutex<Option<Vec<Measurement>>>,
+    /// HTTP grants expansion only after this runtime has archived the bytes itself. The
+    /// store's first-writer session cannot represent repeated content across sessions.
+    archive_scope: Option<Mutex<BTreeSet<String>>>,
     /// The dir [`Runtime::in_memory`] made for this runtime's files; it goes with the runtime.
     scratch: Option<ScratchDir>,
 }
@@ -175,7 +178,29 @@ impl Runtime {
             cwd: None,
             graph_watch_pending: Arc::new(Mutex::new(HashMap::new())),
             deferred: Mutex::new(None),
+            archive_scope: None,
             scratch: None,
+        })
+    }
+
+    /// Start an empty archive capability set for a remote surface. Local surfaces keep the
+    /// global archive lookup; restarting a remote server grants no previous capabilities.
+    pub(crate) fn restrict_archives(&mut self) {
+        self.archive_scope = Some(Mutex::new(BTreeSet::new()));
+    }
+
+    /// At most two granted IDs, enough to resolve a prefix or reject an ambiguity without
+    /// consulting the shared archive. The ordered set bounds misses to a tree lookup.
+    pub(crate) fn scoped_archive_ids(&self, prefix: &str) -> Option<Vec<String>> {
+        self.archive_scope.as_ref().map(|scope| {
+            scope
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .range(prefix.to_owned()..)
+                .take_while(|id| id.starts_with(prefix))
+                .take(2)
+                .cloned()
+                .collect()
         })
     }
 
@@ -416,9 +441,7 @@ impl Host for Runtime {
 
 impl Archive for Runtime {
     fn put_archive(&self, body: &[u8]) -> Result<String> {
-        self.store
-            .put_archive(&self.session, body, &self.config.core.archive_dir)
-            .map_err(Into::into)
+        self.put_archive_for(body, None)
     }
 
     fn get_archive(&self, id: &str) -> Result<Option<Vec<u8>>> {
@@ -482,9 +505,19 @@ impl Archive for Runtime {
     }
 
     fn put_archive_for(&self, body: &[u8], context: Option<&str>) -> Result<String> {
-        self.store
-            .put_archive_for(&self.session, body, &self.config.core.archive_dir, context)
-            .map_err(Into::into)
+        let id = self.store.put_archive_for(
+            &self.session,
+            body,
+            &self.config.core.archive_dir,
+            context,
+        )?;
+        if let Some(scope) = &self.archive_scope {
+            scope
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(id.clone());
+        }
+        Ok(id)
     }
 }
 
