@@ -51,7 +51,8 @@ export function makeHome() {
 /**
  * One real `rtok web` process on a throwaway store. `HOME` and `RTOK_HOME` both point at a
  * fresh temp dir and nothing else of this machine's environment is passed on, so the snapshot
- * never reads the real `~/.claude`, no real agent runs, and a stray `RTOK_WEB_DIST` cannot
+ * never reads the real `~/.claude`; `RTOK_HOST_SANDBOX` also isolates absolute desktop app
+ * paths. No real agent runs, and a stray `RTOK_WEB_DIST` cannot
  * replace the SPA the binary embeds.
  */
 export class Rtok {
@@ -97,7 +98,7 @@ export class Rtok {
   }
 
   private env() {
-    return { PATH: SAFE_PATH, HOME: this.home, RTOK_HOME: this.home };
+    return { PATH: SAFE_PATH, HOME: this.home, RTOK_HOME: this.home, RTOK_HOST_SANDBOX: "1" };
   }
 
   private run(args: string[], input: string) {
