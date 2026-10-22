@@ -14,3 +14,6 @@ workspace = true
 
 [dependencies]
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["fs"] } # O_NOFOLLOW prevents rotation-lock symlink attacks

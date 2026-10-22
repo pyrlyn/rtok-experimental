@@ -905,6 +905,7 @@ mod tests {
         std::fs::write(logs.join("rtok.log.1"), b"a").unwrap();
         std::fs::write(logs.join("rtok.log.2"), b"bb").unwrap();
         std::fs::write(logs.join("rtok.log.6"), b"stale").unwrap();
+        std::fs::write(logs.join("rtok.log.rotate.lock"), b"").unwrap();
         assert_eq!(stale_log_siblings(&cfg), vec![logs.join("rtok.log.6")]);
     }
 

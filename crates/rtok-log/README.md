@@ -34,12 +34,15 @@ append(&log, "info", "app", "boot", "started");
 - When the next line would pass `max_bytes`, the live file becomes `app.log.1`, `.1`
   becomes `.2`, and a file past `files` is deleted. `files = 0` truncates the live file
   and keeps no history.
-- Two processes appending the same path share one lock file in the temp directory
-  (`rtok-log-rotate-<hash>.lock`). The size is checked again under that lock, so a
+- Two processes appending the same path share a lock beside the log
+  (`app.log.rotate.lock`), created owner-only and without following symlinks on Unix.
+  The size is checked again under that lock, so a
   second process does not rotate a file the first one just replaced. The lock is not
   the log file itself: Windows refuses to rename a file this process still has locked.
-- [`write_line`] returns the I/O error. [`append`] swallows it: a log line is not worth
-  failing the caller.
+- If the rotation lock is busy or rotation fails, the line is appended without rotating.
+  The size limit is best effort in that case; a rotation failure must not discard a log line.
+- [`write_line`] returns errors creating the directory or appending the line.
+  [`append`] swallows them: a log line is not worth failing the caller.
 
 ## Errors
 

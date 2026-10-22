@@ -116,7 +116,8 @@ pub fn write_line(log: &FileLog<'_>, text: &str) -> io::Result<()> {
     }
     let incoming = text.len() as u64 + 1;
     if over(log, incoming) {
-        rotate_if_over(log, incoming)?;
+        // Rotation is best effort: a busy or unusable lock must not silence logging.
+        let _ = rotate_if_over(log, incoming);
     }
     writeln!(open_append(log.path)?, "{text}")
 }
@@ -152,12 +153,12 @@ fn over(log: &FileLog<'_>, incoming: u64) -> bool {
 
 /// The size is checked again under an exclusive lock. Two processes that both saw a full
 /// file must not both rename: the second would shift the first's fresh `.1` to `.2` and
-/// then fail to rename a live file that is already gone. The lock is a sibling in the
-/// temp dir, not the log file. Windows will not rename a file this process still holds
+/// then fail to rename a live file that is already gone. The lock is beside the log,
+/// not the log file. Windows will not rename a file this process still holds
 /// locked, even with delete sharing.
 fn rotate_if_over(log: &FileLog<'_>, incoming: u64) -> io::Result<()> {
     let lock = open_rotate_lock(log.path)?;
-    lock.lock()?;
+    lock.try_lock().map_err(io::Error::from)?;
     if over(log, incoming) {
         rotate(log.path, log.files)?;
     }
@@ -165,17 +166,25 @@ fn rotate_if_over(log: &FileLog<'_>, incoming: u64) -> io::Result<()> {
 }
 
 fn open_rotate_lock(path: &Path) -> io::Result<fs::File> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    path.hash(&mut hasher);
-    let lock_path =
-        std::env::temp_dir().join(format!("rtok-log-rotate-{:x}.lock", hasher.finish()));
-    OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(lock_path)
+    let mut name = path.as_os_str().to_os_string();
+    name.push(".rotate.lock");
+    let mut options = OpenOptions::new();
+    options.create(true).truncate(false).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600).custom_flags(
+            (rustix::fs::OFlags::NOFOLLOW | rustix::fs::OFlags::NONBLOCK).bits() as i32,
+        );
+    }
+    let file = options.open(Path::new(&name))?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rotation lock is not a regular file",
+        ));
+    }
+    Ok(file)
 }
 
 fn rotate(path: &Path, files: u32) -> io::Result<()> {
@@ -192,6 +201,75 @@ fn rotate(path: &Path, files: u32) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_rotation_keeps_the_incoming_line() {
+        let dir = tmp("failed-rotation");
+        let path = dir.join("app.log");
+        fs::write(&path, "old\n").unwrap();
+        fs::create_dir(rotated_path(&path, 1)).unwrap();
+        write_line(&log(&path, 1, 1), "new").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "old\nnew\n");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_busy_rotation_lock_keeps_the_incoming_line() {
+        let dir = tmp("busy-rotation");
+        let path = dir.join("app.log");
+        fs::write(&path, "old\n").unwrap();
+        let held = open_rotate_lock(&path).unwrap();
+        held.lock().unwrap();
+        write_line(&log(&path, 1, 1), "new").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "old\nnew\n");
+        assert!(!rotated_path(&path, 1).exists());
+        drop(held);
+        write_line(&log(&path, 1, 1), "after").unwrap();
+        assert_eq!(
+            fs::read_to_string(rotated_path(&path, 1)).unwrap(),
+            "old\nnew\n"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rotation_lock_is_private_and_refuses_symlinks_and_pipes() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        let dir = tmp("private-rotation");
+        let path = dir.join("app.log");
+        let lock_path = dir.join("app.log.rotate.lock");
+        drop(open_rotate_lock(&path).unwrap());
+        assert_eq!(
+            fs::metadata(&lock_path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        fs::remove_file(&lock_path).unwrap();
+        let target = dir.join("unrelated");
+        fs::write(&target, "untouched").unwrap();
+        symlink(&target, &lock_path).unwrap();
+        assert!(open_rotate_lock(&path).is_err());
+        fs::write(&path, "old\n").unwrap();
+        write_line(&log(&path, 1, 1), "new").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "old\nnew\n");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "untouched");
+        // rustix does not expose mkfifoat on Apple targets.
+        #[cfg(target_os = "linux")]
+        {
+            fs::remove_file(&lock_path).unwrap();
+            rustix::fs::mkfifoat(
+                rustix::fs::CWD,
+                &lock_path,
+                rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
+            )
+            .unwrap();
+            assert!(open_rotate_lock(&path).is_err());
+            write_line(&log(&path, 1, 1), "pipe").unwrap();
+            assert_eq!(fs::read_to_string(&path).unwrap(), "old\nnew\npipe\n");
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
 
     fn tmp(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("rtok-log-{name}-{}", std::process::id()));
@@ -288,8 +366,8 @@ mod tests {
             .unwrap()
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .collect();
-        assert_eq!(names.len(), 3, "{names:?}");
-        for want in ["app.log", "app.log.1", "app.log.2"] {
+        assert_eq!(names.len(), 4, "{names:?}");
+        for want in ["app.log", "app.log.1", "app.log.2", "app.log.rotate.lock"] {
             assert!(names.iter().any(|n| n == want), "{names:?}");
         }
         let live = fs::read_to_string(&path).unwrap();

@@ -139,7 +139,7 @@ Project programs and direct packages from the manifests.
 | rmcp | local | https://crates.io/crates/rmcp | MCP types; feature `transport-streamable-http-server` serves `rtok mcp --http` (T401) |
 | rstest | local | https://crates.io/crates/rstest | Rust dependency |
 | rust-embed | local | https://crates.io/crates/rust-embed | Embeds the built SPA (`web/dist`) in the binary in every profile; memory-serve reads disk in debug builds and has no run-time override, include_dir has no media types or digests |
-| rustix | local | https://crates.io/crates/rustix | Rust dependency |
+| rustix | local | https://crates.io/crates/rustix | System calls in rtok-sys; Unix no-follow rotation locks in rtok-log |
 | rustls | local | https://crates.io/crates/rustls | Preconfigured webpki TLS client config (T53.3) |
 | rustls-pemfile | local | https://crates.io/crates/rustls-pemfile | `SSL_CERT_FILE` bundle parsing (T53.3) |
 | semver | local | https://crates.io/crates/semver | T279: plugin version compare + `.rtok-plugin-version` (de)serialization |
