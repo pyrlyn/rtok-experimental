@@ -213,6 +213,7 @@ fn housekeeping_converts_a_pre_t352_store() {
         db_path: db.clone(),
         retain_calls_days: 30,
         retain_hook_bodies_days: 3,
+        prune: PrunePolicy::default(),
     });
     assert!(warnings.is_empty(), "{warnings:?}");
     assert_eq!(auto_vacuum_mode(&Store::open(&db).unwrap()), 2);

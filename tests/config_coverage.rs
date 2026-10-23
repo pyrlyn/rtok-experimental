@@ -71,6 +71,8 @@ const ALLOW_KEYS: &[&str] = &[
     "worktree.clean.stat",
     "agents.junk.clear.dry_run",
     "agents.junk.clear.stat",
+    // T968: the preview flag of the prune, one-shot like the above.
+    "archive.prune.dry_run",
     "guard.check.host", // overlay `[hook] host` on the plugin CLI path (T70.5)
     "memory.import.dry_run",
     "graph.index.dry_run",

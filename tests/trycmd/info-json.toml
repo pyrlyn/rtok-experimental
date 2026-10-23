@@ -50,6 +50,7 @@ stdout = """
   "store": {
 ...
   },
+  "warnings": [],
   "total_bytes": [..]
 }
 """

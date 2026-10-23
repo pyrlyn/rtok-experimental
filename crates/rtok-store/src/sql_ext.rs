@@ -164,6 +164,26 @@ pub(crate) fn vacuum(conn: &mut SqliteConnection) -> QueryResult<()> {
     exec_pragma(conn, "VACUUM")
 }
 
+/// T968: `PRAGMA wal_checkpoint(TRUNCATE)` — copies the WAL into the database and cuts the WAL
+/// file to zero bytes. It answers one row `(busy, log frames, checkpointed frames)`, so it
+/// is a query, not a statement. A reader holding the WAL makes it report busy, which is
+/// not an error: the next prune retries. No DSL form for a PRAGMA.
+#[derive(QueryId)]
+pub(crate) struct WalCheckpointTruncate;
+
+impl QueryFragment<Sqlite> for WalCheckpointTruncate {
+    fn walk_ast<'b>(&'b self, mut out: AstPass<'_, 'b, Sqlite>) -> QueryResult<()> {
+        out.push_sql("PRAGMA wal_checkpoint(TRUNCATE)");
+        Ok(())
+    }
+}
+
+impl Query for WalCheckpointTruncate {
+    type SqlType = (Integer, Integer, Integer);
+}
+
+impl RunQueryDsl<SqliteConnection> for WalCheckpointTruncate {}
+
 /// `PRAGMA auto_vacuum` — a read, one column, no DSL form (0 none, 1 full, 2 incremental).
 #[derive(QueryId)]
 pub(crate) struct AutoVacuumMode;
@@ -974,6 +994,18 @@ pub(crate) fn delete_symbol_root(conn: &mut SqliteConnection, root: &str) -> Que
 
 pub(crate) fn delete_old_calls(conn: &mut SqliteConnection, cutoff: i64) -> QueryResult<usize> {
     diesel::delete(calls::table.filter(calls::ts.lt(cutoff))).execute(conn)
+}
+
+/// T968: a prune can delete an archive body that a surviving `call_io` row still names; the
+/// foreign key refuses that delete, and the row keeps its sha and byte count without the body.
+pub(crate) fn detach_call_io_archive(conn: &mut SqliteConnection, id: &str) -> QueryResult<()> {
+    diesel::update(call_io::table.filter(call_io::request_archive.eq(id)))
+        .set(call_io::request_archive.eq(None::<String>))
+        .execute(conn)?;
+    diesel::update(call_io::table.filter(call_io::response_archive.eq(id)))
+        .set(call_io::response_archive.eq(None::<String>))
+        .execute(conn)?;
+    Ok(())
 }
 
 pub(crate) fn purge_archive(conn: &mut SqliteConnection, id: &str) -> QueryResult<()> {

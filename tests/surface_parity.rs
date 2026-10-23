@@ -861,6 +861,10 @@ const EXEMPT: &[(&str, &str)] = &[
         "archive rewrite",
         "rewrites a pi `context` array on stdin to stdout (T70.2)",
     ),
+    (
+        "archive prune",
+        "deletes archive bodies and old calls, then compacts the store (T968)",
+    ),
     // surfaces: renderers of the model, not pages of it (D23)
     ("web", "the web surface itself"),
     ("dashboard", "deprecated spelling of `rtok web`"),
