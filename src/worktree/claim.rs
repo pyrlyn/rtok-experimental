@@ -274,7 +274,12 @@ pub fn add_with(
 ) -> Result<super::add::Plan> {
     let owner = owner(owner_flag, agent, store)?;
     let agent_id = agent.map(|a| a.id.as_str());
-    let (plan, mut undo) = super::add::run(cwd, wt, seams, id, (&owner, agent_id))?;
+    let added = super::add::run(cwd, wt, seams, id, (&owner, agent_id), store)?;
+    // T523: a retry finds its worktree claimed, seeded and registered by the add that made it.
+    let (plan, mut undo) = match added {
+        super::add::Added::Existing(plan) => return Ok(plan),
+        super::add::Added::New(plan, undo) => (plan, undo),
+    };
     if let Some(agent) = agent_id {
         if let Some(store) = store {
             undo.claim(store, &plan.path);

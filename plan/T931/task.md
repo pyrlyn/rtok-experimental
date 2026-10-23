@@ -1,9 +1,9 @@
 ---
-status: todo
+status: in progress
 priority: P2
 complexity: 3
-readiness: 0%
-agent:
+readiness: 20%
+agent: Claude Code / sonnet-5.5
 ---
 
 # T931. Bounded `sed -n a,bp` windows inside command chains are still elided
@@ -19,3 +19,12 @@ the total under the window limit) passes through unshortened.
 
 Check: cmd tests for `sed -n 1,80p a; sed -n 1,40p b` and `git show x | sed -n 1,100p`
 passing through; unbounded chains still shortened; `just check`.
+
+## Execution plan
+
+1. Tests first: `bounded.rs` rstest cases (chains of windows, `echo ---` labels) and a
+   `formatters.rs` `compress` test on a 240-line body in the single-argv hook shape.
+2. `bounded::is_bounded`: a single-stage literal `echo`/`printf` (no `$`/backtick) is silent
+   like `cd`/`export`, so a label between windows no longer unbounds the chain. Unbounded
+   and mixed chains (`sed ..; cargo test`) are untouched.
+3. Verify: `cargo nextest run --lib` for the cmd tests, then `just check`.

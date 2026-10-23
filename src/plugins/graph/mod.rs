@@ -1291,6 +1291,17 @@ fn is_test_path(path: &str) -> bool {
         })
 }
 
+/// Fixtures, benchmarks and examples by directory: code that ships to no user, so a missing
+/// test there is not a finding.
+fn is_support_path(path: &str) -> bool {
+    const DIRS: &[&str] = &[
+        "fixtures", "fixture", "testdata", "bench", "benches", "examples",
+    ];
+    let mut parts: Vec<&str> = path.split('/').collect();
+    parts.pop();
+    parts.iter().any(|d| DIRS.contains(d))
+}
+
 /// 1-based line ranges of `impl X for Y` blocks and `trait` bodies in Rust source
 /// (methods there are interface surface, not dead code), plus every `impl` target
 /// type name (`impl S`, `impl T for S` — the tags query records no reference for

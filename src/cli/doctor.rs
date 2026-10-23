@@ -5,7 +5,7 @@
 use super::util::print_json;
 use crate::config::Config;
 use crate::model;
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::ValueEnum;
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
@@ -84,6 +84,10 @@ pub(super) struct Args {
     /// Check (and with --fix, repair) the hooks of one host only (an id of `rtok agents list`)
     #[arg(long, value_name = "HOST")]
     pub(super) agent: Option<String>,
+    // T977
+    /// Add setup advice for the git checkout holding PATH (default: the working directory): language servers, graph index, instruction files, plugins left off
+    #[arg(long, value_name = "PATH", num_args = 0..=1, default_missing_value = ".", conflicts_with = "fix")]
+    pub(super) project: Option<PathBuf>,
 }
 
 pub(super) fn run(config_file: &Option<PathBuf>, args: Args) -> Result<()> {
@@ -122,11 +126,19 @@ pub(super) fn run(config_file: &Option<PathBuf>, args: Args) -> Result<()> {
             instructions,
             json,
             agent,
+            project,
             ..
         } => {
             let agent = doctor_host(agent.as_deref())?;
+            // Before the probes: a typo should not cost the MCP server starts.
+            if let Some(path) = project.as_deref().filter(|p| !p.exists()) {
+                bail!("--project {}: no such path", path.display());
+            }
             let cfg = Config::load_with(config_file.as_deref(), doctor_flags(instructions))?;
             let mut report = model::doctor(&cfg)?;
+            report.project = project
+                .as_deref()
+                .map(|path| crate::doctor::project::audit(&cfg, path));
             report
                 .problems
                 .retain(|p| agent.is_none_or(|a| p.agent == a));

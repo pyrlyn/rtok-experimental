@@ -31,6 +31,7 @@ pub mod hooks;
 mod mcp_dupes;
 mod mcp_fix;
 pub mod probe;
+pub mod project;
 pub mod web;
 
 /// What `rtok doctor` found, as data.
@@ -95,6 +96,10 @@ pub struct Report {
     #[cfg(feature = "graph")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub graph_health: Vec<crate::plugins::graph::health::score::Weak>,
+    /// Setup advice for one project (T977): `Some` for `rtok doctor --project` and for the
+    /// snapshot of the checkout the process runs in; `page` leaves it `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<project::ProjectReport>,
 }
 
 #[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
@@ -295,18 +300,7 @@ impl Report {
         }
         if let Some(audit) = &self.instructions {
             out.push_str("instructions\n");
-            for r in &audit.rows {
-                out.push_str(&format!(
-                    "  {} {} tokens {}{}\n",
-                    r.name,
-                    r.tokens,
-                    r.path,
-                    if r.warn { " WARN" } else { "" }
-                ));
-            }
-            for (sent, names) in &audit.duplicates {
-                out.push_str(&format!("  duplicate `{sent}` in {}\n", names.join(", ")));
-            }
+            out.push_str(&instruction_lines(audit, "  "));
         }
         if !self.overlaps.is_empty() {
             out.push_str("overlaps\n");
@@ -385,8 +379,33 @@ impl Report {
                 out.push_str(&format!("  {note}\n"));
             }
         }
+        // Last: with `--project` it is what the user asked for, and the terminal ends on it.
+        if let Some(project) = &self.project {
+            out.push_str(&project.render());
+        }
         out
     }
+}
+
+/// The rows of an instruction audit, one per line under `indent`.
+fn instruction_lines(audit: &Instructions, indent: &str) -> String {
+    let mut out = String::new();
+    for r in &audit.rows {
+        out.push_str(&format!(
+            "{indent}{} {} tokens {}{}\n",
+            r.name,
+            r.tokens,
+            r.path,
+            if r.warn { " WARN" } else { "" }
+        ));
+    }
+    for (sent, names) in &audit.duplicates {
+        out.push_str(&format!(
+            "{indent}duplicate `{sent}` in {}\n",
+            names.join(", ")
+        ));
+    }
+    out
 }
 
 /// Above this much reclaimable junk the doctor line points at `rtok agents junk list`.
@@ -621,7 +640,14 @@ pub fn page(cfg: &Config) -> Result<Report> {
         instructions: cfg
             .doctor
             .instructions
-            .then(|| instruction_audit(cfg, settings.as_ref(), claude.as_ref())),
+            .then(|| {
+                instruction_audit(
+                    cfg,
+                    settings.as_ref(),
+                    claude.as_ref(),
+                    std::env::current_dir().ok().as_deref(),
+                )
+            }),
         skills: skills_audit(cfg),
         overlaps: {
             let mut lines = overlap_lines(
@@ -658,6 +684,7 @@ pub fn page(cfg: &Config) -> Result<Report> {
         graph_alerts: graph_alerts(cfg),
         #[cfg(feature = "graph")]
         graph_health: graph_health(cfg),
+        project: None,
     })
 }
 
@@ -1147,17 +1174,20 @@ struct Source {
     text: String,
 }
 
+/// `cwd` is the project to audit: the working directory for `rtok doctor`, the analysed root for
+/// `--project`.
 fn instruction_audit(
     cfg: &Config,
     settings: Option<&Value>,
     claude: Option<&Value>,
+    cwd: Option<&Path>,
 ) -> Instructions {
     let mut srcs = Vec::new();
     if let Some(dir) = cfg.doctor.settings_path.parent() {
         push_file(&mut srcs, "claude-user", &dir.join("CLAUDE.md"));
     }
-    if let Ok(cwd) = std::env::current_dir() {
-        push_project_files(&mut srcs, &cwd);
+    if let Some(cwd) = cwd {
+        push_project_files(&mut srcs, cwd);
     }
     let blob = format!(
         "{}{}",
@@ -1692,6 +1722,7 @@ pub(crate) fn report_fixture() -> Report {
         #[cfg(feature = "graph")]
         graph_health: Vec::new(),
         junk_bytes: None,
+        project: None,
     }
 }
 

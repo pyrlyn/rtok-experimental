@@ -48,6 +48,8 @@ A new worktree starts with warm build caches. After `git worktree add`, rtok fil
 
 `worktree add` is all or nothing. Before it runs git it checks the free space of the volume that will hold the worktree and refuses, in one line, when less than `[worktree] min_free_mib` (2048 MiB by default; 0 turns the check off) is left. If anything fails after that point (git, for example with `No space left on device`, or the claim write), rtok removes the directory, the branch and the claim this call made; a branch or directory that existed before the call stays.
 
+`worktree add` takes the task and the branch name in one argument too: `rtok worktree add "T504 read-hook-same-path"` is task `t504` on branch `t504-read-hook-same-path` (the first word is the id, the rest the slug, spaces become dashes). Asked again for a task whose worktree is already there and locked by the same owner (or agent), it prints that path and changes nothing, so a retry of an add that landed is safe; a worktree held by anyone else is refused as before.
+
 ### Worktrees a host makes itself
 
 A host that creates worktrees in its own pool (Cursor, Codex, Windsurf and Devin, Kilo, Claude Code, Conductor) leaves rtok no say in where. Run `worktree_adopt` (or `rtok worktree adopt`) inside it: rtok derives the `origin` from the path, takes the task from `--task`, else the old lock, else the branch, and binds it.

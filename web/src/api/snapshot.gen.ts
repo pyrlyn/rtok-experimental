@@ -1367,6 +1367,11 @@ export interface Report {
    */
   problems?: Problem[];
   /**
+   * Setup advice for one project (T977): `Some` for `rtok doctor --project` and for the
+   * snapshot of the checkout the process runs in; `page` leaves it `None`.
+   */
+  project?: ProjectReport | null;
+  /**
    * The proxy chain behind `ANTHROPIC_BASE_URL`, hops joined with `→`.
    */
   proxy: string;
@@ -1524,6 +1529,149 @@ export interface Problem {
    * The config file the entry lives in.
    */
   source: string;
+}
+/**
+ * Where the setup advice for one checkout comes from.
+ *
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "ProjectReport".
+ */
+export interface ProjectReport {
+  /**
+   * The graph index of this checkout; absent while the graph plugin is off or unavailable.
+   */
+  graph?: GraphPart | null;
+  instructions: Instructions1;
+  /**
+   * Languages found, most files first.
+   */
+  languages: LanguageRow[];
+  /**
+   * Catalogue plugins that are off for this checkout.
+   */
+  plugins: PluginAdvice[];
+  /**
+   * The checkout analysed: the git checkout root of the path given, else the path itself.
+   */
+  root: string;
+  /**
+   * The walk hit its file or time cap, so file counts are a lower bound.
+   */
+  walk_cut: boolean;
+  /**
+   * How many days back the saving figures look.
+   */
+  window_days: number;
+}
+/**
+ * The graph index and backend of this checkout.
+ *
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "GraphPart".
+ */
+export interface GraphPart {
+  /**
+   * The `backend` value in effect for this checkout.
+   */
+  backend: string;
+  files: number | null;
+  indexed: boolean;
+  /**
+   * Commands and config changes that are not a health reason.
+   */
+  next: string[];
+  reasons: GraphReason[];
+  registered: boolean;
+  score: number | null;
+  /**
+   * The mode the last check recorded (`lsp` or `tags`).
+   */
+  served_by: string | null;
+  /**
+   * The registry row's state (`ok`, `stale`, `not indexed`, ...); absent while unregistered.
+   */
+  state: string | null;
+}
+/**
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "GraphReason".
+ */
+export interface GraphReason {
+  fix: string;
+  text: string;
+}
+/**
+ * The `AGENTS.md` / `CLAUDE.md` audit scoped to this root.
+ */
+export interface Instructions1 {
+  duplicates: [unknown, unknown][];
+  rows: InstructionRow[];
+}
+/**
+ * One language of the checkout and the server rtok would spawn for it.
+ *
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "LanguageRow".
+ */
+export interface LanguageRow {
+  files: number;
+  /**
+   * How to install the server, while it is missing.
+   */
+  install: string | null;
+  installed: boolean;
+  language: string;
+  /**
+   * The marker file found at the root (`Cargo.toml`).
+   */
+  marker: string | null;
+  note: string | null;
+  /**
+   * What the server would save, from graph `lsp.*` rows.
+   */
+  saving: Saving | null;
+  /**
+   * The language server rtok spawns for it; absent for a tags-only language.
+   */
+  server: string | null;
+}
+/**
+ * An approximate saving, always from `Measurement` rows.
+ *
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "Saving".
+ */
+export interface Saving {
+  /**
+   * `saved_per_call` times `project_calls`.
+   */
+  approx_tokens: number | null;
+  /**
+   * Rows behind the average, across all projects in the window.
+   */
+  calls: number;
+  /**
+   * This project's rows in the window; absent when no session maps to the project.
+   */
+  project_calls: number | null;
+  /**
+   * Average `est_before - est_after` per call, never negative.
+   */
+  saved_per_call: number;
+}
+/**
+ * A catalogue plugin that is off for this checkout.
+ *
+ * This interface was referenced by `WsProtocol`'s JSON-Schema
+ * via the `definition` "PluginAdvice".
+ */
+export interface PluginAdvice {
+  plugin: string;
+  saving: Saving | null;
+  /**
+   * Where to turn it on: `.rtok.toml`, or `user config` for keys a checkout may not set.
+   */
+  where: string;
 }
 /**
  * Share of Read-class transcript tokens spent in native Grep/Glob (T50.4):

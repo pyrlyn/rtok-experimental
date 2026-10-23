@@ -123,19 +123,22 @@ Inspect hooks, MCP servers and the proxy chain
 Usage: rtok doctor [OPTIONS]
 
 Options:
-      --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
-      --instructions   Also run the instruction-file audit
-      --json           JSON instead of the table
-      --fix            Clean up broken hooks and duplicate hooks and MCP entries: a terminal gets a
-                       checklist, a pipe the diff; --yes writes without asking
-      --yes            With --fix: write the changes (a copy goes to `.backup_configs/` first)
-      --dry-run        With --fix --yes: print the diffs and write nothing
-      --stat           With --fix: stat lines and totals instead of the diffs (a dry run)
-      --only <ONLY>    With --fix: limit it to these problems (repeatable; default: all of them)
-                       [possible values: broken-hooks, duplicate-hooks, duplicate-mcp]
-      --agent <HOST>   Check (and with --fix, repair) the hooks of one host only (an id of `rtok
-                       agents list`)
-  -h, --help           Print help
+      --config <PATH>     User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
+      --instructions      Also run the instruction-file audit
+      --json              JSON instead of the table
+      --fix               Clean up broken hooks and duplicate hooks and MCP entries: a terminal gets
+                          a checklist, a pipe the diff; --yes writes without asking
+      --yes               With --fix: write the changes (a copy goes to `.backup_configs/` first)
+      --dry-run           With --fix --yes: print the diffs and write nothing
+      --stat              With --fix: stat lines and totals instead of the diffs (a dry run)
+      --only <ONLY>       With --fix: limit it to these problems (repeatable; default: all of them)
+                          [possible values: broken-hooks, duplicate-hooks, duplicate-mcp]
+      --agent <HOST>      Check (and with --fix, repair) the hooks of one host only (an id of `rtok
+                          agents list`)
+      --project [<PATH>]  Add setup advice for the git checkout holding PATH (default: the working
+                          directory): language servers, graph index, instruction files, plugins left
+                          off
+  -h, --help              Print help
 
 $ rtok info --help
 Version, effective paths, disk usage, error count and proxy status
@@ -1326,8 +1329,9 @@ Create the worktree for a task: one location, one name, one locked owner; prints
 Usage: rtok worktree add [OPTIONS] <TASK> [SLUG]
 
 Arguments:
-  <TASK>  Task id, e.g. `t158`; directory `<repo>-<task>`, branch `<task>[-<slug>]`
-  [SLUG]  Optional branch suffix
+  <TASK>  Task id, e.g. `t158`, or `t158 read-hook-same-path` as one argument; directory
+          `<repo>-<task>`, branch `<task>[-<slug>]`
+  [SLUG]  Optional branch suffix (spaces become dashes, as in the one-argument form)
 
 Options:
       --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)

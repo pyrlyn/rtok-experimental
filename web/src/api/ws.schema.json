@@ -1513,6 +1513,92 @@
         "png"
       ]
     },
+    "GraphPart": {
+      "description": "The graph index and backend of this checkout.",
+      "type": "object",
+      "properties": {
+        "backend": {
+          "description": "The `backend` value in effect for this checkout.",
+          "type": "string"
+        },
+        "files": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "indexed": {
+          "type": "boolean"
+        },
+        "next": {
+          "description": "Commands and config changes that are not a health reason.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GraphReason"
+          }
+        },
+        "registered": {
+          "type": "boolean"
+        },
+        "score": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "served_by": {
+          "description": "The mode the last check recorded (`lsp` or `tags`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "The registry row's state (`ok`, `stale`, `not indexed`, ...); absent while unregistered.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "registered",
+        "state",
+        "indexed",
+        "files",
+        "score",
+        "reasons",
+        "backend",
+        "served_by",
+        "next"
+      ]
+    },
+    "GraphReason": {
+      "type": "object",
+      "properties": {
+        "fix": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "fix"
+      ]
+    },
     "ImportRequest": {
       "description": "A saved JSON export the page read itself, to show read-only. Like Compare mode, it never names\na path: the websocket answers anything on localhost, so the file arrives as its text.",
       "type": "object",
@@ -1718,6 +1804,71 @@
         "unreachable",
         "backend_down",
         "link_broken"
+      ]
+    },
+    "LanguageRow": {
+      "description": "One language of the checkout and the server rtok would spawn for it.",
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "install": {
+          "description": "How to install the server, while it is missing.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "language": {
+          "type": "string"
+        },
+        "marker": {
+          "description": "The marker file found at the root (`Cargo.toml`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "saving": {
+          "description": "What the server would save, from graph `lsp.*` rows.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Saving"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "server": {
+          "description": "The language server rtok spawns for it; absent for a tags-only language.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "language",
+        "files",
+        "marker",
+        "server",
+        "installed",
+        "install",
+        "note",
+        "saving"
       ]
     },
     "Latency": {
@@ -2213,6 +2364,34 @@
         "failed"
       ]
     },
+    "PluginAdvice": {
+      "description": "A catalogue plugin that is off for this checkout.",
+      "type": "object",
+      "properties": {
+        "plugin": {
+          "type": "string"
+        },
+        "saving": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Saving"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "where": {
+          "description": "Where to turn it on: `.rtok.toml`, or `user config` for keys a checkout may not set.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plugin",
+        "where",
+        "saving"
+      ]
+    },
     "PluginPage": {
       "description": "A plugin's page: its manifest, the static copy it contributes through\n`Plugin::dashboard_page`, and the stats widget when it saves tokens.",
       "type": "object",
@@ -2443,6 +2622,63 @@
         "name",
         "kind",
         "reason"
+      ]
+    },
+    "ProjectReport": {
+      "description": "Where the setup advice for one checkout comes from.",
+      "type": "object",
+      "properties": {
+        "graph": {
+          "description": "The graph index of this checkout; absent while the graph plugin is off or unavailable.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GraphPart"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "instructions": {
+          "description": "The `AGENTS.md` / `CLAUDE.md` audit scoped to this root.",
+          "$ref": "#/$defs/Instructions"
+        },
+        "languages": {
+          "description": "Languages found, most files first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LanguageRow"
+          }
+        },
+        "plugins": {
+          "description": "Catalogue plugins that are off for this checkout.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginAdvice"
+          }
+        },
+        "root": {
+          "description": "The checkout analysed: the git checkout root of the path given, else the path itself.",
+          "type": "string"
+        },
+        "walk_cut": {
+          "description": "The walk hit its file or time cap, so file counts are a lower bound.",
+          "type": "boolean"
+        },
+        "window_days": {
+          "description": "How many days back the saving figures look.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "root",
+        "window_days",
+        "languages",
+        "walk_cut",
+        "instructions",
+        "plugins"
       ]
     },
     "ProjectRequest": {
@@ -3052,6 +3288,17 @@
             "$ref": "#/$defs/Problem"
           }
         },
+        "project": {
+          "description": "Setup advice for one project (T977): `Some` for `rtok doctor --project` and for the\nsnapshot of the checkout the process runs in; `page` leaves it `None`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "proxy": {
           "description": "The proxy chain behind `ANTHROPIC_BASE_URL`, hops joined with `→`.",
           "type": "string"
@@ -3356,6 +3603,48 @@
         "session",
         "caller",
         "at"
+      ]
+    },
+    "Saving": {
+      "description": "An approximate saving, always from `Measurement` rows.",
+      "type": "object",
+      "properties": {
+        "approx_tokens": {
+          "description": "`saved_per_call` times `project_calls`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "calls": {
+          "description": "Rows behind the average, across all projects in the window.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "project_calls": {
+          "description": "This project's rows in the window; absent when no session maps to the project.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "saved_per_call": {
+          "description": "Average `est_before - est_after` per call, never negative.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "calls",
+        "saved_per_call",
+        "project_calls",
+        "approx_tokens"
       ]
     },
     "SavingsDay": {

@@ -691,6 +691,15 @@ fn host_by_session(conn: &mut SqliteConnection) -> Result<HashMap<String, Option
         .collect())
 }
 
+/// Each session's project name, `None` when it has none (a session outside any checkout).
+fn project_by_session(conn: &mut SqliteConnection) -> Result<HashMap<String, Option<String>>> {
+    Ok(sessions::table
+        .select((sessions::id, sessions::project))
+        .load::<(String, Option<String>)>(conn)?
+        .into_iter()
+        .collect())
+}
+
 /// One `(plugin, kind)` group from [`Store::measurement_totals`] (T207), or one
 /// `(plugin, kind, ts)` group from [`Store::measurement_totals_since`].
 #[derive(Debug, Clone)]

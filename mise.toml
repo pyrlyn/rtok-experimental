@@ -23,7 +23,7 @@ uv = "0.12.19" # resolves the pipx: tool backend on Windows, where pipx itself h
 "npm:oxfmt" = "0.68.0" # `just js` (T110): format check for the same files
 "npm:vitest" = "5.0.1" # T111: test runner for the TS host plugin tests (run by tests/filter.rs, tests/pi_plugin.rs)
 "npm:vite" = "8.3.0" # peer of vitest 5 mocker; Windows mise install does not hoist it otherwise
-rust = { version = "1.98.1", components = "rustfmt,clippy" } # CI otherwise installs the minimal profile
+rust = { version = "1.99.1", components = "rustfmt,clippy" } # CI otherwise installs the minimal profile
 
 # Lightweight Docker-compatible stack (agents: prefer this over Docker Desktop; see docs/colima.md)
 colima = { version = "0.10.3", os = ["linux", "macos"] } # container runtime UI → Lima VM (aqua:abiosoft/colima)

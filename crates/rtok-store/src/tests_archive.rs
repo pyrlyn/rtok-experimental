@@ -711,6 +711,42 @@ fn insert_measurements_once_is_all_or_none() {
     assert_eq!(store.measurement_count("memory").unwrap(), 2);
 }
 
+/// T977: the ledger split by the project name of the writing session; `expand` stays negative.
+#[rstest]
+fn measurement_saved_by_project_splits_sessions_by_project() {
+    let store = Store::open_in_memory().unwrap();
+    store.upsert_session("a1", None, Some("alpha"), None, None).unwrap();
+    store.upsert_session("a2", None, Some("alpha"), None, None).unwrap();
+    store.upsert_session("b1", None, Some("beta"), None, None).unwrap();
+    let row = |plugin, kind, est_before, est_after| Measurement {
+        plugin,
+        kind,
+        before_bytes: 1,
+        after_bytes: 1,
+        est_before,
+        est_after,
+        ref_id: None,
+        call_id: None,
+    };
+    store.insert_measurement("a1", &row("read", "map", 100, 40)).unwrap();
+    store.insert_measurement("a2", &row("read", "map", 50, 10)).unwrap();
+    store.insert_measurement("a2", &row("read", "expand", 0, 30)).unwrap();
+    store.insert_measurement("b1", &row("read", "map", 70, 20)).unwrap();
+    store.insert_measurement("loose", &row("read", "map", 9, 1)).unwrap();
+
+    let got = store.measurement_saved_by_project(0).unwrap();
+    let find = |project: Option<&str>, kind: &str| {
+        got.iter()
+            .find(|(p, t)| p.as_deref() == project && t.kind == kind)
+            .map(|(_, t)| (t.rows, t.est_before - t.est_after))
+    };
+    assert_eq!(find(Some("alpha"), "map"), Some((2, 100)));
+    assert_eq!(find(Some("alpha"), "expand"), Some((1, -30)));
+    assert_eq!(find(Some("beta"), "map"), Some((1, 50)));
+    assert_eq!(find(None, "map"), Some((1, 8)));
+    assert!(store.measurement_saved_by_project(i64::MAX).unwrap().is_empty());
+}
+
 #[rstest]
 fn insert_measurement_rejects_out_of_range_estimates() {
     let store = Store::open_in_memory().unwrap();

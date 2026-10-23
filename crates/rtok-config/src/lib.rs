@@ -1674,6 +1674,13 @@ impl Config {
         layers::load(&home, config_file, flags)
     }
 
+    /// [`Self::load_with`] as an agent started in `dir` would see it: that checkout's `.rtok.toml`
+    /// and `.env`, not the working directory's. Never creates the user file and never calls the
+    /// load hook.
+    pub fn load_for(dir: &Path, config_file: Option<&Path>) -> Result<Self> {
+        layers::load_in(&Self::home_dir(), config_file, None, Some(dir))
+    }
+
     /// Warn and use defaults. Hooks (T12.3) never fail on a bad file.
     pub fn load_lenient(config_file: Option<&Path>, flags: Option<figment::value::Dict>) -> Self {
         match Self::load_with(config_file, flags) {

@@ -192,6 +192,8 @@ const ALLOW_KEYS: &[&str] = &[
     "doctor.only",
     // T416.3: which preview one dry run prints (stat lines or the diff), a per-call choice.
     "doctor.stat",
+    // `doctor --project` (T977): which checkout one call analyses, not a stored setting.
+    "doctor.project",
     "config.init.stat",
     "config.set.stat",
     "memory.sync.stat",

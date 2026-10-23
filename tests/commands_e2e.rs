@@ -346,6 +346,58 @@ fn doctor_reports_the_chain() {
     let _ = fs::remove_dir_all(&home);
 }
 
+/// T977: `--project` analyses the checkout named, and whether its language server is installed
+/// follows `PATH`; a stub file stands in for the real server.
+#[test]
+fn doctor_project_reports_the_language_server_from_path() {
+    let home = tmp("doctor-project");
+    let repo = home.join("repo");
+    fs::create_dir_all(repo.join("src")).unwrap();
+    fs::write(repo.join(".git"), "").unwrap();
+    fs::write(repo.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+    fs::write(repo.join("src/lib.rs"), "pub fn f() {}\n").unwrap();
+    let with = home.join("with");
+    let without = home.join("without");
+    fs::create_dir_all(&with).unwrap();
+    fs::create_dir_all(&without).unwrap();
+    fs::write(with.join("rust-analyzer"), "stub").unwrap();
+
+    let rust = |path: &Path| -> serde_json::Value {
+        let out = cmd(&["doctor", "--json", "--project"], &home)
+            .arg(&repo)
+            .env("PATH", path)
+            .assert()
+            .success()
+            .get_output()
+            .clone();
+        let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        report["project"]["languages"]
+            .as_array()
+            .and_then(|l| l.iter().find(|l| l["language"] == "rust"))
+            .cloned()
+            .unwrap_or_else(|| panic!("no rust row in {report}"))
+    };
+    let found = rust(&with);
+    assert_eq!((found["files"].as_u64(), found["installed"].as_bool()), (Some(1), Some(true)));
+    let missing = rust(&without);
+    assert_eq!(missing["installed"], false);
+    assert_eq!(missing["install"], "rustup component add rust-analyzer");
+    let _ = fs::remove_dir_all(&home);
+}
+
+/// T977: a path that does not exist is refused before any probe runs.
+#[test]
+fn doctor_project_refuses_a_missing_path() {
+    let home = tmp("doctor-project-missing");
+    let out = cmd(&["doctor", "--project", "no-such-dir"], &home)
+        .assert()
+        .failure()
+        .get_output()
+        .clone();
+    assert!(String::from_utf8_lossy(&out.stderr).contains("no such path"));
+    let _ = fs::remove_dir_all(&home);
+}
+
 /// T276.3: the MCP probe draws a bar on a terminal only; a piped stderr gets no bar bytes.
 #[cfg(unix)] // POSIX command path
 #[test]

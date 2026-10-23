@@ -904,6 +904,7 @@ mod tests {
                 #[cfg(feature = "graph")]
                 graph_health: vec![],
                 junk_bytes: None,
+                project: None,
             },
             recommendations: vec![],
         }

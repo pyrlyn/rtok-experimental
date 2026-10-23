@@ -571,9 +571,22 @@ fn add_creates_one_locked_worktree_per_task_from_a_fresh_base() {
         &["worktree", "add", "t158", "--owner", owner],
         b"",
     );
-    assert!(!again.status.success());
+    // T523: a retry by the same owner prints the same path, in any spelling of the name; another
+    // owner is still refused.
     let err = String::from_utf8_lossy(&again.stderr);
-    assert!(err.contains("one worktree per task"), "{err}");
+    assert!(again.status.success(), "{err}");
+    assert_eq!(String::from_utf8_lossy(&again.stdout), printed);
+    let spelled = ["worktree", "add", "T158 Worktree-Add", "--owner", owner];
+    let again = rtok_in(&home, &work, &spelled, b"");
+    assert_eq!(String::from_utf8_lossy(&again.stdout), printed);
+    let theirs = ["worktree", "add", "t158", "--owner", "Cursor / grok"];
+    let refused = rtok_in(&home, &work, &theirs, b"");
+    let err = String::from_utf8_lossy(&refused.stderr);
+    assert!(!refused.status.success(), "{err}");
+    assert!(
+        err.contains("one worktree per task") && err.contains("locked by"),
+        "{err}"
+    );
     assert_eq!(inventory(&work).unwrap().len(), 2);
 
     // `[worktree] root` wins over the default; `~` expands.
@@ -1427,7 +1440,8 @@ fn mcp_worktree_tools_act_for_the_linked_agent() {
     let calls = [
         ("worktree_add", r#"{"task":"t9","slug":"mcp"}"#),
         ("worktree_list", "{}"),
-        ("worktree_add", r#"{"task":"t9"}"#),
+        // T523: a retry, spelled as id plus slug in one string, is the same worktree.
+        ("worktree_add", r#"{"task":"T9 mcp"}"#),
     ];
     let mut me = String::new();
     let hooks = || {
@@ -1457,7 +1471,11 @@ fn mcp_worktree_tools_act_for_the_linked_agent() {
     );
 
     let (is_err, text) = &got[2];
-    assert!(*is_err && text.contains("already exists"), "{text}");
+    assert!(!is_err, "{text}");
+    let again: serde_json::Value = serde_json::from_str(text).unwrap();
+    assert_eq!(again["path"], added["path"]);
+    assert_eq!(again["branch"], "t9-mcp");
+    assert_eq!(store.open_worktree_claims().unwrap().len(), 1);
 
     // No agent row for this cwd: the worktree has no one to belong to.
     let elsewhere = tmp.join("elsewhere");
@@ -1469,7 +1487,7 @@ fn mcp_worktree_tools_act_for_the_linked_agent() {
         &[("worktree_add", r#"{"task":"t10"}"#)],
     );
     assert!(
-        got[0].0 && got[0].1 == "not linked to an agent session",
+        got[0].0 && got[0].1.starts_with("not linked to an agent session"),
         "{got:?}"
     );
     assert_eq!(inventory(&work).unwrap().len(), 2);
@@ -1715,7 +1733,7 @@ fn worktree_create_hook_returns_the_add_path_bound_to_the_session_agent() {
     assert_eq!(inventory(&work).unwrap().len(), 2);
 
     // A name `add` refuses fails the hook (non-zero, nothing printed); the launcher falls back.
-    let bad = create("two words");
+    let bad = create("../evil");
     assert!(!bad.status.success() && bad.stdout.is_empty());
     assert_eq!(inventory(&work).unwrap().len(), 2);
     let _ = std::fs::remove_dir_all(&tmp);
