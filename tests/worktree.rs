@@ -1784,6 +1784,70 @@ fn worktree_create_hook_returns_the_add_path_bound_to_the_session_agent() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// T995.1: CodeBuddy sends the same two hooks with `--host codebuddy`. Its session's agent is
+/// filed under the `other` host, as the dispatcher files it, and gets the worktree and the lock;
+/// remove takes it back. A host that has no such hooks is refused with nothing printed.
+#[test]
+fn codebuddy_worktree_hooks_bind_and_remove_for_its_session_agent() {
+    let tmp = rtok::testutil::tmp_dir("worktree-hook-codebuddy");
+    let work = origin_clone(&tmp, "rtok");
+    std::fs::create_dir_all(tmp.join(".rtok")).unwrap();
+    let store = rtok::store::Store::open(&tmp.join(".rtok/rtok.db")).unwrap();
+    let other = store.host_id_or_other("codebuddy").unwrap();
+    let id = store
+        .register_agent(other, "sess-cb", None, None, None)
+        .unwrap();
+    let send = |event: &str, host: &str, extra: serde_json::Value| {
+        let stdin = host_payload(event, "sess-cb", &work, extra);
+        rtok_in(&tmp, &work, &["hook", event, "--host", host], &stdin)
+    };
+
+    let out = send(
+        "WorktreeCreate",
+        "codebuddy",
+        serde_json::json!({"name": "cb-1"}),
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let path = String::from_utf8(out.stdout)
+        .unwrap()
+        .trim_end()
+        .to_string();
+    let want = work.join(".rtok/worktrees/rtok-cb-1");
+    assert_eq!(
+        Path::new(&path).canonicalize().unwrap(),
+        want.canonicalize().unwrap()
+    );
+    assert_eq!(
+        lock_of(&work, "rtok-cb-1").agent.as_deref(),
+        Some(id.as_str())
+    );
+
+    let refused = send(
+        "WorktreeCreate",
+        "cursor",
+        serde_json::json!({"name": "cb-2"}),
+    );
+    assert!(!refused.status.success() && refused.stdout.is_empty());
+    assert_eq!(inventory(&work).unwrap().len(), 2);
+
+    let gone = send(
+        "WorktreeRemove",
+        "codebuddy",
+        serde_json::json!({"worktree_path": path}),
+    );
+    assert!(
+        gone.status.success(),
+        "{}",
+        String::from_utf8_lossy(&gone.stderr)
+    );
+    assert!(!want.exists());
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// T159 (D31): whatever goes wrong inside rtok, `scripts/worktree.sh` still hands the host a
 /// usable worktree at the host's own default path, and exits 0.
 #[cfg(unix)]

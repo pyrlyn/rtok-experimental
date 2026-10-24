@@ -69,7 +69,7 @@ fn hooks_run_the_three_step_chain_with_the_codebuddy_host() {
         !hooks.contains_key("Stop"),
         "rtok registers no Stop hook for Claude-shaped hosts"
     );
-    for (event, entries) in hooks {
+    for (event, entries) in hooks.iter().filter(|(e, _)| !e.starts_with("Worktree")) {
         let hook = &entries[0]["hooks"][0];
         assert_eq!(
             hook["command"],
@@ -83,6 +83,32 @@ fn hooks_run_the_three_step_chain_with_the_codebuddy_host() {
         assert_eq!(hook["type"], "command");
         assert_eq!(hook["timeout"], 5);
     }
+}
+
+/// T995.1: CodeBuddy's `WorktreeCreate`/`WorktreeRemove` replace its own create and remove, as
+/// Claude Code's do (T159), so they run the shared launcher with the host named, once each, with
+/// a timeout that fits a fetch plus `git worktree add`. The launcher is Claude's byte for byte:
+/// each plugin is installed on its own, so each carries the copy.
+#[test]
+fn worktree_hooks_run_the_shared_launcher_for_codebuddy() {
+    let doc = read("hooks/hooks.json");
+    for event in ["WorktreeCreate", "WorktreeRemove"] {
+        assert_eq!(
+            doc["hooks"][event],
+            json!([{"hooks": [{
+                "type": "command",
+                "command": format!("\"${{CODEBUDDY_PLUGIN_ROOT}}/scripts/worktree.sh\" {event} codebuddy"),
+                "timeout": 120
+            }]}]),
+            "{event}"
+        );
+    }
+    let claude = root().join("../claude/scripts/worktree.sh");
+    assert_eq!(
+        fs::read(root().join("scripts/worktree.sh")).unwrap(),
+        fs::read(claude).unwrap(),
+        "plugins/codebuddy/scripts/worktree.sh is a copy of plugins/claude/scripts/worktree.sh"
+    );
 }
 
 #[cfg(unix)]
@@ -129,7 +155,8 @@ mod launcher {
         let doc = read("hooks/hooks.json");
         for (with_client, want) in [(true, "rtok-hook "), (false, "")] {
             let dir = shim_dir(&format!("path{with_client}"), with_client);
-            for (event, entries) in doc["hooks"].as_object().unwrap() {
+            let hooks = doc["hooks"].as_object().unwrap();
+            for (event, entries) in hooks.iter().filter(|(e, _)| !e.starts_with("Worktree")) {
                 let cmd = entries[0]["hooks"][0]["command"].as_str().unwrap();
                 let (ok, stdout) = run(cmd, &dir, &dir);
                 assert!(ok, "{event}");

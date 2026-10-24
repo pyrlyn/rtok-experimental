@@ -167,7 +167,7 @@ impl Runtime {
 
     fn with_store(config: Config, store: Store, session: impl Into<String>) -> Result<Self> {
         store.set_store_raw(config.core.store_raw);
-        let host_id = store.host_id(&config.hook.host)?.or(Some(6));
+        let host_id = Some(store.host_id_or_other(&config.hook.host)?);
         Ok(Self {
             config,
             store,
