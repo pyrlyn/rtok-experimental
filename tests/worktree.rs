@@ -1848,6 +1848,83 @@ fn codebuddy_worktree_hooks_bind_and_remove_for_its_session_agent() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// T995.2: Command Code runs `rtok hook <event> --host commandcode` with the name and path in
+/// `COMMAND_CODE_WORKTREE_*`, no stdin and no session. The one live Command Code agent in the
+/// repository gets the worktree and removes it again. A create rtok refuses, and any create while
+/// worktrees are off, still gets a plain worktree, since Command Code has no fallback of its own.
+#[test]
+fn commandcode_worktree_hooks_read_the_environment_and_fall_back_to_plain_git() {
+    let tmp = rtok::testutil::tmp_dir("worktree-hook-commandcode");
+    let work = origin_clone(&tmp, "rtok");
+    std::fs::create_dir_all(tmp.join(".rtok")).unwrap();
+    let store = rtok::store::Store::open(&tmp.join(".rtok/rtok.db")).unwrap();
+    let host = store.host_id_or_other("commandcode").unwrap();
+    let repo = work.canonicalize().unwrap();
+    let id = store
+        .register_agent(host, "sess-cc", None, Some(&repo.to_string_lossy()), None)
+        .unwrap();
+    let send = |event: &str, vars: &[(&str, Option<&str>)]| {
+        let args = ["hook", event, "--host", "commandcode"];
+        rtok_env(&tmp, &work, None, vars, &args, b"")
+    };
+    let path_of = |out: std::process::Output| {
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let path = String::from_utf8(out.stdout).unwrap();
+        Path::new(path.trim_end()).canonicalize().unwrap()
+    };
+
+    let made = send(
+        "WorktreeCreate",
+        &[("COMMAND_CODE_WORKTREE_NAME", Some("cc-1"))],
+    );
+    let path = path_of(made);
+    let want = work.join(".rtok/worktrees/rtok-cc-1");
+    assert_eq!(path, want.canonicalize().unwrap());
+    assert_eq!(
+        lock_of(&work, "rtok-cc-1").agent.as_deref(),
+        Some(id.as_str())
+    );
+    let gone = send(
+        "WorktreeRemove",
+        &[
+            ("COMMAND_CODE_WORKTREE_PATH", Some(&path.to_string_lossy())),
+            ("COMMAND_CODE_WORKTREE_NAME", Some("cc-1")),
+        ],
+    );
+    assert!(
+        gone.status.success(),
+        "{}",
+        String::from_utf8_lossy(&gone.stderr)
+    );
+    assert!(!want.exists());
+
+    // Command Code allows `/` in a name; rtok's task ids do not, so the plain worktree is made
+    // where the plugin launchers make theirs.
+    let plain = path_of(send(
+        "WorktreeCreate",
+        &[("COMMAND_CODE_WORKTREE_NAME", Some("feat/auth"))],
+    ));
+    assert_eq!(plain, repo.join(".commandcode/worktrees/feat-auth"));
+    let branch = run(&plain, &["branch", "--show-current"]);
+    assert_eq!(branch.trim(), "worktree-feat-auth");
+
+    std::fs::write(
+        tmp.join(".rtok/config.toml"),
+        "[worktree]\nenabled = false\n",
+    )
+    .unwrap();
+    let off = path_of(send(
+        "WorktreeCreate",
+        &[("COMMAND_CODE_WORKTREE_NAME", Some("cc-2"))],
+    ));
+    assert_eq!(off, repo.join(".commandcode/worktrees/cc-2"));
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// T159 (D31): whatever goes wrong inside rtok, `scripts/worktree.sh` still hands the host a
 /// usable worktree at the host's own default path, and exits 0.
 #[cfg(unix)]

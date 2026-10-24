@@ -441,27 +441,11 @@ pub fn bind_unattended(
     if hosts.is_empty() {
         bail!("no agent to bind: pass --agent or set RTOK_AGENT_ID");
     }
-    let repo = main.to_string_lossy();
     let host_ids: Vec<i32> = hosts
         .iter()
         .filter_map(|h| store.host_id(h).ok().flatten())
         .collect();
-    // The cwd rule of `agents::link::resolve` (T283.1); only top-level sessions, since a
-    // sub-agent shares its parent's cwd and would make every repository ambiguous.
-    let mut here: Vec<_> = store
-        .live_agents(idle)?
-        .into_iter()
-        .filter(|a| host_ids.contains(&a.host_id) && a.parent_key.is_empty())
-        .filter(|a| {
-            a.cwd
-                .as_deref()
-                .is_some_and(|c| crate::fs::same_dir(c, &repo))
-        })
-        .collect();
-    if here.len() == 1 {
-        let agent = store
-            .agent_detail(&here.remove(0).id)?
-            .context("the live agent vanished")?;
+    if let Some(agent) = sole_live_agent(store, &host_ids, &main, idle)? {
         return bind(Some(store), path, &agent, None, task, true, auto_add);
     }
     let task = task_of(path, task, &record)?;
@@ -480,6 +464,36 @@ pub fn bind_unattended(
         pending: true,
         branch: record.branch.clone(),
     })
+}
+
+/// The one live top-level agent of `host_ids` working in `repo`; `None` with none or several,
+/// since guessing would hand the worktree to another agent.
+pub fn sole_live_agent(
+    store: &Store,
+    host_ids: &[i32],
+    repo: &Path,
+    idle: &str,
+) -> Result<Option<AgentDetail>> {
+    let repo = repo.to_string_lossy();
+    // The cwd rule of `agents::link::resolve` (T283.1); only top-level sessions, since a
+    // sub-agent shares its parent's cwd and would make every repository ambiguous.
+    let mut here: Vec<_> = store
+        .live_agents(idle)?
+        .into_iter()
+        .filter(|a| host_ids.contains(&a.host_id) && a.parent_key.is_empty())
+        .filter(|a| {
+            a.cwd
+                .as_deref()
+                .is_some_and(|c| crate::fs::same_dir(c, &repo))
+        })
+        .collect();
+    if here.len() != 1 {
+        return Ok(None);
+    }
+    let agent = store
+        .agent_detail(&here.remove(0).id)?
+        .context("the live agent vanished")?;
+    Ok(Some(agent))
 }
 
 #[cfg(test)]

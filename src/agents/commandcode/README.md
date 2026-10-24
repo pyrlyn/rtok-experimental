@@ -23,6 +23,22 @@ tool names in: `shell_command`, `read_file` (`absolute_path`), `write_file` / `e
 maps the names to Claude's `Bash` / `Read` / `Write` / `Edit`, so the plugins see what they
 match on; the reply passes through unchanged.
 
+## Worktrees
+
+The same `settings.json` gets `worktree.createHook` and `worktree.removeHook` (T995.2), so
+`enter_worktree` / `exit_worktree` go through `rtok worktree` instead of Command Code's own git
+worktrees. Each is `rtok hook WorktreeCreate|WorktreeRemove --host commandcode`, written only when
+the key is free: a hook of the user's own stays, and `remove` takes a key out only while it still
+holds rtok's command. A project's `.commandcode/settings.json` hook wins over the user one.
+
+Command Code runs the command in a shell with the name in `COMMAND_CODE_WORKTREE_NAME` (and the
+path in `COMMAND_CODE_WORKTREE_PATH` on remove), sends no stdin and names no session, so the
+worktree goes to the one live Command Code agent in the repository, the rule `worktree adopt`
+uses. When rtok refuses the name (Command Code allows `/`), fails, or has worktrees turned off,
+it makes a plain worktree at `.commandcode/worktrees/<name>` on `worktree-<name>` itself: a
+create hook that fails leaves Command Code with no worktree at all. Evidence: the docs below and
+Command Code 1.64.0 `dist/cli.mjs` (`runCreateHook`, `runRemoveHook`), read 2026-10-25.
+
 ## rtok plugins this host reaches
 
 Hooks carry `hook` and `cli`, MCP carries `mcp`. Nothing carries `proxy`.
@@ -36,5 +52,6 @@ Host documentation setup writes against; re-check the links when this host chang
 
 - Hooks (events, `settings.json` `hooks` key, matchers, stdin/stdout schema, exit codes): https://commandcode.ai/docs/hooks
 - MCP (`cmd mcp`, scopes, `mcp.json` schema): https://commandcode.ai/docs/mcp
+- Worktrees (`worktree.createHook` / `removeHook`, `COMMAND_CODE_WORKTREE_*`): https://commandcode.ai/docs/worktrees
 - Mods (the TypeScript extension surface; rtok ships hooks + MCP, not a mod): https://commandcode.ai/docs/mods
 - Skills: https://github.com/CommandCodeAI/agent-skills
