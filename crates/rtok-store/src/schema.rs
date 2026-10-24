@@ -525,7 +525,21 @@ diesel::joinable!(note_embeddings -> notes (note_id));
 diesel::joinable!(note_files -> notes (note_id));
 diesel::joinable!(observation_files -> observations (observation_id));
 
+diesel::table! {
+    mcp_memo (key_hash) {
+        key_hash -> Text,
+        key -> Text,
+        tool -> Text,
+        value -> Text,
+        created -> BigInt,
+        last_used -> BigInt,
+        schema_hash -> Text,
+        rtok_version -> Text,
+    }
+}
+
 diesel::allow_tables_to_appear_in_same_query!(
+    mcp_memo,
     events,
     measurements,
     archive,

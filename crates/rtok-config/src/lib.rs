@@ -386,6 +386,8 @@ section! {
         /// The public HTTPS URL a tunnel serves the HTTP server at. Its host passes the Host
         /// check and its origin the Origin check; anything else is refused.
         public_url: String = String::new(),
+        /// The MCP tool-result memo on/off; `RTOK_MCP_CACHE=0` turns it off too.
+        cache_enabled: bool = true,
         /// Seconds a memoized read-only tool result stays fresh (see `src/mcp/memo.rs`).
         /// `0` turns the memo off.
         cache_ttl_secs: u64 = 300,

@@ -411,6 +411,12 @@ struct Server {
     caller: Mutex<Option<(std::time::Instant, Option<std::path::PathBuf>)>>,
     /// Read-only tool results by full request key (see `memo`).
     memo: Mutex<memo::Memo>,
+    /// Memo on/off (`[mcp] cache_enabled`, `RTOK_MCP_CACHE`); off skips both layers.
+    memo_on: bool,
+    /// Schema hash per memoizable tool, for the persistent layer.
+    memo_schemas: Vec<(&'static str, String)>,
+    memo_hits: std::sync::atomic::AtomicU64,
+    memo_misses: std::sync::atomic::AtomicU64,
 }
 
 impl Server {
@@ -519,6 +525,30 @@ impl Server {
                     || cfg.mcp.tools.iter().any(|n| n.as_str() == t.def.name)
             });
         }
+        let memo_on = memo::enabled(
+            cfg.mcp.cache_enabled,
+            std::env::var("RTOK_MCP_CACHE").ok().as_deref(),
+        );
+        let memo_schemas: Vec<(&'static str, String)> = listed
+            .iter()
+            .filter(|t| memo::MEMO_TOOLS.contains(&t.def.name))
+            .map(|t| (t.def.name, memo::schema_hash(&t.def)))
+            .collect();
+        if memo_on {
+            let pairs: Vec<(&str, &str)> =
+                memo_schemas.iter().map(|(t, h)| (*t, h.as_str())).collect();
+            let dropped = cx
+                .store
+                .memo_invalidate(env!("CARGO_PKG_VERSION"), &pairs)
+                .unwrap_or(0);
+            let (entries, bytes) = cx.store.memo_stats().unwrap_or((0, 0));
+            cx.log(
+                "info",
+                "mcp",
+                "memo",
+                &format!("memo on: {entries} entries, {bytes} bytes, {dropped} invalidated"),
+            );
+        }
         Ok(Self {
             cx,
             listed,
@@ -531,6 +561,10 @@ impl Server {
                 cfg.mcp.cache_ttl_secs,
                 cfg.mcp.cache_max_entries,
             )),
+            memo_on,
+            memo_schemas,
+            memo_hits: std::sync::atomic::AtomicU64::new(0),
+            memo_misses: std::sync::atomic::AtomicU64::new(0),
         })
     }
 
@@ -772,25 +806,77 @@ impl Server {
     /// `invoke_text` through the memo: a hit for a byte-identical request of a memo tool,
     /// else a real call whose successful answer is kept. A call that may write clears it.
     fn memoized(&self, name: &str, args: &Value) -> (String, bool) {
+        if !self.memo_on {
+            return self.invoke_text(name, args);
+        }
         let now = std::time::Instant::now();
         let key = self
             .memo
             .lock()
             .ok()
             .and_then(|m| m.key(name, &self.memo_scope(), args));
-        if let Some(k) = &key
-            && let Some(hit) = self.memo.lock().ok().and_then(|mut m| m.get(k, now))
-        {
-            return (hit, true);
+        let schema = self
+            .memo_schemas
+            .iter()
+            .find(|(t, _)| *t == name)
+            .map(|(_, h)| h.as_str());
+        let version = env!("CARGO_PKG_VERSION");
+        let ttl = i64::try_from(self.cx.config.mcp.cache_ttl_secs).unwrap_or(i64::MAX);
+        if let Some(k) = &key {
+            let hot = self.memo.lock().ok().and_then(|mut m| m.get(k, now));
+            let hit = hot.or_else(|| {
+                let v = self.cx.store.memo_get(k, schema?, version, ttl).ok()??;
+                if let Ok(mut m) = self.memo.lock() {
+                    m.put(k.clone(), v.clone(), now);
+                }
+                Some(v)
+            });
+            if let Some(v) = hit {
+                self.memo_count(true);
+                return (v, true);
+            }
+            self.memo_count(false);
         }
         let (text, ok) = self.invoke_text(name, args);
         if let Ok(mut m) = self.memo.lock() {
-            if ok && let Some(k) = key {
-                m.put(k, text.clone(), now);
+            if ok && let Some(k) = &key {
+                m.put(k.clone(), text.clone(), now);
+                if let Some(schema_hash) = schema {
+                    let row = crate::store::MemoRow {
+                        key: k,
+                        tool: name,
+                        value: &text,
+                        schema_hash,
+                        rtok_version: version,
+                    };
+                    let max = i64::from(self.cx.config.mcp.cache_max_entries);
+                    let _ = self.cx.store.memo_put(&row, max);
+                }
             }
             m.after_call(name, ok);
+            if ok && memo::clears(name) {
+                let _ = self.cx.store.memo_clear();
+            }
         }
         (text, ok)
+    }
+
+    /// Count a memo hit or miss; every 100 lookups log the metrics.
+    fn memo_count(&self, hit: bool) {
+        let c = if hit {
+            &self.memo_hits
+        } else {
+            &self.memo_misses
+        };
+        c.fetch_add(1, Ordering::Relaxed);
+        let hits = self.memo_hits.load(Ordering::Relaxed);
+        let misses = self.memo_misses.load(Ordering::Relaxed);
+        if (hits + misses) % 100 == 0 {
+            let (entries, bytes) = self.cx.store.memo_stats().unwrap_or((0, 0));
+            let msg =
+                format!("memo: {hits} hits, {misses} misses, {entries} entries, {bytes} bytes");
+            self.cx.log("info", "mcp", "memo", &msg);
+        }
     }
 
     fn tools(&self) -> Vec<Tool> {

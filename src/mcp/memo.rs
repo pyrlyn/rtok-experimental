@@ -28,8 +28,26 @@ pub(crate) const MEMO_TOOLS: &[&str] = &[
     "mem_pack",
 ];
 
+/// `[mcp] cache_enabled`, unless `RTOK_MCP_CACHE` is `0`, `false` or `off` (for comparing
+/// runs with and without the memo).
+pub(crate) fn enabled(cfg_on: bool, env: Option<&str>) -> bool {
+    cfg_on && !matches!(env.map(str::trim), Some("0" | "false" | "off"))
+}
+
+/// Hex sha256 of a tool's name, description and input schema: a memoized row of a tool whose
+/// definition changed is not served.
+pub(crate) fn schema_hash(def: &crate::plugin::ToolDef) -> String {
+    let text = serde_json::json!([def.name, def.description, canonical(&def.input_schema)]);
+    crate::store::memo_key_hash(&text.to_string())
+}
+
 /// Tools that change nothing, so a call to one does not clear the memo.
 const PURE: &[&str] = &["ping", "expand"];
+
+/// A successful call of `tool` may have written, so it clears the memo.
+pub(crate) fn clears(tool: &str) -> bool {
+    !MEMO_TOOLS.contains(&tool) && !PURE.contains(&tool)
+}
 
 /// The memo itself: an LRU bounded by `max` entries, each fresh for `ttl`.
 pub(crate) struct Memo {
@@ -89,7 +107,7 @@ impl Memo {
 
     /// Called after every tool call that was not served from the memo.
     pub(crate) fn after_call(&mut self, tool: &str, ok: bool) {
-        if ok && !MEMO_TOOLS.contains(&tool) && !PURE.contains(&tool) {
+        if ok && clears(tool) {
             self.clear();
         }
     }
@@ -298,6 +316,16 @@ mod tests {
             call(&mut m, &n, "docs_get", "s", &json!({"id":id}), t);
         }
         assert_eq!(m.len(), 2);
+    }
+
+    #[test]
+    fn env_switch_turns_the_memo_off() {
+        assert!(enabled(true, None));
+        assert!(enabled(true, Some("1")));
+        for off in ["0", "false", "off", " 0 "] {
+            assert!(!enabled(true, Some(off)), "{off}");
+        }
+        assert!(!enabled(false, None));
     }
 
     #[test]

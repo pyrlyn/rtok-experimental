@@ -104,3 +104,8 @@ only with an explicit Batch client. Details: [batch-flex.md](batch-flex.md).
 [proxy.routing]
 sticky = true
 ```
+
+## MCP tool-result memo
+
+`rtok mcp` also memoizes read-only tool results, and keeps `tools/list` byte-stable so a
+host's cached prefix survives. See [mcp-cache.md](mcp-cache.md).
