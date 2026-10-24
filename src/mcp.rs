@@ -28,6 +28,7 @@ pub mod ping;
 pub mod http;
 
 mod agents;
+mod memo;
 mod messages;
 #[cfg(feature = "read")]
 mod paths;
@@ -408,6 +409,8 @@ struct Server {
     /// shared server does not redo the link rules every time.
     #[cfg(feature = "read")]
     caller: Mutex<Option<(std::time::Instant, Option<std::path::PathBuf>)>>,
+    /// Read-only tool results by full request key (see `memo`).
+    memo: Mutex<memo::Memo>,
 }
 
 impl Server {
@@ -524,6 +527,10 @@ impl Server {
             started: crate::log::now() as i64,
             #[cfg(feature = "read")]
             caller: Mutex::new(None),
+            memo: Mutex::new(memo::Memo::new(
+                cfg.mcp.cache_ttl_secs,
+                cfg.mcp.cache_max_entries,
+            )),
         })
     }
 
@@ -749,6 +756,43 @@ impl Server {
         .to_string())
     }
 
+    /// Who is asking, for the memo key: the cwd and the linked agent. A result may depend on
+    /// either, so a different caller never gets another's cached answer.
+    fn memo_scope(&self) -> String {
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let agent = self
+            .agent
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().map(|(id, _)| id.clone()))
+            .unwrap_or_default();
+        serde_json::json!([cwd.to_string_lossy(), agent]).to_string()
+    }
+
+    /// `invoke_text` through the memo: a hit for a byte-identical request of a memo tool,
+    /// else a real call whose successful answer is kept. A call that may write clears it.
+    fn memoized(&self, name: &str, args: &Value) -> (String, bool) {
+        let now = std::time::Instant::now();
+        let key = self
+            .memo
+            .lock()
+            .ok()
+            .and_then(|m| m.key(name, &self.memo_scope(), args));
+        if let Some(k) = &key
+            && let Some(hit) = self.memo.lock().ok().and_then(|mut m| m.get(k, now))
+        {
+            return (hit, true);
+        }
+        let (text, ok) = self.invoke_text(name, args);
+        if let Ok(mut m) = self.memo.lock() {
+            if ok && let Some(k) = key {
+                m.put(k, text.clone(), now);
+            }
+            m.after_call(name, ok);
+        }
+        (text, ok)
+    }
+
     fn tools(&self) -> Vec<Tool> {
         self.listed.iter().map(|t| to_tool(&t.def)).collect()
     }
@@ -853,7 +897,7 @@ impl Server {
         } else if let Some(msg) = found.and_then(|t| missing_required(&t.def.input_schema, &args)) {
             (format!("invalid params: {msg}"), false)
         } else {
-            self.invoke_text(name, &args)
+            self.memoized(name, &args)
         };
         let _ = record(&self.cx, plugin, name, &args, &text);
         if !ok {
@@ -1283,6 +1327,39 @@ mod tests {
         "mem_save",
         "mem_update",
     ];
+
+    /// Prompt caching: `tools/list` is the host's prompt prefix, so it must be byte-identical
+    /// across calls and across server processes (no timestamps, ids or unordered maps).
+    #[test]
+    fn tools_list_is_byte_stable() {
+        let (cfg, dir) = tmp("mcp-tools-stable");
+        let line = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
+        let one = Server::new(&cfg).unwrap();
+        let two = Server::new(&cfg).unwrap();
+        let first = one.handle_line(line).unwrap();
+        assert_eq!(first, one.handle_line(line).unwrap());
+        assert_eq!(first, two.handle_line(line).unwrap());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Only read-only tools may be memoized.
+    #[test]
+    fn memo_tools_are_read_only() {
+        for t in memo::MEMO_TOOLS {
+            assert!(READ_ONLY_TOOLS.contains(t), "{t}");
+        }
+    }
+
+    /// A failed call is never memoized: the same request runs (and fails) again.
+    #[test]
+    fn errors_are_not_memoized() {
+        let (cfg, dir) = tmp("mcp-memo-err");
+        let server = Server::new(&cfg).unwrap();
+        let args = json!({"id":"nope"});
+        let _ = server.memoized("docs_get", &args);
+        assert_eq!(server.memo.lock().unwrap().len(), 0);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     /// T528: every built-in tool, enabled or not, is sorted into one list on purpose, so a new
     /// tool can neither skip Codex's approval nor lose it by accident.

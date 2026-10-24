@@ -386,6 +386,11 @@ section! {
         /// The public HTTPS URL a tunnel serves the HTTP server at. Its host passes the Host
         /// check and its origin the Origin check; anything else is refused.
         public_url: String = String::new(),
+        /// Seconds a memoized read-only tool result stays fresh (see `src/mcp/memo.rs`).
+        /// `0` turns the memo off.
+        cache_ttl_secs: u64 = 300,
+        /// Most memoized results kept; the least recently used is dropped first. `0`: off.
+        cache_max_entries: u32 = 256,
     }
 }
 
