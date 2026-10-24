@@ -78,11 +78,7 @@ fn skip_wrap_host(
 /// embedded — a malformed or hostile `agent_id` must never reach the rewritten argv, and
 /// missing/unknown stays exactly today's un-scoped dispatch (fail open).
 fn is_valid_agent_id(id: &str) -> bool {
-    !id.is_empty()
-        && id.len() <= 64
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    crate::names::wrap_agent_id(id)
 }
 
 /// `--agent <id> ` when `cx` carries a validly-shaped sub-agent id, else empty — spliced

@@ -15,6 +15,16 @@ pub fn key(path: &str, mode: &str, range: Option<&str>) -> String {
     format!("{path}\t{mode}\t{}", range.unwrap_or(""))
 }
 
+/// T929.1: a sub-agent's row must not collide with the parent's. The parent keeps the
+/// three-field key so native delta can still find the last MCP `read` of the path.
+pub fn key_for(path: &str, mode: &str, range: Option<&str>, agent: Option<&str>) -> String {
+    let base = key(path, mode, range);
+    match agent {
+        Some(id) => format!("{base}\t{id}"),
+        None => base,
+    }
+}
+
 /// Unchanged re-read → one line; changed re-read → unified diff when it is below
 /// `read.delta_max_ratio` of the file (T58.1). `force_delta` is MCP `mode=diff`.
 pub fn hit(cx: &Ctx, key: &str, path: &str, body: &[u8], force_delta: bool) -> Option<String> {
@@ -79,7 +89,7 @@ fn dedup_line(cx: &Ctx, id: &str, body: &[u8]) -> String {
 }
 
 pub fn remember(cx: &Ctx, key: &str, body: &[u8]) -> anyhow::Result<String> {
-    let id = cx.put_archive(body)?;
+    let id = cx.put_archive_for(body, cx.agent_id())?;
     cx.put_read_cache(key, &hex_sha256(body), Some(&id))?;
     Ok(id)
 }
@@ -106,6 +116,7 @@ fn hex_sha256(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use crate::plugins::read::read;
+    use crate::plugins::read::read_for;
     use crate::plugins::read::read_with;
     use crate::plugins::read::tests::cx;
     use serde_json::json;
@@ -156,6 +167,68 @@ mod tests {
             assert!(again.contains("1:alpha"), "{again}");
             assert!(!again.contains("unchanged"), "{again}");
         }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// T929.1: with `agent` present, each window keeps its own stub and sees the other's
+    /// first read whole, even after a sub-agent has registered. Without the argument the
+    /// T929 fallback still prints the body.
+    #[test]
+    fn a_known_caller_scopes_stubs_to_its_window() {
+        let (cx, dir) = cx("windows");
+        let p = dir.join("a.txt");
+        let q = dir.join("b.txt");
+        let r = dir.join("c.txt");
+        let s = dir.join("d.txt");
+        let body = "a body long enough to be worth a pointer, repeated: ".repeat(8);
+        let other_body = "a second body, also long enough to pointer: ".repeat(8);
+        fs::write(&p, &body).unwrap();
+        fs::write(&q, &body).unwrap();
+        fs::write(&r, &other_body).unwrap();
+        fs::write(&s, &other_body).unwrap();
+        let path = p.to_str().unwrap();
+        let same = q.to_str().unwrap();
+        let hashed = r.to_str().unwrap();
+        let twin = s.to_str().unwrap();
+        let claude = cx.store.host_id("claude").unwrap().unwrap();
+        cx.store
+            .register_agent(claude, "windows", Some("child"), None, None)
+            .unwrap();
+        let parent = Ctx::new(&cx);
+        let child = Ctx::with_agent(&cx, Some("child"));
+
+        let first = read_for(&parent, path, "full", None, true).unwrap();
+        assert!(first.contains("1:a body"), "{first}");
+        let again = read_for(&parent, path, "full", None, true).unwrap();
+        assert!(again.contains(super::DEDUP_PREFIX), "{again}");
+
+        let child_first = read_for(&child, path, "full", None, true).unwrap();
+        assert!(child_first.contains("1:a body"), "{child_first}");
+        assert!(!child_first.contains(super::DEDUP_PREFIX), "{child_first}");
+        let child_again = read_for(&child, path, "full", None, true).unwrap();
+        assert!(child_again.contains(super::DEDUP_PREFIX), "{child_again}");
+
+        // Parent archived `path`; a twin path is a pointer in that window only.
+        let pointer = read_for(&parent, same, "full", None, true).unwrap();
+        assert!(pointer.contains("identical to a result"), "{pointer}");
+
+        let parent_hash = read_for(&parent, hashed, "full", None, true).unwrap();
+        assert!(parent_hash.contains("1:a second"), "{parent_hash}");
+        let parent_twin = read_for(&parent, twin, "full", None, true).unwrap();
+        assert!(
+            parent_twin.contains("identical to a result"),
+            "{parent_twin}"
+        );
+        let child_twin = read_for(&child, twin, "full", None, true).unwrap();
+        assert!(child_twin.contains("1:a second"), "{child_twin}");
+        assert!(
+            !child_twin.contains("identical to a result"),
+            "{child_twin}"
+        );
+
+        let unknown = read(&Ctx::new(&cx), path, "full", None).unwrap();
+        assert!(unknown.contains("1:a body"), "{unknown}");
+        assert!(!unknown.contains(super::DEDUP_PREFIX), "{unknown}");
         let _ = fs::remove_dir_all(dir);
     }
 

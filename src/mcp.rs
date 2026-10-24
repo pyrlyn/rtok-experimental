@@ -1142,7 +1142,14 @@ fn read_file(cx: &Runtime, args: &Value) -> Result<String> {
     let path = args["path"].as_str().unwrap_or("");
     let mode = args["mode"].as_str().unwrap_or("");
     let range = args["range"].as_str();
-    crate::plugins::read::read(&crate::plugin::Ctx::new(cx), path, mode, range)
+    let (agent, known) = crate::plugins::read::caller_arg(args);
+    crate::plugins::read::read_for(
+        &crate::plugin::Ctx::with_agent(cx, agent),
+        path,
+        mode,
+        range,
+        known,
+    )
 }
 
 #[cfg(feature = "memory")]
@@ -1493,6 +1500,68 @@ mod tests {
                 .unwrap()
                 .contains("path outside cwd"),
             "{v}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// T929.1: the hidden `agent` argument scopes re-read stubs to the calling window; without
+    /// it a session that has a sub-agent keeps the T929 whole-body fallback.
+    #[cfg(feature = "read")]
+    #[test]
+    fn read_agent_argument_scopes_stubs_and_without_it_the_fallback_holds() {
+        let (mut cfg, dir) = tmp("mcp-read-agent");
+        cfg.plugins.read.allow_paths = vec![dir.clone()];
+        let file = dir.join("a.txt");
+        fs::write(
+            &file,
+            "a body long enough to be worth a pointer, repeated: ".repeat(8),
+        )
+        .unwrap();
+        let path = file.to_str().unwrap();
+        let server = Server::new(&cfg).unwrap();
+        let claude = server.cx.store.host_id("claude").unwrap().unwrap();
+        server
+            .cx
+            .store
+            .register_agent(claude, &server.cx.session, Some("child"), None, None)
+            .unwrap();
+        let call = |args: Value| {
+            let line = json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                "params":{"name":"read","arguments":args}})
+            .to_string();
+            let v: Value = serde_json::from_str(&server.handle_line(&line).unwrap()).unwrap();
+            v["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+        let parent = json!({"path": path, "agent": ""});
+        let child = json!({"path": path, "agent": "child"});
+        let first = call(parent.clone());
+        assert!(
+            !first.contains(crate::plugins::read::cache::DEDUP_PREFIX),
+            "{first}"
+        );
+        let again = call(parent);
+        assert!(
+            again.contains(crate::plugins::read::cache::DEDUP_PREFIX),
+            "{again}"
+        );
+        let child_first = call(child.clone());
+        assert!(
+            !child_first.contains(crate::plugins::read::cache::DEDUP_PREFIX),
+            "{child_first}"
+        );
+        assert!(child_first.contains("1:a body"), "{child_first}");
+        let child_again = call(child);
+        assert!(
+            child_again.contains(crate::plugins::read::cache::DEDUP_PREFIX),
+            "{child_again}"
+        );
+        let unknown = call(json!({"path": path}));
+        assert!(
+            !unknown.contains(crate::plugins::read::cache::DEDUP_PREFIX),
+            "{unknown}"
         );
         let _ = fs::remove_dir_all(dir);
     }

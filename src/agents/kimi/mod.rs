@@ -213,7 +213,7 @@ fn load(path: &Path) -> Result<DocumentMut> {
 }
 
 /// Kimi's `(event, matcher)` pairs: Claude's list minus `SubagentStart`, whose hook output Kimi
-/// discards (the `kimi` rows of [`hook_events`]).
+/// discards, and the MCP `read` matcher (Kimi's `updatedInput` is unverified).
 fn entries() -> Vec<(&'static str, &'static str)> {
     hook_events::entries("kimi")
 }

@@ -375,7 +375,7 @@ mod tests {
             r#"{"model":"x","hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo stop"}]}]}}"#,
         )
         .unwrap();
-        assert!(run(&c, Kind::Cli, false).unwrap().contains("9 additions"));
+        assert!(run(&c, Kind::Cli, false).unwrap().contains("10 additions"));
         assert_eq!(run(&c, Kind::Cli, false).unwrap(), NO_CHANGES);
         let doc: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         let rows = hook_events::entries(HOST);
