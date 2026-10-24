@@ -871,7 +871,7 @@ impl Server {
         c.fetch_add(1, Ordering::Relaxed);
         let hits = self.memo_hits.load(Ordering::Relaxed);
         let misses = self.memo_misses.load(Ordering::Relaxed);
-        if (hits + misses) % 100 == 0 {
+        if (hits + misses).is_multiple_of(100) {
             let (entries, bytes) = self.cx.store.memo_stats().unwrap_or((0, 0));
             let msg =
                 format!("memo: {hits} hits, {misses} misses, {entries} entries, {bytes} bytes");
@@ -1426,6 +1426,58 @@ mod tests {
         assert_eq!(first, one.handle_line(line).unwrap());
         assert_eq!(first, two.handle_line(line).unwrap());
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Memo bench (`--ignored`): one fixed request set (15 distinct `mem_search` / `mem_get`
+    /// requests, each sent 5 times) run with the memo off and on. Prints wall time, real
+    /// tool executions and the estimated tokens of answers served from the memo.
+    #[cfg(feature = "memory")]
+    #[test]
+    #[ignore = "bench: run with --ignored --nocapture"]
+    fn memo_bench_fixed_request_set() {
+        let mut requests = Vec::new();
+        for r in 0..5 {
+            let _ = r;
+            for q in 0..10 {
+                requests.push(("mem_search", json!({"query": format!("topic{q}")})));
+            }
+            for id in 1..=5 {
+                requests.push(("mem_get", json!({"id": id})));
+            }
+        }
+        for on in [false, true] {
+            let (mut cfg, dir) = tmp(if on { "mcp-bench-on" } else { "mcp-bench-off" });
+            cfg.mcp.cache_enabled = on;
+            let server = Server::new(&cfg).unwrap();
+            for i in 0..200 {
+                let body = format!(
+                    "topic{} note {i} {}",
+                    i % 10,
+                    "lorem ipsum dolor ".repeat(40)
+                );
+                server
+                    .cx
+                    .store
+                    .insert_note(None, "note", &format!("n{i}"), &body)
+                    .unwrap();
+            }
+            let start = std::time::Instant::now();
+            let mut served_tokens = 0u64;
+            for (name, args) in &requests {
+                let (text, ok) = server.memoized(name, args);
+                assert!(ok, "{name}: {text}");
+                served_tokens += u64::from(server.cx.estimate(&text, Class::Json));
+            }
+            let ms = start.elapsed().as_secs_f64() * 1000.0;
+            let hits = server.memo_hits.load(Ordering::Relaxed);
+            let misses = server.memo_misses.load(Ordering::Relaxed);
+            println!(
+                "memo={on} requests={} executions={} hits={hits} ms={ms:.2} tokens_out={served_tokens}",
+                requests.len(),
+                if on { misses } else { requests.len() as u64 },
+            );
+            let _ = fs::remove_dir_all(dir);
+        }
     }
 
     /// Only read-only tools may be memoized.
