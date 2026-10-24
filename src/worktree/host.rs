@@ -6,7 +6,8 @@
 //! checked 2026-10-02) routed through the same code `rtok worktree add` / `remove` run, so a
 //! worktree the host creates gets rtok's location, name, owner lock and agent claim. T995.1:
 //! CodeBuddy has the same two hooks with the same payloads (`research.md` §18.6), so `--host`
-//! only changes whose agent and lock the worktree gets.
+//! only changes whose agent and lock the worktree gets. T995.2: Command Code's
+//! `worktree.createHook` / `removeHook` carry the same facts in its environment (see [`BARE`]).
 //!
 //! The host replaces its own create/remove with these hooks, so the contract differs from
 //! every other hook: `WorktreeCreate` prints the path (not JSON) and fails the creation on any
@@ -28,7 +29,14 @@ use crate::store::{AgentDetail, Store};
 
 /// The hosts whose plugin sends these hooks. The name is also the lock owner when no rtok agent
 /// can be named (no store, or no session id).
-pub const HOSTS: [&str; 2] = ["claude", "codebuddy"];
+pub const HOSTS: [&str; 3] = ["claude", "codebuddy", "commandcode"];
+
+/// Command Code runs its hook command with no plugin launcher around it: the name and path are
+/// in `COMMAND_CODE_WORKTREE_*`, nothing comes on stdin, no session is named, and a create that
+/// fails leaves the session without a worktree (Command Code 1.64.0 `dist/cli.mjs`, read
+/// 2026-10-25). So for it rtok reads the environment and makes the launcher's plain worktree
+/// itself ([`plain`]).
+const BARE: &str = "commandcode";
 
 pub fn handles(event: &str) -> bool {
     matches!(event, "WorktreeCreate" | "WorktreeRemove")
@@ -60,6 +68,35 @@ pub fn run(
         "{host} sends no {event}; worktree hooks come from {}",
         HOSTS.join(", ")
     );
+    let payload = if host == BARE {
+        from_env()?
+    } else {
+        from_stdin(event, stdin, cfg)?
+    };
+    let create_event = event == "WorktreeCreate";
+    if !cfg.worktree.enabled {
+        if host == BARE && create_event {
+            return Ok(Some(plain(&payload, host)?.display().to_string()));
+        }
+        return without_rtok(event, &payload);
+    }
+    let store = Store::open(&cfg.core.db_path).ok();
+    if create_event {
+        let path = match create(&payload, cfg, store.as_ref(), host) {
+            Err(e) if host == BARE => {
+                crate::log::stderr_ln(&format!("rtok: {e:#}; making a plain worktree"));
+                plain(&payload, host)?
+            }
+            made => made?,
+        };
+        return Ok(Some(path.display().to_string()));
+    }
+    let note = remove(&payload, cfg, store.as_ref(), host)?;
+    crate::log::stderr_ln(&format!("rtok: {}: {note}", payload.worktree_path));
+    Ok(None)
+}
+
+fn from_stdin(event: &str, stdin: impl Read, cfg: &Config) -> Result<Payload> {
     let max = u64::from(cfg.core.hook_max_input_bytes);
     let mut buf = Vec::new();
     stdin.take(max + 1).read_to_end(&mut buf)?;
@@ -67,18 +104,49 @@ pub fn run(
         buf.len() as u64 <= max,
         "{event} payload is over {max} bytes"
     );
-    let payload: Payload = serde_json::from_slice(&buf).context("bad payload")?;
-    if !cfg.worktree.enabled {
-        return without_rtok(event, &payload);
+    serde_json::from_slice(&buf).context("bad payload")
+}
+
+/// Command Code starts a create in the main checkout and a remove where the session began, so
+/// the working directory is the payload's `cwd`.
+fn from_env() -> Result<Payload> {
+    let var = |k: &str| std::env::var(k).unwrap_or_default();
+    Ok(Payload {
+        cwd: std::env::current_dir()?.display().to_string(),
+        name: var("COMMAND_CODE_WORKTREE_NAME"),
+        worktree_path: var("COMMAND_CODE_WORKTREE_PATH"),
+        ..Payload::default()
+    })
+}
+
+/// What the plugin launchers make when rtok cannot: `.<host>/worktrees/<name>` in the main
+/// checkout on `worktree-<name>`, the name made path-safe the same way.
+fn plain(p: &Payload, host: &str) -> Result<PathBuf> {
+    ensure!(
+        !p.name.is_empty() && !p.cwd.is_empty(),
+        "payload has no name or cwd"
+    );
+    let mut name: String = p
+        .name
+        .chars()
+        .map(|c| match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '_' | '-' => c,
+            _ => '-',
+        })
+        .collect();
+    if name.is_empty() || name.starts_with(['.', '-']) {
+        name.insert_str(0, "w-");
     }
-    let store = Store::open(&cfg.core.db_path).ok();
-    if event == "WorktreeCreate" {
-        let path = create(&payload, cfg, store.as_ref(), host)?;
-        return Ok(Some(path.display().to_string()));
+    let main = git::list(Path::new(&p.cwd))?
+        .first()
+        .context("git lists no worktree")?
+        .path
+        .clone();
+    let path = main.join(format!(".{host}")).join("worktrees").join(&name);
+    if !path.is_dir() {
+        git::add_plain(&main, &path, &format!("worktree-{name}"))?;
     }
-    let note = remove(&payload, store.as_ref(), host)?;
-    crate::log::stderr_ln(&format!("rtok: {}: {note}", payload.worktree_path));
-    Ok(None)
+    Ok(path)
 }
 
 /// `[worktree] enabled = false` (T410): what the host does without rtok. A create prints no
@@ -108,7 +176,7 @@ fn create(p: &Payload, cfg: &Config, store: Option<&Store>, host: &str) -> Resul
     if let Some(r) = git::list(cwd)?.iter().skip(1).find(|r| known(r)) {
         return Ok(native(r.path.clone()));
     }
-    let agent = session_agent(store, p, host);
+    let agent = session_agent(store, p, host).or_else(|| live_agent(store, p, cwd, cfg, host));
     let owner = agent.is_none().then(|| host.to_string());
     let auto_add = cfg.plugins.graph.auto_add_projects;
     let plan = claim::add(
@@ -134,9 +202,24 @@ fn session_agent(store: Option<&Store>, p: &Payload, host: &str) -> Option<Agent
     store.agent_detail(&id).ok()?
 }
 
+/// A payload that names no session ([`BARE`]): the host's one live agent working in the
+/// repository, the rule `adopt` applies to a host's post-create script (T289.3).
+fn live_agent(
+    store: Option<&Store>,
+    p: &Payload,
+    cwd: &Path,
+    cfg: &Config,
+    host: &str,
+) -> Option<AgentDetail> {
+    let store = store.filter(|_| p.session_id.is_empty())?;
+    let main = git::list(cwd).ok()?.first()?.path.clone();
+    let host = store.host_id_or_other(host).ok()?;
+    claim::sole_live_agent(store, &[host], &main, &cfg.agents.idle).ok()?
+}
+
 /// Removes what rtok would remove for its own agent; leaves everything else in place and says why
 /// (the `Err`). Tagged caches go either way: they hold no source (T152).
-fn remove(p: &Payload, store: Option<&Store>, host: &str) -> Result<String> {
+fn remove(p: &Payload, cfg: &Config, store: Option<&Store>, host: &str) -> Result<String> {
     ensure!(!p.worktree_path.is_empty(), "payload has no worktree_path");
     let path = Path::new(&p.worktree_path);
     if !path.exists() {
@@ -160,7 +243,9 @@ fn remove(p: &Payload, store: Option<&Store>, host: &str) -> Result<String> {
     if entry.state == State::Main {
         bail!("is the main checkout");
     }
-    let (agent, owner) = caller(store, p, entry.record.owner().and_then(|o| o.agent), host);
+    let live = live_agent(store, p, main, cfg, host);
+    let locked = entry.record.owner().and_then(|o| o.agent);
+    let (agent, owner) = caller(store, p, locked, live, host);
     let who = Caller {
         agent: agent.as_deref(),
         owner: Some(&owner),
@@ -186,17 +271,23 @@ fn remove(p: &Payload, store: Option<&Store>, host: &str) -> Result<String> {
 /// `(agent id, owner)` to remove as: the lock's own agent when it belongs to the payload's
 /// session (a sub-agent's worktree is removed under its parent's `session_id`), else the
 /// session's first agent, else no agent and the plain host name an agent-less lock carries.
+/// `live` stands in for the session's agents when the payload names no session.
 fn caller(
     store: Option<&Store>,
     p: &Payload,
     locked: Option<String>,
+    live: Option<AgentDetail>,
     host: &str,
 ) -> (Option<String>, String) {
-    let rows = store.and_then(|s| {
-        s.agents_of_sessions(std::slice::from_ref(&p.session_id))
-            .ok()
-    });
-    let rows = rows.unwrap_or_default();
+    let rows = match live {
+        Some(agent) => vec![agent],
+        None => store
+            .and_then(|s| {
+                s.agents_of_sessions(std::slice::from_ref(&p.session_id))
+                    .ok()
+            })
+            .unwrap_or_default(),
+    };
     let pick = |id: &String| rows.iter().find(|a| &a.id == id);
     let agent = locked.as_ref().and_then(pick).or(rows.first());
     let owner = claim::owner(None, agent, store).unwrap_or_else(|_| host.into());
