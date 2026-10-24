@@ -51,6 +51,12 @@ pub fn config_in(dir: &Path) -> Config {
 /// first (T252, T254): a reload would otherwise point each `~/x` back at this machine's real
 /// `~/.claude*`, `~/.codex` and agent configs, and a snapshot would parse its session history.
 pub fn config_file_in(dir: &Path) -> Config {
+    // Fixtures need persisted paths, not the annotated reference file: revealing each path
+    // in that template repeatedly scans all its documentation before applying the edits.
+    let path = Config::user_path(dir, None);
+    if !path.exists() {
+        crate::config::write_file(&path, "").expect("empty fixture config");
+    }
     let mut rebased = config_in(dir);
     let mut pairs: Vec<(String, String)> = Vec::new();
     // A list key (`plugins.read.allow_paths[0]`, `agents.usage.dirs.kilo[0]`) is one `set`
@@ -319,7 +325,11 @@ mod tests {
     #[test]
     fn every_config_path_stays_in_dir() {
         let dir = super::tmp_dir("paths-in-dir");
-        for mut c in [super::config_in(&dir), super::config_file_in(&dir)] {
+        for mut c in [
+            super::config_in(&dir),
+            super::config_file_in(&dir),
+            crate::config::Config::load_from(&dir).unwrap(),
+        ] {
             for (key, path) in c.path_fields_mut() {
                 let shown = path.display();
                 assert!(
@@ -328,6 +338,17 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn config_fixture_preserves_existing_settings_and_rebased_paths_on_reload() {
+        let dir = super::tmp_dir("config-reload").join("nested");
+        super::config_file_in(&dir);
+        crate::config::validate::set(&dir, "tui.tab", "plugins", false).unwrap();
+        let cfg = super::config_file_in(&dir);
+        assert_eq!(cfg.tui.tab, "plugins");
+        let reloaded = crate::config::Config::load_from(&dir).unwrap();
+        assert_eq!(cfg, reloaded);
     }
 
     /// T255: nextest's `test-home` setup script moves `HOME` under `target/`, so a path that
