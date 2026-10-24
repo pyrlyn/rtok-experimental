@@ -270,7 +270,11 @@ fn setting_file(key: &str) -> &'static str {
 }
 
 #[cfg(feature = "graph")]
-fn languages(cfg: &Config, root: &Path, installed: &dyn Fn(&str) -> bool) -> (Vec<LanguageRow>, bool) {
+fn languages(
+    cfg: &Config,
+    root: &Path,
+    installed: &dyn Fn(&str) -> bool,
+) -> (Vec<LanguageRow>, bool) {
     use crate::plugins::graph::lsp;
     use std::collections::BTreeMap;
 
@@ -286,7 +290,11 @@ fn languages(cfg: &Config, root: &Path, installed: &dyn Fn(&str) -> bool) -> (Ve
         .into_iter()
         .map(|(lang, n)| language_row(lang, n, root, installed))
         .collect();
-    rows.sort_by(|a, b| b.files.cmp(&a.files).then_with(|| a.language.cmp(&b.language)));
+    rows.sort_by(|a, b| {
+        b.files
+            .cmp(&a.files)
+            .then_with(|| a.language.cmp(&b.language))
+    });
     (rows, cut)
 }
 
@@ -379,9 +387,7 @@ fn graph_part(
     let rt = rt?;
     let backend = backend_name(&rtok_plugin_sdk::Ctx::new(rt), root);
     let registered = rt.store.project_by_root(root).ok().flatten();
-    let row = registered
-        .clone()
-        .and_then(|p| projects::row(rt, p).ok());
+    let row = registered.clone().and_then(|p| projects::row(rt, p).ok());
     let index = row.as_ref().and_then(|r| r.index.as_ref());
     let indexed = index.is_some_and(|i| i.indexed_at.is_some() || i.rows > 0);
     let mut next = Vec::new();
@@ -389,9 +395,7 @@ fn graph_part(
         next.push(format!("rtok graph index {}", root.display()));
     }
     if matches!(backend.as_str(), "tags" | "text")
-        && let Some(l) = languages
-            .iter()
-            .find(|l| l.installed && l.marker.is_some())
+        && let Some(l) = languages.iter().find(|l| l.installed && l.marker.is_some())
     {
         let server = l.server.as_deref().unwrap_or("the language server");
         next.push(format!(
@@ -483,11 +487,9 @@ impl ProjectReport {
                 } else {
                     "not registered"
                 },
-                g.state.as_deref().unwrap_or(if g.indexed {
-                    "indexed"
-                } else {
-                    "not indexed"
-                }),
+                g.state
+                    .as_deref()
+                    .unwrap_or(if g.indexed { "indexed" } else { "not indexed" }),
                 g.files.map_or_else(String::new, |n| format!(", {n} files")),
             ));
             if let Some(score) = g.score {
@@ -552,7 +554,12 @@ mod tests {
         r.languages.iter().find(|l| l.language == lang).unwrap()
     }
 
-    fn measurement(plugin: &'static str, kind: &'static str, before: u32, after: u32) -> Measurement {
+    fn measurement(
+        plugin: &'static str,
+        kind: &'static str,
+        before: u32,
+        after: u32,
+    ) -> Measurement {
         Measurement {
             plugin,
             kind,
@@ -637,7 +644,10 @@ mod tests {
         assert_eq!(at("read"), Some(".rtok.toml"));
         assert_eq!(at("graph"), Some("user config"));
         assert_eq!(at("cmd"), None, "an enabled plugin is not listed");
-        assert!(report.graph.is_none(), "no graph part while the plugin is off");
+        assert!(
+            report.graph.is_none(),
+            "no graph part while the plugin is off"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -655,7 +665,11 @@ mod tests {
         rt.store
             .upsert_session("elsewhere", None, Some("other"), None, None)
             .unwrap();
-        for (session, before, after) in [("here", 300, 100), ("here", 200, 100), ("elsewhere", 400, 100)] {
+        for (session, before, after) in [
+            ("here", 300, 100),
+            ("here", 200, 100),
+            ("elsewhere", 400, 100),
+        ] {
             rt.store
                 .insert_measurement(session, &measurement("graph", "lsp.symbol", before, after))
                 .unwrap();

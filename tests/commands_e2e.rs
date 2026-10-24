@@ -378,7 +378,10 @@ fn doctor_project_reports_the_language_server_from_path() {
             .unwrap_or_else(|| panic!("no rust row in {report}"))
     };
     let found = rust(&with);
-    assert_eq!((found["files"].as_u64(), found["installed"].as_bool()), (Some(1), Some(true)));
+    assert_eq!(
+        (found["files"].as_u64(), found["installed"].as_bool()),
+        (Some(1), Some(true))
+    );
     let missing = rust(&without);
     assert_eq!(missing["installed"], false);
     assert_eq!(missing["install"], "rustup component add rust-analyzer");

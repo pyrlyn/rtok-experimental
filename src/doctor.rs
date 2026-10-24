@@ -637,17 +637,14 @@ pub fn page(cfg: &Config) -> Result<Report> {
             .and_then(|s| s.get("autoCompactWindow"))
             .map(|v| v.to_string()),
         read_share: read_share(cfg),
-        instructions: cfg
-            .doctor
-            .instructions
-            .then(|| {
-                instruction_audit(
-                    cfg,
-                    settings.as_ref(),
-                    claude.as_ref(),
-                    std::env::current_dir().ok().as_deref(),
-                )
-            }),
+        instructions: cfg.doctor.instructions.then(|| {
+            instruction_audit(
+                cfg,
+                settings.as_ref(),
+                claude.as_ref(),
+                std::env::current_dir().ok().as_deref(),
+            )
+        }),
         skills: skills_audit(cfg),
         overlaps: {
             let mut lines = overlap_lines(
