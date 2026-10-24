@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rtok::plugin::{Ctx, Plugin, Runtime};
 use rtok::plugins::graph::lsp::on_path;
-use rtok::plugins::graph::{GraphPlugin, callers, outline, symbol};
+use rtok::plugins::graph::{GraphPlugin, callers, outline, scope, symbol};
 
 const CHAIN: &str = "fn a() {\n    b();\n}\nfn b() {\n    c();\n}\nfn c() {}\n";
 const OTHER: &str = "fn d() {\n    c();\n    c();\n}\n";
@@ -205,7 +205,13 @@ fn lsp_backend_outlines_dart_main() {
     )
     .unwrap();
     let ctx = Ctx::new(&cx);
-    let res = outline(&ctx, &root.join("lib/main.dart").to_string_lossy());
+    // Probe the fixture's Dart server, not the Rust checkout's server via cwd.
+    let projects = scope::resolve(&cx.store, None, &root).unwrap();
+    let res = scope::outline(
+        &ctx,
+        &projects,
+        &root.join("lib/main.dart").to_string_lossy(),
+    );
     let text = match &res {
         Ok(m) => m.clone(),
         Err(e) => e.to_string(),
@@ -216,6 +222,14 @@ fn lsp_backend_outlines_dart_main() {
         return;
     }
     let map = res.unwrap();
+    assert!(
+        cx.store
+            .list_measurements("graph")
+            .unwrap()
+            .iter()
+            .any(|m| m.kind == "lsp.outline"),
+        "expected Dart LSP outline, got: {map}"
+    );
     assert!(map.contains("helper"), "{map}");
     assert!(map.contains("main"), "{map}");
     assert_lsp_state_stays_in(&dir, &root);

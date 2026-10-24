@@ -473,7 +473,7 @@ Every effective key with its origin — the `config show --sources` page.
 | worktree.seed | true | default |
 | worktree.seed_dirs | [target, node_modules] | default |
 
-426 keys.
+427 keys.
 
 ## Doctor
 

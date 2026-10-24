@@ -23,6 +23,7 @@ fn tui_without_a_tty_exits_one_with_one_clean_stderr_line() {
     let home = home();
     let out = Command::new(env!("CARGO_BIN_EXE_rtok"))
         .arg("tui")
+        .env_remove("RUST_LOG")
         .env("RTOK_HOME", &home)
         .env("HOME", &home)
         .current_dir(&home)

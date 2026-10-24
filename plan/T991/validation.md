@@ -1,75 +1,118 @@
 # T991 validation
 
-## Change
+## Result
 
-Fresh `testutil::config_file_in` fixtures start with an empty file written through
-the existing atomic config writer. The existing `set_all_with` still writes and
-validates every rebased path, and `Config::load_from` still loads the result.
-Existing files are preserved. No dependency, production config initialization,
-test selection, timeout, or concurrency setting changed.
+The complete nextest run decreased from **435.341 s to 198.771 s**, including setup but
+excluding compilation: **54.3% less time, or 2.19 times faster**, in this local pair.
+Both variants passed **4,236 tests**, with the same **8 ignored tests**. Final `just check`
+selected `full-check` and exited 0.
 
-Previously each fresh fixture initialized the annotated reference config and
-`reveal_commented_key` scanned that whole document once for each path. TUI, web,
-graph model, and other tests reuse this helper. The existing config writer and
-validator already provide the necessary implementation; no new helper or package
-was introduced.
+## Changes and resolved blockers
 
-Regression coverage checks paths after a further reload and an existing setting
-after repeated fixture preparation, including creation of a missing parent.
+- Fresh `testutil::config_file_in` fixtures start with an empty file through the existing
+  atomic writer. `set_all_with` still validates and writes every rebased path, and
+  `Config::load_from` still reloads it. Regression tests check reload equality, path
+  containment, retained settings and creation of a missing parent directory.
+- The doctor CLI snapshot uses trycmd's existing filesystem sandbox and shared input
+  directory. It still runs the real CLI and checks the same stdout, including the ambient
+  logging variant. Its empty transcript fixture is preserved. A process sample located the
+  old delay in `agents::junk_worktrees::items`, walking the actual checkout's worktrees.
+- The Dart LSP test selects its fixture project explicitly and requires an `lsp.outline`
+  measurement. It no longer probes the Rust checkout's language server first.
+- Snapshot totals left stale by T970 are corrected to 612 config lines and 427 keys.
+  Two stderr contract tests clear inherited `RUST_LOG`. The unlinked-agent test checks
+  the existing refusal and recovery hint, retaining its unchanged-inventory assertion.
+- Guard-check and the locked-store hook test use the existing exclusive nextest scheduling
+  mechanism. Their setup writes failed open under parallel I/O pressure but passed alone;
+  their assertions and timing bounds are retained.
+- The SessionEnd ownership test awaits the documented deferred unlock. Its failed fixture
+  later had A unlocked and B still locked, proving the immediate assertion raced the child.
+  Both an available store and a deliberately held writer are covered with the existing lock
+  fixture; A/B ownership and GC assertions remain. The focused binary passes all three cases.
+- Worktree rollback/retry and existing-branch checks keep using their existing injected
+  `plenty` free-space reading with real git. Two calls accidentally used `Seams::HOST` and
+  failed at the unrelated 2 GiB floor. All four rollback/free-space cases pass after the fix;
+  explicit low-space refusal coverage is retained.
 
-## Local diagnostic timings
+No dependency or production behavior changed. No test was removed or newly ignored.
 
-Measured on 2026-10-24, macOS arm64, Rust 1.99.1, baseline `31633156a`.
-These are fixture preparation timings, not token savings or a whole-suite speedup.
+## Measurement method
 
-Both exact `config_in` and `config_file_in` function bodies were extracted from
-the baseline and working source and linked into one small unoptimized Rust driver
-against the same already-built `rtok_config` and `serde_json` libraries. This
-avoided rebuilding the full application after the disk filled. Each sample used
-a fresh nested directory; before/after order alternated. Compilation and
-subsequent correctness assertions were outside the timed interval.
+2026-10-24, macOS 27.0.1 (26A434), arm64 Mac15,9, 16 logical CPUs, 64 GiB RAM.
+Rust/Cargo 1.98.1 (repository pin), rustc `48a229cea` (2026-09-01), nextest 0.9.143.
+Both variants execute 4,236 tests across 145 binaries, with the same 8 tests ignored by
+default. They use 16 test threads, `RUST_LOG=warn`, `CARGO_INCREMENTAL=0` and
+`CARGO_PROFILE_DEV_DEBUG=0`, with no retries.
 
-| Pair | Before, seconds | After, seconds |
+The baseline restores only the old config helper initialization and doctor fixture.
+All blocker fixes and added regression cases are identical in both variants.
+
+```sh
+RUST_LOG=warn CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+  mise exec rust@1.98.1 -- cargo nextest run --workspace \
+  --test-threads 16 --no-fail-fast \
+  --config-file .rtok/t991-benchmark-nextest.toml
+
+RUST_LOG=warn CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+  CARGO="mise exec rust@1.98.1 -- cargo" just check
+```
+
+The ignored measurement config is a copy of `.config/nextest.toml` with only the
+`binary(cli_trycmd)` termination cap extended from 180 to 600 seconds. A previous baseline
+hit 180 seconds under external CI load. Neither CLI case in the successful baseline reached
+180 seconds, so the extension did not affect its completed workload. The optimized
+`just check` uses the committed config and ordinary limits; shared-input changes select
+`full-check`, including the complete nextest suite.
+
+| Measurement | Baseline | Optimized |
 | --- | ---: | ---: |
-| 1 | 0.719591 | 0.030796 |
-| 2 | 0.709703 | 0.025899 |
-| 3 | 0.723630 | 0.027488 |
-| 4 | 0.709412 | 0.031208 |
-| 5 | 0.723215 | 0.033262 |
+| nextest total, including setup | 435.341 s | 198.771 s |
+| setup | 0.130 s | 4.308 s |
+| execution after setup | 435.211 s | 194.463 s |
+| test compilation reported by Cargo | 8.01 s | 37.33 s |
+| CLI snapshots (`cli`) | 106.107 s | 1.048 s |
+| CLI snapshots with ambient logging | 101.815 s | 0.985 s |
+| result | 4,236 passed; 8 ignored | 4,236 passed; 8 ignored |
 
-Median: 0.719591 s to 0.030796 s, approximately 23.4 times faster for this helper.
-The same driver passed assertions for reload equality, containment of every
-absolute path, retention of `tui.tab = "plugins"` across repeated setup, and
-equality of the old and new configurations created at the same path.
-Raw sample output is in [fixture-timing.md](fixture-timing.md).
+Execution excluding setup decreased by 55.3% (2.24 times faster). The headline includes
+setup. Baseline whole-command wall time was 458.69 s; final `just check` was 323.32 s.
+The latter also includes lint, minimal-feature build and other gates, so these two command
+wall times are not used to calculate the speedup.
 
-Driver invocation used `mise exec rust@1.99.1 -- rustc --edition=2024` with
-`--extern rtok_config`, `--extern serde_json`, and `-L dependency=target/debug/deps`.
-Execution used private `HOME` and `TMPDIR`, `RTOK_HOST_SANDBOX=1`, and
-`RTOK_WORKTREE_MIN_FREE_MIB=0`. No real agents were invoked.
+Local evidence is retained under `.rtok/` in this worktree:
+`t991-baseline-sample6.log`, `t991-final-check3.log`, and their `.time` files.
 
-Before the change, nextest ran 91 TUI tests successfully in 20.319 s after a
-92-second dependency build. A warm run including the existing path-isolation
-test passed 92 tests in 13.775 s. The old unit binary directly ran the 91 TUI
-tests in 11.84 s with 16 threads. Concurrent machine activity makes these
-diagnostic baselines unsuitable for a whole-suite speedup claim. There is no
-post-change TUI-suite measurement.
+```text
+Summary [435.341s] 4236 tests run: 4236 passed (2 slow), 8 skipped
+Summary [198.771s] 4236 tests run: 4236 passed, 8 skipped
+```
 
-## Verification and remaining gate
+This is one local before/after pair on a shared machine, not a cross-host guarantee.
+External Actions archive jobs, builds and desktop applications varied during the investigation;
+no external build/archive writers were observed during the final pair's test-phase polls.
+Every failed or incomplete run is excluded from the comparison, including ENOSPC, the earlier
+CLI timeout, the deferred-unlock race and the host free-space fixture failures. Earlier
+4,235-test diagnostics preceded the added SessionEnd regression variant.
 
-- Exact before/after fixture driver: passed all assertions and five timing pairs.
-- `mise exec rust@1.99.1 -- cargo fmt --all -- --check`: passed.
-- `git diff --check`: passed.
-- Focused nextest with the repository's pinned Rust 1.98.1: compilation failed
-  with `No space left on device`; tests did not run.
-- Retry with Rust 1.99.1 (the main checkout's pre-existing local toolchain
-  setting), `CARGO_INCREMENTAL=0`: the root test binary again could not be built
-  because the disk filled. Neither toolchain configuration was edited.
-- `just check` using `CARGO="mise exec rust@1.99.1 -- cargo"`: stopped at Clippy
-  on 34 existing `redundant_field_names` diagnostics in unchanged `rtok-store`
-  code; the run also reported deprecated `Atomic::fetch_update` in `rtok-sys`.
-  It did not reach the test gate. Those unrelated files were not changed.
+## Verification
 
-Only this task's failed build artifacts were cleaned. Other worktrees, the
-concurrent runner, and the user's existing `mise.toml` edit were left intact.
-The task remains open until focused nextest and `just check` can complete.
+Final `just check` passed formatting, all three Clippy commands, all 4,236 workspace tests,
+the minimal-feature build, duplication detection (408 clones; within the configured limit),
+JavaScript lint/format and all 43 Python tests. The optional `swarfr` step was a documented
+no-op because that tool is not installed. The command exited 0.
+
+The repository's pinned compiler resolved the earlier Clippy blocker without suppressions
+or changes to the main checkout's pre-existing `mise.toml` edit. Disk recovery included
+removing a reproducible extracted VM base verified against its retained archive and cleaning
+only this task's finished test fixtures. Other worktrees and CI processes were left intact.
+
+## Earlier helper-only microbenchmark
+
+Five alternating old/new pairs on macOS arm64 with Rust 1.99.1 measured exact helper bodies
+linked against the same existing libraries. Median fixture preparation decreased from
+0.719591 s to 0.030796 s (23.4 times faster). Correctness assertions ran outside the timed
+interval and covered reload equality, containment, existing settings and old/new config
+equality at the same path. See [raw fixture timings](fixture-timing.md).
+
+That diagnostic measures only fixture preparation. It is separate from the full-suite
+comparison above, and neither measurement is a token-saving claim.

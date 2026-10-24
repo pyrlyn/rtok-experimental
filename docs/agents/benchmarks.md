@@ -48,3 +48,7 @@ Each comparison page keeps these `##` sections, in this order:
 - [ ] Latency not presented as filter speed (the replay shim dominates it).
 - [ ] English only; ru/uk mirrors updated or listed as a follow-up.
 - [ ] Temporary dirs and containers removed.
+
+## 5. T991 developer test-runtime run (2026-10-24)
+
+For the full-workspace nextest comparison, keep the 4,236 executed tests and 8 ignored tests fixed. Use Rust 1.98.1, 16 test threads, `CARGO_INCREMENTAL=0`, and `CARGO_PROFILE_DEV_DEBUG=0` for both runs. Record compilation/setup wall time separately from nextest execution time. See the [T991 validation evidence](../../plan/T991/validation.md).
