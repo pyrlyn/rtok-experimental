@@ -78,9 +78,28 @@ fn only(home: &Path, on: bool) -> Option<(String, Origin)> {
 }
 
 #[test]
-fn a_session_in_a_new_directory_registers_it_only_when_on() {
+fn a_session_that_ran_no_tool_does_not_register_a_project() {
+    let (home, proj) = scene("auto-add-toolless", true);
+    let start = serde_json::json!({
+        "hook_event_name": "SessionStart",
+        "session_id": "sess-auto-add",
+        "cwd": proj,
+        "source": "startup",
+    });
+    rtok(&home, &proj, &["hook", "SessionStart"], &start.to_string());
+    let end = serde_json::json!({
+        "hook_event_name": "SessionEnd",
+        "session_id": "sess-auto-add",
+        "cwd": proj,
+    });
+    rtok(&home, &proj, &["hook", "SessionEnd"], &end.to_string());
+    assert!(projects(&home).is_empty());
+}
+
+#[test]
+fn a_session_that_ran_a_tool_registers_the_project_only_when_on() {
     for on in [true, false] {
-        let (home, proj) = scene(&format!("auto-add-session-{on}"), on);
+        let (home, proj) = scene(&format!("auto-add-tool-{on}"), on);
         let start = serde_json::json!({
             "hook_event_name": "SessionStart",
             "session_id": "sess-auto-add",
@@ -88,6 +107,14 @@ fn a_session_in_a_new_directory_registers_it_only_when_on() {
             "source": "startup",
         });
         rtok(&home, &proj, &["hook", "SessionStart"], &start.to_string());
+        let tool = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "session_id": "sess-auto-add",
+            "cwd": proj,
+            "tool_name": "Read",
+            "tool_input": {"file_path": proj.join("x.rs")},
+        });
+        rtok(&home, &proj, &["hook", "PreToolUse"], &tool.to_string());
         let want = on.then(|| (spelled(&proj), Origin::Session));
         assert_eq!(only(&home, on), want);
     }

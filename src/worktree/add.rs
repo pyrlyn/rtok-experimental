@@ -12,6 +12,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rtok_config::root::{ProjectRoot, contain, resolved};
 
 use super::{Owner, git};
+use crate::store::Store;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Plan {
@@ -37,6 +38,23 @@ fn ident(what: &str, raw: &str) -> Result<String> {
         "{what} `{raw}` must match [a-z0-9][a-z0-9._-]* and be a valid branch name"
     );
     Ok(id)
+}
+
+/// Agents pass `T504 read-hook-same-path` the way the branch is named: one argument. The first
+/// token is the task id, the rest the slug; spaces in a slug become dashes, a separate `slug`
+/// is joined after the rest, and a bare id is unchanged.
+fn split_id_slug<'a>(task: &'a str, slug: Option<&str>) -> (&'a str, Option<String>) {
+    let task = task.trim();
+    let (id, rest) = task.split_once(char::is_whitespace).unwrap_or((task, ""));
+    let dashed = |s: &str| {
+        let d = s.split_whitespace().collect::<Vec<_>>().join("-");
+        (!d.is_empty()).then_some(d)
+    };
+    let slug = match (dashed(rest), slug.and_then(dashed)) {
+        (Some(rest), Some(slug)) => Some(format!("{rest}-{slug}")),
+        (rest, slug) => rest.or(slug),
+    };
+    (id, slug)
 }
 
 /// The directory `root` names for the repository whose main checkout is `main`. A relative
@@ -66,9 +84,10 @@ pub fn plan(
     (owner, agent): (&str, Option<&str>),
     date: &str,
 ) -> Result<Plan> {
+    let (task, slug) = split_id_slug(task, slug);
     let task = ident("task id", task)?;
     let branch = match slug {
-        Some(slug) => format!("{task}-{}", ident("slug", slug)?),
+        Some(slug) => format!("{task}-{}", ident("slug", &slug)?),
         None => task.clone(),
     };
     let reason = Owner {
@@ -117,17 +136,59 @@ pub fn plan(
             )
         })?;
     }
-    ensure!(
-        !path.exists(),
-        "{} already exists: one worktree per task",
-        path.display()
-    );
     Ok(Plan {
         path,
         branch,
         task,
         reason,
     })
+}
+
+/// What a retry of an add that already landed gets back: the plan of the worktree that is there.
+/// `Ok(None)` when nothing is at the path; an error when something else is — another task's
+/// directory, a worktree someone else holds, or a directory git does not know.
+fn existing(
+    worktrees: &[super::Record],
+    plan: &Plan,
+    (owner, agent): (&str, Option<&str>),
+    store: Option<&Store>,
+) -> Result<Option<Plan>> {
+    if !plan.path.exists() {
+        return Ok(None);
+    }
+    let clash = |why: String| {
+        anyhow::anyhow!(
+            "{} already exists: one worktree per task{why}",
+            plan.path.display()
+        )
+    };
+    let here = crate::fs::canon(&plan.path);
+    let record = worktrees
+        .iter()
+        .skip(1)
+        .find(|r| crate::fs::same_path(&crate::fs::canon(&r.path), &here))
+        .ok_or_else(|| clash(String::new()))?;
+    let ours = record.owner().is_some_and(|o| o.task == plan.task);
+    // An agent-less caller has no id to match a lock that names one, so it never reuses it.
+    let held = super::claim::held_against(record, (owner, agent.unwrap_or("")), store);
+    if let Some(held) = held {
+        return Err(clash(format!(" ({})", held.locked())));
+    }
+    if !ours {
+        return Err(clash(String::new()));
+    }
+    Ok(Some(Plan {
+        branch: record.branch.clone().unwrap_or_else(|| plan.branch.clone()),
+        path: plan.path.clone(),
+        task: plan.task.clone(),
+        reason: plan.reason.clone(),
+    }))
+}
+
+/// A created worktree with what undoes it, or the one a retry found already there.
+pub enum Added<'a> {
+    New(Plan, Undo<'a>),
+    Existing(Plan),
 }
 
 /// The rule [`ensure_ignored`] adds.
@@ -173,18 +234,124 @@ pub(super) fn today() -> Result<String> {
     Ok(crate::log::stamp(now.as_secs())[..10].to_string())
 }
 
-/// Creates the worktree and returns its plan. A failed fetch is an error: branching
-/// from a stale base is how a finished task gets rebuilt on old code.
-pub fn run(
+/// The two effects a healthy test machine cannot cause: a nearly full volume, and a
+/// `git worktree add` that dies half-way.
+#[derive(Clone, Copy)]
+pub struct Seams {
+    /// Free bytes on the volume that holds an existing path.
+    pub free_bytes: fn(&Path) -> std::io::Result<u64>,
+    /// `git worktree add` for `(repo, path, branch, lock reason, base)`.
+    pub create: fn(&Path, &Path, &str, &str, &str) -> Result<()>,
+}
+
+impl Seams {
+    pub const HOST: Self = Self {
+        free_bytes: rtok_sys::free_bytes,
+        create: git::add_locked,
+    };
+}
+
+/// Refuses when the volume that would hold `path` has less than `min_mib` MiB free. `path` does
+/// not exist yet, so the nearest ancestor that does stands for its volume. A reading that fails
+/// lets the add go on: an unknown is no reason to block work.
+fn ensure_room(seams: &Seams, path: &Path, min_mib: u32) -> Result<()> {
+    let Some(on) = path
+        .ancestors()
+        .find(|p| p.exists())
+        .filter(|_| min_mib > 0)
+    else {
+        return Ok(());
+    };
+    let free = match (seams.free_bytes)(on) {
+        Ok(free) => free >> 20,
+        Err(e) => {
+            crate::log::stderr_ln(&format!(
+                "warning: free space of {} unknown: {e}",
+                on.display()
+            ));
+            return Ok(());
+        }
+    };
+    ensure!(
+        free >= u64::from(min_mib),
+        "only {free} MiB free for {}, below `[worktree] min_free_mib` = {min_mib}; free disk space or lower it (0 turns the check off)",
+        path.display()
+    );
+    Ok(())
+}
+
+/// What a failed add takes back: the branch, the worktree and the claim this call made, in
+/// reverse order, unless [`Undo::keep`] says the add went through. A branch or directory that
+/// was there before the call is never recorded, so it stays.
+#[derive(Default)]
+pub struct Undo<'a> {
+    steps: Vec<Step<'a>>,
+}
+
+enum Step<'a> {
+    Branch { repo: PathBuf, name: String },
+    Worktree { repo: PathBuf, path: PathBuf },
+    Claim { store: &'a Store, path: String },
+}
+
+impl<'a> Undo<'a> {
+    /// Records a claim in the store, to be released on a failure.
+    pub fn claim(&mut self, store: &'a Store, path: &Path) {
+        let path = crate::fs::canon(path).to_string_lossy().into_owned();
+        self.steps.push(Step::Claim { store, path });
+    }
+
+    /// The add went through; nothing is taken back.
+    pub fn keep(mut self) {
+        self.steps.clear();
+    }
+}
+
+impl Drop for Undo<'_> {
+    fn drop(&mut self) {
+        for step in self.steps.drain(..).rev() {
+            let done = match &step {
+                Step::Claim { store, path } => super::claim::release(store, path),
+                Step::Worktree { repo, path } => {
+                    // A lock outlives a failed add: `prune` leaves a locked record alone.
+                    let _ = git::unlock(repo, path);
+                    fs_kit::tree::remove_any(path)
+                        .map_err(Into::into)
+                        .and_then(|()| git::prune(repo))
+                }
+                Step::Branch { repo, name } if git::has_branch(repo, name) => {
+                    git::delete_branch(repo, name)
+                }
+                Step::Branch { .. } => Ok(()),
+            };
+            if let Err(e) = done {
+                crate::log::stderr_ln(&format!("warning: add not fully undone: {e:#}"));
+            }
+        }
+    }
+}
+
+/// Creates the worktree and returns its plan; a retry of an add that already landed (the path
+/// is this task's worktree, held by this owner) gets that worktree back and touches nothing. A
+/// failed fetch is an error: branching from a stale base is how a finished task gets rebuilt on
+/// old code. A failure here leaves nothing behind; the caller keeps the [`Undo`] until its own
+/// steps are done.
+pub fn run<'a>(
     cwd: &Path,
-    root: &Path,
+    wt: &crate::config::Worktree,
+    seams: Seams,
     id: (&str, Option<&str>),
     owner: (&str, Option<&str>),
-) -> Result<Plan> {
+    store: Option<&Store>,
+) -> Result<Added<'a>> {
     let worktrees = git::list(cwd)?;
     let main = &worktrees.first().context("git lists no worktree")?.path;
     let temp = [std::env::temp_dir(), "/tmp".into()];
-    let plan = plan(main, root, &temp, id, owner, &today()?)?;
+    let plan = plan(main, &wt.root, &temp, id, owner, &today()?)?;
+    if let Some(again) = existing(&worktrees, &plan, owner, store)? {
+        return Ok(Added::Existing(again));
+    }
+    ensure_room(&seams, &plan.path, wt.min_free_mib)?;
     let base = git::default_base(main);
     git::fetch(main, &base)?;
     if crate::fs::path_starts_with(&resolved(&plan.path), &resolved(main)) {
@@ -194,8 +361,27 @@ pub fn run(
         std::fs::create_dir_all(root)
             .with_context(|| format!("cannot create {}", root.display()))?;
     }
-    git::add_locked(main, &plan.path, &plan.branch, &plan.reason, &base)?;
-    Ok(plan)
+    // `plan` checked this before the fetch; another add of the same task may have made it since,
+    // and the rollback below must never remove a directory this call did not create.
+    ensure!(
+        !plan.path.exists(),
+        "{} already exists: one worktree per task",
+        plan.path.display()
+    );
+    let mut undo = Undo::default();
+    // Recorded before the call: git may die with the branch made and the directory half-filled.
+    if !git::has_branch(main, &plan.branch) {
+        undo.steps.push(Step::Branch {
+            repo: main.clone(),
+            name: plan.branch.clone(),
+        });
+    }
+    undo.steps.push(Step::Worktree {
+        repo: main.clone(),
+        path: plan.path.clone(),
+    });
+    (seams.create)(main, &plan.path, &plan.branch, &plan.reason, &base)?;
+    Ok(Added::New(plan, undo))
 }
 
 #[cfg(test)]
@@ -234,14 +420,96 @@ mod tests {
             (OWNER, "t158")
         );
 
-        std::fs::create_dir_all(root.join("rtok-t1")).unwrap();
-        let taken = plan_in(&main, &root, ("t1", None), OWNER).unwrap_err();
-        assert!(
-            taken.to_string().contains("one worktree per task"),
-            "{taken}"
-        );
         let empty = plan_in(&main, Path::new(""), ("t2", None), OWNER).unwrap_err();
         assert!(empty.to_string().contains("is empty"), "{empty}");
+    }
+
+    /// T523: agents name the branch in one argument; the first token is the id, the rest the slug.
+    #[rstest]
+    #[case::logged_t504("T504 read-hook-same-path", "t504", "t504-read-hook-same-path")]
+    #[case::logged_m16_5("M16.5 test toml", "m16.5", "m16.5-test-toml")]
+    #[case::logged_m16_3(
+        "M16.3 push.rs through the config module",
+        "m16.3",
+        "m16.3-push.rs-through-the-config-module"
+    )]
+    #[case::bare_id("T504", "t504", "t504")]
+    fn one_argument_is_an_id_plus_a_slug(
+        #[case] arg: &str,
+        #[case] task: &str,
+        #[case] branch: &str,
+    ) {
+        let p = plan_in(Path::new("/r/rtok"), Path::new("/r/_w"), (arg, None), OWNER).unwrap();
+        assert_eq!((p.task.as_str(), p.branch.as_str()), (task, branch));
+    }
+
+    /// T523: a retry gets its worktree back; a clash with another owner or task is still refused.
+    #[rstest]
+    #[case::same_task_and_owner(OWNER, "t504", true)]
+    #[case::another_owner("Cursor / grok", "t504", false)]
+    #[case::another_task(OWNER, "t505", false)]
+    fn only_the_same_task_and_owner_gets_its_worktree_back(
+        #[case] holder: &str,
+        #[case] task: &str,
+        #[case] again: bool,
+    ) {
+        let dir = tmp_dir("wt-retry");
+        let (main, root) = (dir.join("apps/rtok"), dir.join("home/.rtok/worktrees"));
+        std::fs::create_dir_all(&main).unwrap();
+        let taken = root.join("rtok-t504");
+        std::fs::create_dir_all(&taken).unwrap();
+        let records = [
+            super::super::Record {
+                path: main.clone(),
+                ..Default::default()
+            },
+            super::super::Record {
+                path: taken.clone(),
+                branch: Some("t504-read-hook".into()),
+                locked: Some(format!("{holder} | {task} | 2026-10-24")),
+                ..Default::default()
+            },
+        ];
+        let plan = plan_in(&main, &root, ("T504 other-words", None), OWNER).unwrap();
+        let got = existing(&records, &plan, (OWNER, None), None);
+        if again {
+            // The branch is the one that is there, not the spelling of this call.
+            assert_eq!(got.unwrap().unwrap().branch, "t504-read-hook");
+        } else {
+            let err = got.unwrap_err().to_string();
+            assert!(err.contains("one worktree per task"), "{err}");
+        }
+        let free = plan_in(&main, &root, ("t7", None), OWNER).unwrap();
+        assert!(
+            existing(&records, &free, (OWNER, None), None)
+                .unwrap()
+                .is_none()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn spaces_in_a_separate_slug_become_dashes_too() {
+        let id = ("T504", Some("read hook same path"));
+        let p = plan_in(Path::new("/r/rtok"), Path::new("/r/_w"), id, OWNER).unwrap();
+        assert_eq!(p.branch, "t504-read-hook-same-path");
+        let both = ("T504 read", Some("hook"));
+        let p = plan_in(Path::new("/r/rtok"), Path::new("/r/_w"), both, OWNER).unwrap();
+        assert_eq!(p.branch, "t504-read-hook");
+    }
+
+    /// The path of a task that already has one is still its plan: `run` decides whether the
+    /// directory is that task's worktree, so a retry can be told from a clash.
+    #[test]
+    fn an_existing_path_is_planned_like_any_other() {
+        let dir = tmp_dir("wt-existing");
+        let (main, root) = (dir.join("apps/rtok"), dir.join("home/.rtok/worktrees"));
+        std::fs::create_dir_all(&main).unwrap();
+        std::fs::create_dir_all(root.join("rtok-t504")).unwrap();
+        let p = plan_in(&main, &root, ("T504 read-hook-same-path", None), OWNER).unwrap();
+        assert_eq!(p.path, root.join("rtok-t504"));
+        assert_eq!(p.branch, "t504-read-hook-same-path");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// T660.4: the default root is inside the project; relative roots start at the main
@@ -310,7 +578,10 @@ mod tests {
     #[case::path_in_id(("../t1", None), OWNER, "task id")]
     #[case::leading_dash(("-t1", None), OWNER, "task id")]
     #[case::ref_rule(("t1.lock", None), OWNER, "task id")]
-    #[case::bad_slug(("t1", Some("two words")), OWNER, "slug")]
+    #[case::not_an_id_after_split(("../t1 rest", None), OWNER, "task id")]
+    #[case::dash_id_after_split(("-t1 rest", None), OWNER, "task id")]
+    #[case::bad_slug(("t1", Some("../evil")), OWNER, "slug")]
+    #[case::bad_slug_in_the_argument(("t1 ../evil", None), OWNER, "slug")]
     #[case::no_owner(("t1", None), "", "--owner")]
     #[case::separator_in_owner(("t1", None), "a | b", "--owner")]
     #[case::non_ascii_owner(("t1", None), "Клод / sonnet", "--owner")]

@@ -1,0 +1,1 @@
+Refreshed report-md snapshot rows for the four tracked project skills. The focused report-md test and complete cli_trycmd suite passed in the final gate. Validation: CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 mise exec -- just check passed: 4,283 tests passed, 8 skipped.

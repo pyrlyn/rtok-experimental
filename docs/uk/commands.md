@@ -24,6 +24,7 @@ lang: uk
 | `rtok stats` | вимірювання з логів сесій і з проксі |
 | `rtok discover` | shell-команди ваших агентів без правила й форматера, спершу з найбільшим виводом |
 | `rtok doctor` | перевіряє хуки, MCP-сервери, ланцюжок проксі — зокрема скільки кожен коштує за хід, і скільки місця звільнить `rtok agents junk clear` |
+| `rtok doctor --project [PATH]` | додає поради з налаштування одного checkout: мовні сервери з командами встановлення, граф-індекс, файли інструкцій, вимкнені плагіни; економія — лише з вимірювань ([lsp.md](lsp.md)) |
 | `rtok agents install claude\|cursor\|codex\|opencode\|kilo\|pi\|zcode\|kimi\|copilot\|aider\|windsurf\|zed` | встановлює в хост із резервними копіями; `--dry-run` |
 | `rtok agents uninstall claude\|cursor\|codex\|opencode\|kilo\|pi\|zcode\|kimi\|copilot\|aider\|windsurf\|zed` | прибирає rtok із хоста з резервними копіями; `--dry-run` |
 | `rtok agents list` | кожен відомий застосунок: тип і назва, шлях і версія, файли конфігурації, модулі rtok, версія встановленого плагіна |

@@ -102,14 +102,21 @@ pub fn parse_jsonl(text: &str) -> Parsed {
 
 pub fn parse_path(path: &Path) -> std::io::Result<Parsed> {
     let f = std::fs::File::open(path)?;
-    // A line that is not valid UTF-8 is a malformed line, not the end of the file:
-    // `map_while(Result::ok)` stopped the iteration there, so `rtok stats` silently
-    // under-reported every session whose transcript holds one such byte.
+    parse_reader(BufReader::new(f))
+}
+
+fn parse_reader(mut reader: impl BufRead) -> std::io::Result<Parsed> {
     let mut out = Parsed::default();
-    for line in BufReader::new(f).lines() {
-        match line {
-            Ok(line) => count_line(&line, &mut out),
-            // An undecodable line is still a line: count it and carry on with the next one.
+    let mut bytes = Vec::new();
+    loop {
+        bytes.clear();
+        // Decode separately: malformed UTF-8 consumes one line, but an I/O error may
+        // persist forever without advancing the reader and must stop the scan.
+        if reader.read_until(b'\n', &mut bytes)? == 0 {
+            break;
+        }
+        match std::str::from_utf8(&bytes) {
+            Ok(line) => count_line(line, &mut out),
             Err(_) => {
                 out.lines += 1;
                 out.malformed += 1;
@@ -522,6 +529,42 @@ mod tests {
         );
         assert_eq!(p.turns, 2, "the line after it is still parsed");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reader_errors_stop_the_scan_instead_of_retrying_forever() {
+        use std::io::{self, Read};
+
+        struct Broken {
+            kind: io::ErrorKind,
+            attempted: bool,
+        }
+
+        impl Read for Broken {
+            fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+                assert!(!self.attempted, "a persistent error must not be retried");
+                self.attempted = true;
+                Err(io::Error::from(self.kind))
+            }
+        }
+
+        for kind in [io::ErrorKind::Other, io::ErrorKind::InvalidData] {
+            let reader = io::Cursor::new(b"{}\n").chain(Broken {
+                kind,
+                attempted: false,
+            });
+            assert_eq!(
+                parse_reader(BufReader::new(reader)).unwrap_err().kind(),
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn a_directory_is_a_read_error() {
+        let dir = crate::testutil::tmp_dir("jsonl-directory");
+        assert!(parse_path(&dir).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

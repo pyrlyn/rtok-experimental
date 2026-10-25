@@ -248,14 +248,64 @@ fn slow_note(ms: f64, max_ms: u64, event: &str) -> Option<String> {
     }
 }
 
+/// T969: the `kv` key holding one event's slow-call tally. Hooks are separate short-lived
+/// processes, so the tally has to live in the store.
+fn slow_key(event: &str) -> String {
+    format!("hook:slow:{event}")
+}
+
+/// T969: folds one slow call into the tally `"<last warning secs> <calls> <worst ms>"` and says
+/// whether this call opens a new warning. Returns the next tally and, when a warning is due, its
+/// `(calls, worst ms)`. A missing or garbled tally counts as "never warned", so the first slow
+/// call after a reset warns at once. `every = 0` warns on every call.
+fn slow_tally(prev: Option<&str>, now: u64, ms: f64, every: u64) -> (String, Option<(u64, f64)>) {
+    let mut it = prev.unwrap_or("").split(' ');
+    let since = it.next().and_then(|v| v.parse::<u64>().ok());
+    let calls = it.next().and_then(|v| v.parse::<u64>().ok()).unwrap_or(0) + 1;
+    let worst = it
+        .next()
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(0.0)
+        .max(ms);
+    if since.is_none_or(|s| every == 0 || now.saturating_sub(s) >= every) {
+        (format!("{now} 0 0"), Some((calls, worst)))
+    } else {
+        (format!("{} {calls} {worst:.1}", since.unwrap_or(now)), None)
+    }
+}
+
 /// T170: an over-budget event is logged at `warn` through the log funnel, not only printed
 /// to stderr — hook stderr never reaches the operator, so `eprintln!` alone left `rtok.log`
 /// and the `logs` table empty. `Runtime::log` fails open, so a dead store still exits 0 (D1).
+///
+/// T969: at most one warning per event per `[hook] slow_warn_s`, carrying the count and the
+/// worst time since the last one (27,107 per-call rows buried every other warning). The
+/// `calls` row's `ms` is unaffected. Only the slow path touches the store, so a fast run pays
+/// nothing; a store error skips the bookkeeping and the call stays silent.
 fn note_slow(cx: &Runtime, event: &str, ms: f64) {
-    if let Some(note) = slow_note(ms, cx.config.hook.max_ms, event) {
-        eprintln!("rtok: {note}");
-        cx.log("warn", "hook", event, &note);
-    }
+    let max_ms = cx.config.hook.max_ms;
+    let Some(note) = slow_note(ms, max_ms, event) else {
+        return;
+    };
+    let key = slow_key(event);
+    let Ok(prev) = cx.store.kv_get(&key) else {
+        return;
+    };
+    let now = crate::log::now();
+    let (next, due) = slow_tally(prev.as_deref(), now, ms, cx.config.hook.slow_warn_s);
+    let _ = cx.store.kv_set(&key, &next);
+    let Some((calls, worst)) = due else {
+        return;
+    };
+    let note = if calls > 1 {
+        format!(
+            "hook {event} slow: {calls} calls over max_ms {max_ms} ms since the last warning, worst {worst:.1} ms"
+        )
+    } else {
+        note
+    };
+    eprintln!("rtok: {note}");
+    cx.log("warn", "hook", event, &note);
 }
 
 /// T204: a panicking plugin used to be indistinguishable from one returning `None` — the
@@ -611,9 +661,15 @@ pub fn dispatch(stdin: &[u8], input: &HookInput, cx: &Runtime) -> Vec<u8> {
     };
     forget_after_compaction(input, cx);
     let out = match input.hook_event_name.as_str() {
-        "PreToolUse" => pre_tool(input, cx, &registry),
+        "PreToolUse" => {
+            auto_add_on_tool(cx);
+            pre_tool(input, cx, &registry)
+        }
         "PostToolUse" => post_tool(input, cx, &registry, agent.as_deref()),
-        "AfterMCPExecution" => after_mcp(input, cx),
+        "AfterMCPExecution" => {
+            auto_add_on_tool(cx);
+            after_mcp(input, cx)
+        }
         // T295: Claude Code's PostCompact has no decision control and rejects any
         // `hookSpecificOutput` (code.claude.com/docs/en/hooks, checked 2026-09-27); its
         // checkpoint arrives on SessionStart source=compact. `compact_summary` is Claude's own
@@ -625,16 +681,6 @@ pub fn dispatch(stdin: &[u8], input: &HookInput, cx: &Runtime) -> Vec<u8> {
         }
         "SessionStart" => {
             write_agent_env_file(agent.as_deref());
-            // T329.6: one upsert beside `register_agent`'s; a locked store only skips it.
-            if cx.config.plugins.graph.auto_add_projects
-                && let Some(cwd) = cx.cwd.as_deref()
-            {
-                let _ = cx.store.auto_add_project(
-                    std::path::Path::new(cwd),
-                    crate::store::Origin::Session,
-                    None,
-                );
-            }
             // T289.5: a worktree a post-create script left without an agent goes to the first
             // session that starts inside it.
             if let (Some(id), Some(cwd)) = (agent.as_deref(), cx.cwd.as_deref()) {
@@ -775,6 +821,26 @@ fn defer_session_end(cfg: &Config, event: &str, stdin: &[u8]) {
 /// rather than re-shortening the same result a second time on a second, divergent path (T190).
 fn after_mcp(_input: &HookInput, _cx: &Runtime) -> HookOutput {
     HookOutput::default()
+}
+
+/// T940: probes fire only SessionStart/SessionEnd and used to become graph projects.
+/// The first tool event is the write; a known root or a locked store is skipped.
+fn auto_add_on_tool(cx: &Runtime) {
+    if !cx.config.plugins.graph.auto_add_projects {
+        return;
+    }
+    let Some(cwd) = cx.cwd.as_deref() else {
+        return;
+    };
+    let path = std::path::Path::new(cwd);
+    match cx.store.project_by_root(path) {
+        Ok(None) => {
+            let _ = cx
+                .store
+                .auto_add_project(path, crate::store::Origin::Session, None);
+        }
+        Ok(Some(_)) | Err(_) => {}
+    }
 }
 
 fn pre_tool(input: &HookInput, cx: &Runtime, registry: &Registry) -> HookOutput {
@@ -1542,6 +1608,64 @@ mod tests {
         note_slow(&cx, "PreToolUse", 5.0);
         let rows = cx.store.logs_after(0, 10).unwrap();
         assert_eq!(rows.len(), 1, "under-budget run added a row: {rows:?}");
+    }
+
+    /// T969: inside the interval a slow call only joins the tally; the next warning of the
+    /// same event reports every call since the last one and the worst time.
+    #[test]
+    fn slow_tally_warns_once_per_interval_with_count_and_worst() {
+        let (t, due) = slow_tally(None, 1000, 12.0, 300);
+        assert_eq!(due, Some((1, 12.0)));
+        assert_eq!(t, "1000 0 0");
+        let (t, due) = slow_tally(Some(&t), 1100, 40.0, 300);
+        assert_eq!(due, None);
+        let (t, due) = slow_tally(Some(&t), 1200, 25.0, 300);
+        assert_eq!(due, None);
+        let (t, due) = slow_tally(Some(&t), 1300, 11.0, 300);
+        assert_eq!(due, Some((3, 40.0)), "{t}");
+        assert_eq!(t, "1300 0 0");
+    }
+
+    /// T969: `slow_warn_s = 0` is the old one-warning-per-call behaviour, and a garbled
+    /// tally is "never warned" rather than an error.
+    #[test]
+    fn slow_tally_zero_interval_and_garbage() {
+        let (t, due) = slow_tally(Some("1000 0 0"), 1000, 12.0, 0);
+        assert_eq!(due, Some((1, 12.0)));
+        assert_eq!(slow_tally(Some(&t), 1000, 13.0, 0).1, Some((1, 13.0)));
+        assert_eq!(slow_tally(Some("junk"), 5, 13.0, 300).1, Some((1, 13.0)));
+    }
+
+    /// T969: through `note_slow` and the store: ten slow calls in one interval leave one
+    /// `warn` row, a second event warns on its own, and `0` warns on every call.
+    #[test]
+    fn note_slow_logs_one_row_per_event_per_interval() {
+        let mut cx = Runtime::in_memory("b1e2c3d4-0000-4000-8000-0000000000b2").unwrap();
+        cx.config.hook.max_ms = 10;
+        cx.config.hook.slow_warn_s = 3600;
+        for _ in 0..10 {
+            note_slow(&cx, "PostToolUse", 50.0);
+        }
+        note_slow(&cx, "PreToolUse", 50.0);
+        let rows = cx.store.logs_after(0, 50).unwrap();
+        assert_eq!(rows.len(), 2, "{rows:?}");
+        // Age the tally so the interval has passed.
+        cx.store
+            .kv_set(&slow_key("PostToolUse"), "1 9 50.0")
+            .unwrap();
+        note_slow(&cx, "PostToolUse", 70.0);
+        let rows = cx.store.logs_after(0, 50).unwrap();
+        assert_eq!(rows.len(), 3, "{rows:?}");
+        let msg = &rows[2].message;
+        assert!(
+            msg.contains("10 calls") && msg.contains("worst 70.0 ms"),
+            "{msg}"
+        );
+
+        cx.config.hook.slow_warn_s = 0;
+        note_slow(&cx, "PostToolUse", 50.0);
+        note_slow(&cx, "PostToolUse", 50.0);
+        assert_eq!(cx.store.logs_after(0, 50).unwrap().len(), 5);
     }
 
     /// T45.4: `fail_open = false` surfaces a bad payload instead of `{}`.

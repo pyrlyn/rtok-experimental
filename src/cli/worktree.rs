@@ -12,12 +12,13 @@ use std::path::PathBuf;
 pub(super) enum WorktreeCmd {
     /// Create the worktree for a task: one location, one name, one locked owner; prints its path
     Add {
-        /// Task id, e.g. `t158`; directory `<repo>-<task>`, branch `<task>[-<slug>]`
+        /// Task id, e.g. `t158`, or `t158 read-hook-same-path` as one argument; directory
+        /// `<repo>-<task>`, branch `<task>[-<slug>]`
         task: String,
-        /// Optional branch suffix
+        /// Optional branch suffix (spaces become dashes, as in the one-argument form)
         slug: Option<String>,
         /// Who holds it, as `<provider> / <model>`; written into the lock reason. Defaults to
-        /// `<host> / <model>` of the agent
+        /// `<host> / <model>` of the agent, else `RTOK_OWNER`, else the login user
         #[arg(long)]
         owner: Option<String>,
         /// The rtok agent id (any unique prefix) to bind it to; defaults to `RTOK_AGENT_ID`

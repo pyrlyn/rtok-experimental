@@ -7,8 +7,10 @@
 //! diffable in the repository. Done and closed tasks move to `<dir>/done/` (§8), so the plan is
 //! a directory listing. Writes are temp file + rename.
 
+use std::collections::HashSet;
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -74,42 +76,46 @@ impl DiskAdapter {
         self.dir.join("done")
     }
 
-    /// `(path, task)` of every task file in `dir`; a missing directory is an empty plan.
-    fn scan(&self, dir: &Path) -> Result<Vec<(PathBuf, Task)>> {
+    /// The task files of `dir` that parse, and the ones that do not. A missing directory is an
+    /// empty plan.
+    fn scan(&self, dir: &Path) -> Result<Scan> {
         let entries = match std::fs::read_dir(dir) {
             Ok(entries) => entries,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Scan::default()),
             Err(e) => return Err(e).with_context(|| format!("disk tasks: {}", dir.display())),
         };
-        let mut out = Vec::new();
+        let mut out = Scan::default();
         for entry in entries {
             let path = entry?.path();
             // Only `<id> - <slug>.md` is ours; a README or notes beside the tasks stay theirs.
             let Some(name_id) = file_id(&path) else {
                 continue;
             };
-            let text = std::fs::read_to_string(&path)
-                .with_context(|| format!("disk tasks: {}", path.display()))?;
-            let task = parse(&text).with_context(|| format!("disk tasks: {}", path.display()))?;
-            // `place` writes under the front-matter id, so a copied file with a foreign id
-            // would overwrite that task's file; reject it before any mutation.
-            if task.id != name_id {
-                bail!(
-                    "disk tasks: {}: file name says {name_id} but the front matter says {}",
-                    path.display(),
-                    task.id
-                );
+            match load(&path, &name_id) {
+                Ok(task) => out.found.push((path, task)),
+                Err(error) => {
+                    warn_skipped(&error);
+                    out.skipped.push(Skipped { name_id, error });
+                }
             }
-            out.push((path, task));
         }
         Ok(out)
     }
 
-    /// The file holding `id`, in the plan or the archive.
+    /// The tasks of `dir` that parse; a broken file is warned about and left out.
+    fn tasks(&self, dir: &Path) -> Result<Vec<Task>> {
+        Ok(self.scan(dir)?.found.into_iter().map(|(_, t)| t).collect())
+    }
+
+    /// The file holding `id`, in the plan or the archive. Its own broken file is an error, so
+    /// no write goes near it; another task's broken file is not.
     fn find(&self, id: &TaskId) -> Result<Option<(PathBuf, Task)>> {
         for dir in [self.dir.clone(), self.done_dir()] {
-            if let Some(hit) = self
-                .scan(&dir)?
+            let Scan { found, skipped } = self.scan(&dir)?;
+            if let Some(broken) = skipped.into_iter().find(|s| &s.name_id == id) {
+                return Err(broken.error);
+            }
+            if let Some(hit) = found
                 .into_iter()
                 .find(|(path, _)| file_id(path).as_ref() == Some(id))
             {
@@ -171,9 +177,9 @@ impl TaskAdapter for DiskAdapter {
     }
 
     fn list(&self, filter: &Filter) -> Result<Vec<Task>> {
-        let mut tasks: Vec<Task> = self.scan(&self.dir)?.into_iter().map(|(_, t)| t).collect();
+        let mut tasks = self.tasks(&self.dir)?;
         if filter.wants_finished() {
-            tasks.extend(self.scan(&self.done_dir())?.into_iter().map(|(_, t)| t));
+            tasks.extend(self.tasks(&self.done_dir())?);
         }
         Ok(filter.select(tasks))
     }
@@ -220,9 +226,58 @@ impl TaskAdapter for DiskAdapter {
         let prefix = prefix.to_ascii_uppercase();
         let mut ids: Vec<TaskId> = Vec::new();
         for dir in [self.dir.clone(), self.done_dir()] {
-            ids.extend(self.scan(&dir)?.into_iter().map(|(_, t)| t.id));
+            let Scan { found, skipped } = self.scan(&dir)?;
+            // A skipped file still owns its name, or the next task would be given its id.
+            ids.extend(found.into_iter().map(|(_, t)| t.id));
+            ids.extend(skipped.into_iter().map(|s| s.name_id));
         }
         Ok(ids.into_iter().filter(|id| id.prefix() == prefix).max())
+    }
+}
+
+/// What a directory scan found: the tasks, and the files that are named like one but cannot be
+/// used.
+#[derive(Default)]
+struct Scan {
+    found: Vec<(PathBuf, Task)>,
+    skipped: Vec<Skipped>,
+}
+
+struct Skipped {
+    /// The id the file name carries; the front matter of a broken file cannot be trusted.
+    name_id: TaskId,
+    error: anyhow::Error,
+}
+
+/// Parse one task file, refusing one whose front-matter id is not its name's.
+fn load(path: &Path, name_id: &TaskId) -> Result<Task> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("disk tasks: {}", path.display()))?;
+    let task = parse(&text).with_context(|| format!("disk tasks: {}", path.display()))?;
+    // `place` writes under the front-matter id, so a copied file with a foreign id would
+    // overwrite that task's file; it is skipped like a broken one, and `find` fails for its name.
+    if &task.id != name_id {
+        bail!(
+            "disk tasks: {}: file name says {name_id} but the front matter says {}",
+            path.display(),
+            task.id
+        );
+    }
+    Ok(task)
+}
+
+/// Warn that a task file was left out of a read. Every command and MCP call rescans, so the
+/// same file is reported once per process, not once per call.
+pub(super) fn warn_skipped(error: &anyhow::Error) {
+    static SEEN: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+    let message = format!("{error:#}");
+    let first = SEEN
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get_or_insert_with(HashSet::new)
+        .insert(message.clone());
+    if first {
+        log::warn!("skipping a task that does not parse: {message}");
     }
 }
 
@@ -461,7 +516,7 @@ mod tests {
     }
 
     #[test]
-    fn foreign_files_are_ignored_and_broken_ones_are_named() {
+    fn foreign_files_are_ignored_and_broken_ones_are_skipped_but_keep_their_id() {
         let dir = tmp("foreign");
         let disk = DiskAdapter::new(dir.clone());
         assert!(
@@ -472,14 +527,35 @@ mod tests {
         std::fs::write(dir.join("README.md"), "# tasks\n").unwrap();
         std::fs::write(dir.join("R2 - notes.txt"), "x").unwrap();
         assert_eq!(disk.list(&Filter::default()).unwrap().len(), 1);
-        std::fs::write(dir.join("R3 - broken.md"), "no front matter\n").unwrap();
-        let err = disk.list(&Filter::default()).unwrap_err();
+        let broken = dir.join("R3 - broken.md");
+        std::fs::write(&broken, "no front matter\n").unwrap();
+        disk.create(&new("Next"), &id("R4")).unwrap();
+
+        let listed = disk.list(&Filter::default()).unwrap();
+        assert_eq!(listed.len(), 2, "the broken file is left out");
+        assert_eq!(disk.get(&id("R4")).unwrap().unwrap().title, "Next");
+        assert_eq!(disk.max_id("r").unwrap(), Some(id("R4")));
+        std::fs::remove_file(dir.join("R4 - next.md")).unwrap();
+        assert_eq!(
+            disk.max_id("r").unwrap(),
+            Some(id("R3")),
+            "ids are not reused"
+        );
+
+        // Its own id still fails with the file named, and no write touches it.
+        let err = disk.get(&id("R3")).unwrap_err();
         assert!(format!("{err:#}").contains("R3 - broken.md"), "{err:#}");
+        assert!(disk.create(&new("Again"), &id("R3")).is_err());
+        assert!(disk.write_status(&id("R3"), Status::Done).is_err());
+        assert!(disk.save(&Task::open(id("R3"), "x", "", 0)).is_err());
+        assert_eq!(std::fs::read(&broken).unwrap(), b"no front matter\n");
+        // README, notes, R1, the broken file and the claim lock: nothing new.
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 5);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn a_file_whose_front_matter_id_differs_from_its_name_is_rejected_untouched() {
+    fn a_file_whose_front_matter_id_differs_from_its_name_is_skipped_untouched() {
         let dir = tmp("identity");
         let disk = DiskAdapter::new(dir.clone());
         disk.create(&new("target"), &id("R2")).unwrap();
@@ -495,12 +571,22 @@ mod tests {
             std::fs::read(&target).unwrap(),
         );
 
+        // Reads that do not name the copy go on without it...
+        let listed = disk.list(&Filter::default()).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(disk.get(&id("R2")).unwrap().unwrap().description, "");
+        assert_eq!(disk.max_id("r").unwrap(), Some(id("R2")));
+        // ...and R2 is the real file's, so writes to it never see the copy.
+        disk.write_status(&id("R2"), Status::InProgress).unwrap();
+        disk.write_status(&id("R2"), Status::Open).unwrap();
+
+        // Every path that would write under the copy's name fails before any mutation.
         for err in [
             disk.get(&id("R1")).unwrap_err(),
-            disk.list(&Filter::default()).unwrap_err(),
             disk.write_status(&id("R1"), Status::InProgress)
                 .unwrap_err(),
             disk.save(&Task::open(id("R1"), "x", "", 0)).unwrap_err(),
+            disk.create(&new("x"), &id("R1")).unwrap_err(),
         ] {
             let msg = format!("{err:#}");
             assert!(
@@ -508,18 +594,13 @@ mod tests {
                 "{msg}"
             );
         }
-        assert_eq!(
-            before,
-            (
-                std::fs::read(&copy).unwrap(),
-                std::fs::read(&target).unwrap()
-            )
-        );
+        assert_eq!(std::fs::read(&copy).unwrap(), before.0);
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 3);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn a_mismatch_in_done_is_rejected_and_a_lower_case_name_still_matches() {
+    fn a_mismatch_in_done_is_skipped_and_a_lower_case_name_still_matches() {
         let dir = tmp("identity-done");
         std::fs::create_dir_all(dir.join("done")).unwrap();
         std::fs::write(
@@ -528,12 +609,12 @@ mod tests {
         )
         .unwrap();
         let disk = DiskAdapter::new(dir.clone());
-        let err = disk
-            .list(&Filter {
-                all: true,
-                ..Filter::default()
-            })
-            .unwrap_err();
+        let all = Filter {
+            all: true,
+            ..Filter::default()
+        };
+        assert!(disk.list(&all).unwrap().is_empty());
+        let err = disk.get(&id("R3")).unwrap_err();
         assert!(format!("{err:#}").contains("R3 - a.md"), "{err:#}");
         std::fs::remove_file(dir.join("done/R3 - a.md")).unwrap();
 

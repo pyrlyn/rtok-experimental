@@ -39,8 +39,7 @@ pub fn add(
         cwd,
         &wt,
         (task, slug),
-        agent.as_ref(),
-        owner,
+        (agent.as_ref(), owner),
         cfg.plugins.graph.auto_add_projects,
     )
 }

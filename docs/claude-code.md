@@ -39,6 +39,12 @@ listed the same way from the surfaces each one declares (`(off)` when disabled).
 same blocks without writing; `rtok doctor` lists modules for every host under
 `agents`.
 
+In a folder Claude Code has not trusted ("This workspace isn't trusted"), it skips the
+project's hooks and MCP servers, so rtok does nothing there. `rtok doctor` reports that as
+`untrusted folder`, naming the folder Claude Code keys the trust on: the repository root, the
+main checkout for a worktree. Trust it by running `claude` there and accepting the dialog, or
+in the desktop app; `doctor` never sets the flag itself.
+
 After upgrading rtok, `rtok agents update` refreshes every host rtok is
 installed in (or only the hosts named): a hook or MCP entry written by an older
 binary path or with an old timeout is rewritten in place, and a

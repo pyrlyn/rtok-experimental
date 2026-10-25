@@ -47,6 +47,7 @@ target/tmp/t60-2-config-init.toml
 +[hook]                                # rtok hook <event>
 +# host      = "claude"                  # claude | cursor | copilot | devin | cline — payload field mapping
 +# max_ms    = 10                        # soft budget; over it, the event is logged as slow
++# slow_warn_s = 300                     # one slow warning per event per this many seconds, with the count and worst time; 0 = every slow call
 +# fail_open = true                      # any error → `{}` and exit 0; false only for debugging
 +
 +[agents]                              # the rtok agent registry
@@ -106,8 +107,8 @@ target/tmp/t60-2-config-init.toml
 +# dry_run         = false               # --dry-run: print effective [proxy] settings and exit, don't serve
 +
 +[proxy.tools_rewrite]                 # off: request bytes stay identical
-+# enabled = false
-+# compact_schema = false                # also first-sentence property descriptions + redundant default/examples inside input_schema; originals archived (Measurement.ref_id)
++# enabled = true
++# compact_schema = true                 # also first-sentence property descriptions + redundant default/examples inside input_schema; originals archived (Measurement.ref_id)
 +# max_description_tokens = 60           # 0 = no truncate; sentence boundary; estimator Class::Prose
 +# allow = []                            # empty = keep all names not in deny
 +# deny = []                             # drop these names from tools[]; later calls still forward
@@ -434,6 +435,7 @@ target/tmp/t60-2-config-init.toml
 +# root = ".rtok/worktrees"              # where `rtok worktree add` creates worktrees, as <root>/<repo>-<task>; relative: under the main checkout
 +# seed = true                          # fill a new worktree's seed_dirs from the sibling that built them last, by copy-on-write clone (--no-seed)
 +# seed_dirs = ["target", "node_modules"] # build caches to seed, relative to the checkout; a bare name also matches one level down
++# min_free_mib = 2048                   # `worktree add` refuses below this much free space on the target volume, in MiB; 0 = no check
 +
 +[tasks]                               # task adapters; usually set per project in .rtok.toml
 +# adapter = "disk"                      # disk | github | gitlab
@@ -505,6 +507,7 @@ target/tmp/t60-2-config-init.toml
 +# min_tokens = 1500                     # only rewrite tool results above this (estimated)
 +# head_lines = 8
 +# tail_lines = 4
++# signal_lines = 8                     # elided error/fail/panic lines inlined as N:line (saves an expand); 0 = off
 +# tiers      = false                    # optional L0/L1/L2 depth (OpenViking spec, AGPL-3.0 — rtok does not vendor/link/subprocess; native implementation)
 +# live_blobs = false                    # shrink nested JSON dumps + data: blobs in user blocks, never results/system/tools/last-2-turns (opt-in)
 +# skills     = false                    # opt-in skill body archiving outside the live zone

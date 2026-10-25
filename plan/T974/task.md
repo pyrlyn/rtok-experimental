@@ -1,9 +1,9 @@
 ---
-status: todo
+status: in progress
 priority: P2
 complexity: 2
-readiness: 0%
-agent:
+readiness: 100%
+agent: Claude Code / claude-opus-5-5
 ---
 
 # T974. `zsh_tab_completes_with_a_stale_compinit_dump_and_no_zshrc_edit` fails

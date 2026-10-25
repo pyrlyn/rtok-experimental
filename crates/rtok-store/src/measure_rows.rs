@@ -152,6 +152,55 @@ impl Store {
         Ok(by_host.into_iter().collect())
     }
 
+    /// [`Self::measurement_totals`] over the rows stamped at or after `since`, split by the
+    /// project name of the session that wrote them (`None`: a session with no project). Rows
+    /// are summed per `(plugin, kind)` as there; an `expand` group reads negative, a cost and
+    /// not a saving, as in [`Self::measurement_saved_by_host`]. Sessions are grouped here and
+    /// mapped to projects in Rust for the same Diesel join-group gap.
+    pub fn measurement_saved_by_project(
+        &self,
+        since: i64,
+    ) -> Result<Vec<(Option<String>, MeasurementTotal)>> {
+        use diesel::dsl::{count_star, sum};
+        let mut conn = self.lock()?;
+        let rows: Vec<(String, MeasurementTotalRow)> = measurements::table
+            .filter(measurements::ts.ge(since))
+            .group_by((
+                measurements::session,
+                measurements::plugin,
+                measurements::kind,
+            ))
+            .select((
+                measurements::session,
+                (
+                    measurements::plugin,
+                    measurements::kind,
+                    count_star(),
+                    sum(measurements::est_before),
+                    sum(measurements::est_after),
+                ),
+            ))
+            .load(&mut *conn)?;
+        let project_of = project_by_session(&mut conn)?;
+        let mut by: BTreeMap<(Option<String>, String, String), MeasurementTotal> = BTreeMap::new();
+        for (session, row) in rows {
+            let project = project_of.get(&session).cloned().flatten();
+            let t = MeasurementTotal::from_row(row);
+            let sum = by
+                .entry((project, t.plugin.clone(), t.kind.clone()))
+                .or_insert_with(|| MeasurementTotal {
+                    rows: 0,
+                    est_before: 0,
+                    est_after: 0,
+                    ..t.clone()
+                });
+            sum.rows += t.rows;
+            sum.est_before += t.est_before;
+            sum.est_after += t.est_after;
+        }
+        Ok(by.into_iter().map(|((p, ..), t)| (p, t)).collect())
+    }
+
     /// Test helper: stamp every `measurements` row of `session` at `ts`.
     #[cfg(any(test, feature = "test-util"))]
     pub fn set_measurement_ts(&self, session: &str, ts: i64) -> Result<()> {

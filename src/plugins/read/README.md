@@ -42,6 +42,9 @@ Root guard: paths must be under cwd or `allow_paths`. In `rtok mcp` (T351) every
 cwd's repository (`git worktree list`, re-read at most every 30 s, only after a path failed the
 cheap checks) and every `file://` root of the client's `roots/list` answer count too; host
 scratchpads and any other directory stay outside, so `allow_paths` is the escape hatch.
+The refusal names both ways out: the host's own file tool and `allow_paths` (T972). A missing
+file under a directory named like one of those worktrees (an old worktree root) names where the
+same file is now.
 
 ## Config
 

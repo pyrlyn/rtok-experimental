@@ -39,5 +39,9 @@ with live traffic before adopting a configuration.
 | B — rtok | 0 | 0 | 0 | 0.0000 | 6/6 |
 | delta (B − A) | 0 | 0 | 0 | 0.0000 | 0 |
 
+These rows predate real checks: `bench/tasks.toml` used `check = "true"`, so 6/6 meant
+nothing, and the zero tokens mean no live run. The checks are real now; see
+[`bench/README.md`](../bench/README.md).
+
 Sources: [`bench/results/a.json`](../bench/results/a.json),
 [`bench/results/b.json`](../bench/results/b.json), and [`research.md`](../research.md).

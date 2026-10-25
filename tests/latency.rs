@@ -118,6 +118,79 @@ fn latency_hook_post_tool_p95_under_10ms() {
     );
 }
 
+/// T920: `PostToolUse` stores one observation per tool call, and the identical fixture above
+/// stores only the first (the 5 s dedup window), so it never paid for one. Each spawn here is a
+/// new call. The same spawn with a tool the memory plugin skips is the baseline: the hook's own
+/// start-up and writes are in both, so the median gap is what an observation adds (7 ms in
+/// alpha.2/3, all of it compiling the scrub patterns, the insert is ~0.3 ms). Interleaving keeps
+/// machine load out of the gap.
+#[test]
+fn latency_hook_post_tool_observation_adds_under_4ms() {
+    if cfg!(debug_assertions) {
+        eprintln!("skip: T920 Check is `cargo test --release --test latency`");
+        return;
+    }
+    const EXTRA_MAX: Duration = Duration::from_millis(4);
+    let bin = env!("CARGO_BIN_EXE_rtok");
+    let tmp = std::env::temp_dir().join(format!("rtok-latency-observe-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).expect("temp home");
+    let session = "t920-observe";
+    let fixture: serde_json::Value =
+        serde_json::from_slice(include_bytes!("fixtures/hooks/post_tool.json")).unwrap();
+    let spawn = |tool: &str, i: usize| {
+        let mut v = fixture.clone();
+        v["session_id"] = session.into();
+        v["tool_name"] = tool.into();
+        v["tool_use_id"] = format!("toolu_{tool}_{i}").into();
+        v["tool_input"]["command"] = format!("echo call {i}").into();
+        let start = std::time::Instant::now();
+        let mut child = Command::new(bin)
+            .args(["hook", "PostToolUse"])
+            .env("RTOK_HOME", &tmp)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn rtok");
+        common::feed_stdin(&mut child, v.to_string().as_bytes());
+        let out = child.wait_with_output().expect("wait");
+        let took = start.elapsed();
+        assert!(out.status.success(), "hook must fail open with exit 0");
+        assert_eq!(out.stdout, b"{}");
+        took
+    };
+    // The first spawn of each kind creates the store and runs the migrations.
+    spawn("Bash", usize::MAX);
+    spawn("mem_save", usize::MAX);
+
+    let (mut observed, mut skipped) = (Vec::new(), Vec::new());
+    for i in 0..N {
+        observed.push(spawn("Bash", i));
+        skipped.push(spawn("mem_save", i));
+    }
+    observed.sort();
+    skipped.sort();
+    let extra = observed[N / 2].saturating_sub(skipped[N / 2]);
+    eprintln!(
+        "PostToolUse observation: n={N} p50 {:?} vs {:?} without one, extra {extra:?}",
+        observed[N / 2],
+        skipped[N / 2]
+    );
+
+    // The gap only means something if the observations were stored, one per call.
+    let store = rtok::store::Store::open(&tmp.join("rtok.db")).expect("open store");
+    let stored = store
+        .recent_observations(session, 1000)
+        .expect("observations");
+    assert_eq!(stored.len(), N + 1, "one observation per Bash call");
+    assert!(
+        extra < EXTRA_MAX,
+        "an observation adds {extra:?} to PostToolUse, not < {EXTRA_MAX:?}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// T288: `UserPromptSubmit` also reads the caller's undelivered messages (one indexed
 /// query); an empty inbox still prints `{}` inside the budget.
 #[test]
@@ -272,8 +345,9 @@ fn hook_returns_despite_exclusive_lock() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// T329.6: `SessionStart` with a real cwd also upserts the session's project (the
-/// `auto_add_projects` default); the fixture's own cwd does not exist and would skip it.
+/// T329.6 / T940: `SessionStart` with a real cwd (the fixture's own cwd does not exist
+/// and would skip other work). Project registration waits for a tool; this path must
+/// still stay under 10 ms.
 #[test]
 fn latency_hook_session_start_with_project_registration_p95_under_10ms() {
     let mut v: serde_json::Value =

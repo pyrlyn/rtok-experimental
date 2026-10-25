@@ -1,0 +1,6 @@
+`PlanDirAdapter::scan` and `DiskAdapter::scan` no longer fail on one task file that does not parse (no front matter, missing heading, bad status, unreadable text, or a disk file whose front-matter id differs from its name). Reads that list (`list`, and so `next`/`ready`/`pick` and the MCP `task_*` tools) skip it and warn once per process with its path and the reason (`disk::warn_skipped`, through the `log` facade).
+
+- Commands that name the skipped task's id (`get`, `write_status`, `write_report`, `save`, `create`) fail with the same error as before, so no write ever touches the file. For the disk adapter this keeps the id-mismatch guard: `find` fails for the copy's own name, so `place` cannot overwrite the foreign task's file; another task's broken file no longer blocks `get`/`write_status` of a healthy id.
+- `max_id` counts the skipped file/folder names, so id allocation never reuses them.
+
+Check: `cargo nextest run --lib -E 'test(/tasks::/)'` (122 passed); new/updated tests in `src/tasks/disk.rs` (`foreign_files_are_ignored_and_broken_ones_are_skipped_but_keep_their_id`, `a_file_whose_front_matter_id_differs_from_its_name_is_skipped_untouched`, `a_mismatch_in_done_is_skipped_...`) and `src/tasks/plan_dir.rs` (`a_broken_task_is_skipped_by_reads_and_fails_by_its_id`); clippy (`-D warnings`, repo invocation) and `cargo fmt --check` clean. PR: this branch.

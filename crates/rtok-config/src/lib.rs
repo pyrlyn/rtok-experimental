@@ -228,6 +228,9 @@ section! {
     Hook {
         host: String = s("claude"),
         max_ms: u64 = 10,
+        /// T969: seconds between two slow-hook warnings of one event; the warning carries the
+        /// count and the worst time since the last. `0` warns on every slow call.
+        slow_warn_s: u64 = 300,
         fail_open: bool = true,
     }
 }
@@ -392,17 +395,25 @@ section! {
         /// The public HTTPS URL a tunnel serves the HTTP server at. Its host passes the Host
         /// check and its origin the Origin check; anything else is refused.
         public_url: String = String::new(),
+        /// The MCP tool-result memo on/off; `RTOK_MCP_CACHE=0` turns it off too.
+        cache_enabled: bool = true,
+        /// Seconds a memoized read-only tool result stays fresh (see `src/mcp/memo.rs`).
+        /// `0` turns the memo off.
+        cache_ttl_secs: u64 = 300,
+        /// Most memoized results kept; the least recently used is dropped first. `0`: off.
+        cache_max_entries: u32 = 256,
     }
 }
 
 section! {
-    /// `[proxy.tools_rewrite]` — opt-in `tools[]` description rewrite (T59.5). Off: bytes
-    /// identical. Empty `allow` keeps every tool not in `deny`. `input_schema` keeps its names,
+    /// `[proxy.tools_rewrite]` — `tools[]` description rewrite (T59.5), on by default with
+    /// `compact_schema`; the originals are archived for `expand`. Off: bytes identical. Empty
+    /// `allow` keeps every tool not in `deny`. `input_schema` keeps its names,
     /// `type`, `required` and `enum` byte for byte; only with `compact_schema` (T686) do its
     /// `description`, `default` and `examples` strings shrink.
     ToolsRewrite {
-        enabled: bool = false,
-        compact_schema: bool = false,
+        enabled: bool = true,
+        compact_schema: bool = true,
         max_description_tokens: u32 = 60,
         allow: Vec<String> = Vec::new(),
         deny: Vec<String> = Vec::new(),
@@ -1087,6 +1098,10 @@ section! {
         /// Build caches to seed, relative to the checkout. A bare name also matches one level
         /// down (`node_modules` takes `web/node_modules`).
         seed_dirs: Vec<String> = strs(&["target", "node_modules"]),
+        /// `worktree add` refuses when the volume that would hold the worktree has less free
+        /// space than this many MiB (T970): a full disk leaves a half-made worktree. 0 turns the
+        /// check off.
+        min_free_mib: u32 = 2048,
     }
 }
 
@@ -1290,6 +1305,10 @@ section! {
         min_tokens: u32 = 1500,
         head_lines: u32 = 8,
         tail_lines: u32 = 4,
+        /// Elided lines that look like errors or failures (`error`, `panic`, `fail`, …) shown
+        /// under the pointer with their line numbers, so the common `expand` grep round-trip is
+        /// not needed. 0 = head and tail only.
+        signal_lines: u32 = 8,
         /// Opt-in L0/L1/L2 tiered loading (P33). Default off — v0.1 archive+inject unchanged.
         /// Behaviour spec: OpenViking (AGPL-3.0); rtok does not vendor, link, or subprocess it
         /// (D6). Gates native implementation in T33.2.
@@ -1674,6 +1693,13 @@ impl Config {
         let home = Self::home_dir();
         Self::ensure_user_file(&home, config_file)?;
         layers::load(&home, config_file, flags)
+    }
+
+    /// [`Self::load_with`] as an agent started in `dir` would see it: that checkout's `.rtok.toml`
+    /// and `.env`, not the working directory's. Never creates the user file and never calls the
+    /// load hook.
+    pub fn load_for(dir: &Path, config_file: Option<&Path>) -> Result<Self> {
+        layers::load_in(&Self::home_dir(), config_file, None, Some(dir))
     }
 
     /// Warn and use defaults. Hooks (T12.3) never fail on a bad file.

@@ -31,10 +31,13 @@ pub(super) fn run(config_file: &Option<PathBuf>, args: Args) -> Result<()> {
         // T159: these two events answer with a path and an exit code, not the JSON the hook
         // dispatcher writes, so they skip it.
         Args {
-            event: Some(event), ..
+            event: Some(event),
+            host,
+            ..
         } if crate::worktree::host::handles(&event) => {
             let cfg = Config::load_lenient(config_file.as_deref(), None);
-            if let Some(out) = crate::worktree::host::run(&event, io::stdin(), &cfg)? {
+            let host = host.as_deref();
+            if let Some(out) = crate::worktree::host::run(&event, host, io::stdin(), &cfg)? {
                 println!("{out}");
             }
 

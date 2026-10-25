@@ -74,7 +74,8 @@ pub(crate) fn paths_with_ext(dir: &Path, cutoff: SystemTime, ext: &str) -> Vec<P
                 stack.push((p, canon_child));
                 continue;
             }
-            if p.extension().and_then(OsStr::to_str) != Some(ext) {
+            // Opening a FIFO can wait forever; linked targets must be regular files too.
+            if !meta.is_file() || p.extension().and_then(OsStr::to_str) != Some(ext) {
                 continue;
             }
             let mtime = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
@@ -244,6 +245,22 @@ mod tests {
         );
         assert!(collect(&dir.join("absent"), SystemTime::UNIX_EPOCH).is_none());
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_regular_transcripts_and_their_aliases_are_skipped() {
+        use std::os::unix::{fs::symlink, net::UnixListener};
+
+        let dir = crate::testutil::tmp_dir("transcript-special");
+        let socket = dir.join("socket.jsonl");
+        let _listener = UnixListener::bind(&socket).unwrap();
+        symlink(&socket, dir.join("alias.jsonl")).unwrap();
+        let regular = dir.join("session.jsonl");
+        fs::write(&regular, "{}\n").unwrap();
+
+        assert_eq!(jsonl_paths(&dir, SystemTime::UNIX_EPOCH), [regular]);
+        fs::remove_dir_all(dir).unwrap();
     }
 
     /// T579: a directory alias, a file alias and a symlink cycle never make one physical

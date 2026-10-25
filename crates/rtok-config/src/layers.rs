@@ -145,6 +145,11 @@ fn project_restricted(key: &str) -> bool {
     })
 }
 
+/// Whether `.rtok.toml` may set `key`; a key it may not set belongs in the user config.
+pub fn project_allowed(key: &str) -> bool {
+    !project_restricted(key)
+}
+
 fn ignored_note(key: &str, path: &Path) -> String {
     format!(
         "{}: ignored project setting {key}; set it in user config, process environment or explicit --config",
@@ -692,14 +697,27 @@ pub fn web_flags(host: Option<String>, port: Option<u16>) -> Option<Dict> {
 /// [`figment`], extracted and finished (legacy-key migration + `~` expansion).
 pub fn load(home: &Path, config_file: Option<&Path>, flags: Option<Dict>) -> Result<Config> {
     let cwd = std::env::current_dir().ok();
-    let dotenv = RtokEnv::from_dotenv(home, cwd.as_deref());
+    let cfg = load_in(home, config_file, flags, cwd.as_deref())?;
+    notify(&cfg);
+    Ok(cfg)
+}
+
+/// [`load`] for a project directory other than the working one, without the load hook: the
+/// caller is looking at another checkout and the process's own notes already went out.
+pub fn load_in(
+    home: &Path,
+    config_file: Option<&Path>,
+    flags: Option<Dict>,
+    cwd: Option<&Path>,
+) -> Result<Config> {
+    let dotenv = RtokEnv::from_dotenv(home, cwd);
     let mut warnings = dotenv.warnings.clone();
     let extracted = assemble_noted(
         home,
         config_file,
         flags,
         RtokEnv::from_process(),
-        cwd.as_deref(),
+        cwd,
         dotenv,
         &mut warnings,
     )
@@ -726,7 +744,6 @@ pub fn load(home: &Path, config_file: Option<&Path>, flags: Option<Dict>) -> Res
             log: w,
         });
     }
-    notify(&cfg);
     Ok(cfg)
 }
 
@@ -1376,6 +1393,29 @@ claude = "/tmp/attacker-claude"
         assert_eq!(key.1, "auto");
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn load_in_reads_the_given_directory_and_leaves_the_user_file_alone() {
+        let home = tmp("load-in-home");
+        let repo = tmp("load-in-repo");
+        std::fs::write(repo.join(".git"), "").unwrap();
+        std::fs::write(repo.join(".rtok.toml"), "[plugins.read]\nenabled = false\n").unwrap();
+        let missing = Config::path_for(&home);
+        let cfg = load_in(&home, Some(&missing), None, Some(&repo)).unwrap();
+        assert!(!cfg.plugin_enabled("read", true));
+        assert!(!missing.exists(), "the user file is not created");
+        let _ = std::fs::remove_dir_all(&home);
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn project_allowed_names_the_keys_a_checkout_may_set() {
+        assert!(project_allowed("plugins.read.enabled"));
+        assert!(project_allowed("plugins.cmd.enabled"));
+        assert!(!project_allowed("plugins.graph.enabled"));
+        assert!(!project_allowed("plugins.graph.backend"));
+        assert!(!project_allowed("plugins.memory.enabled"));
     }
 
     #[rstest]

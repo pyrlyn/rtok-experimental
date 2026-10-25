@@ -167,7 +167,7 @@ impl Runtime {
 
     fn with_store(config: Config, store: Store, session: impl Into<String>) -> Result<Self> {
         store.set_store_raw(config.core.store_raw);
-        let host_id = store.host_id(&config.hook.host)?.or(Some(6));
+        let host_id = Some(store.host_id_or_other(&config.hook.host)?);
         Ok(Self {
             config,
             store,
@@ -785,6 +785,10 @@ impl Symbols for Runtime {
 
     fn symbol_ref_groups(&self, root: &str, name: &str) -> Result<Vec<(String, String, i64, i32)>> {
         self.store.symbol_ref_groups(root, name).map_err(Into::into)
+    }
+
+    fn symbol_ref_kinds(&self, root: &str, name: &str) -> Result<Vec<(String, String, String)>> {
+        self.store.symbol_ref_kinds(root, name).map_err(Into::into)
     }
 
     fn symbol_callees(&self, root: &str, name: &str) -> Result<Vec<(String, i32, String, i32)>> {

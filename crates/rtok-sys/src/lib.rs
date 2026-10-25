@@ -146,6 +146,20 @@ pub fn ancestors(pid: i32, max: usize) -> Vec<i32> {
     chain
 }
 
+/// Bytes a new file can still take on the volume holding `path`, which must exist. The share
+/// an unprivileged user may use (`f_bavail`), not the root-reserved total.
+pub fn free_bytes(path: &std::path::Path) -> io::Result<u64> {
+    #[cfg(unix)]
+    {
+        let st = rustix::fs::statvfs(path)?;
+        Ok(st.f_bavail.saturating_mul(st.f_frsize))
+    }
+    #[cfg(windows)]
+    {
+        win::free_bytes(path)
+    }
+}
+
 /// Become a session leader so closing the terminal does not take the tree down.
 /// No-op on Windows.
 pub fn setsid() {
@@ -259,6 +273,28 @@ mod win {
         Ok(())
     }
 
+    pub fn free_bytes(path: &std::path::Path) -> std::io::Result<u64> {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+
+        let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        let mut free = 0u64;
+        // SAFETY: `wide` is NUL-terminated and `free` is a valid out pointer; the other two
+        // out parameters are optional and null.
+        let ok = unsafe {
+            GetDiskFreeSpaceExW(
+                wide.as_ptr(),
+                &mut free,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(free)
+    }
+
     pub fn stop_inheriting_std_handles() {
         for id in [STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
             let handle = unsafe { GetStdHandle(id) };
@@ -314,5 +350,12 @@ mod tests {
         assert_eq!(parent_of(0), None);
         assert_eq!(parent_of(-5), None);
         assert!(ancestors(0, 3).is_empty());
+    }
+
+    #[test]
+    fn a_directory_reports_the_space_of_its_volume() {
+        let dir = std::env::temp_dir();
+        assert!(free_bytes(&dir).unwrap() > 0);
+        assert!(free_bytes(&dir.join("no-such-dir-t970")).is_err());
     }
 }

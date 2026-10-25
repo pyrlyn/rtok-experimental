@@ -1,9 +1,9 @@
 ---
-status: todo
+status: in progress
 priority: P2
 complexity: 4
-readiness: 0%
-agent:
+readiness: 100%
+agent: Claude Code / claude-sonnet-5-5
 ---
 
 # T970. `rtok worktree add` creates all or nothing and checks free space first
@@ -19,3 +19,5 @@ created and the claim record. A branch or directory that existed before the call
 
 Check: tests that inject a failed `git worktree add` and a full-volume reading, then assert
 nothing is left behind; `just check`.
+
+Plan: `rtok-sys` gains `free_bytes(path)` (rustix `statvfs` on Unix, `GetDiskFreeSpaceExW` on Windows; both crates already depend on the OS binding). `[worktree] min_free_mib` (default 2048, 0 off) is read in `claim::add` and handed to `add::run_with`, which checks the nearest existing ancestor of the target before the fetch. `add::Undo` records branch, worktree and claim as they are created and takes them back in reverse on drop unless kept; a pre-existing branch is never recorded. `add::Seams` makes the free-space reading and the `git worktree add` step injectable. Tests: `tests/worktree.rs` with injected failures against a scratch repository; docs (en, ru, uk), default.toml and trycmd expectations; verify with the focused nextest runs, clippy, `just check`.

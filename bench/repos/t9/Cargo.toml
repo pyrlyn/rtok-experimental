@@ -1,0 +1,8 @@
+# T9.1 bench fixture: the crate `bench/tasks.toml` edits. Detached from the rtok workspace.
+[package]
+name = "t9"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]

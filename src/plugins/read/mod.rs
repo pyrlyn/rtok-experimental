@@ -112,7 +112,12 @@ pub(crate) fn read_with(
     let raw = fs.read_to_string(&abs).map_err(|e| {
         let msg = e.to_string();
         let msg = msg.split(" (os error").next().unwrap_or(&msg);
-        anyhow::anyhow!("{msg}: {path}")
+        let hint = if e.kind() == std::io::ErrorKind::NotFound {
+            roots::moved_hint(cwd, &abs)
+        } else {
+            String::new()
+        };
+        anyhow::anyhow!("{msg}: {path}{hint}")
     })?;
     let mode = if mode.is_empty() {
         cfg.default_mode.as_str()
@@ -261,7 +266,7 @@ pub(crate) fn resolve_with(
         return Ok(abs);
     }
     bail!(
-        "path outside cwd: {} (outside this project and its worktrees; read it with the host's own file tool)",
+        "path outside cwd: {} (outside this project and its worktrees; read it with the host's own file tool, or add its directory to [plugins.read] allow_paths)",
         path.display()
     )
 }
