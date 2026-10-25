@@ -85,7 +85,10 @@ impl Store {
     }
 
     /// T352: run `f` under the maintenance busy window (see `purge_calls_older_than`).
-    fn maintenance<T>(&self, f: impl FnOnce(&mut SqliteConnection) -> Result<T>) -> Result<T> {
+    pub(crate) fn maintenance<T>(
+        &self,
+        f: impl FnOnce(&mut SqliteConnection) -> Result<T>,
+    ) -> Result<T> {
         let mut conn = self.lock()?;
         set_busy(&mut conn, std::time::Duration::from_secs(30))?;
         let out = f(&mut conn);
@@ -136,6 +139,10 @@ impl Store {
         };
         if let Err(e) = store.run_retention(job.retain_calls_days, job.retain_hook_bodies_days) {
             return vec![warn("retention", &e)];
+        }
+        // T968: after the age retention, so the limits only act on what it left.
+        if let Err(e) = store.prune(&job.db_path, &job.prune, false) {
+            return vec![warn("prune", &e)];
         }
         match store.convert_to_incremental_vacuum() {
             Ok(_) => Vec::new(),

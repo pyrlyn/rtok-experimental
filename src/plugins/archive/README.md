@@ -26,6 +26,11 @@ Decisions are keyed by `tool_use_id` and persisted, so every later request rewri
 block identically — the frozen prefix stays byte-stable and cache hits survive. Never touched:
 `system`, `tools`, the last `keep_turns` turns, or any block whose id was `expand`ed.
 
+Size and age (T968): `core.retain_archive_days` and `core.max_archive_mb` delete the oldest
+bodies, at session start or on demand with `rtok archive prune [--dry-run]`. A body that a
+session with a call in the last 14 days can still `expand` — its own, or one its decisions or
+read cache name — is never deleted; `rtok info` warns when the archive is over its limit.
+
 The live zone has two carriers, and they share one function — `rewrite` over
 `ToolResultRef`/`BlobRef`, never a second implementation:
 

@@ -58,6 +58,16 @@ pub const HOOK_EVENTS: &[HookEvent] = &[
     matched("claude", "PreToolUse", "PreToolUse", "Bash", false),
     matched("claude", "PreToolUse", "PreToolUse", "Read", false),
     matched("claude", "PreToolUse", "PreToolUse", "Skill", false),
+    // T929.1: Claude honours `updatedInput` on MCP tools (T130.1). The hidden `agent`
+    // argument is injected here; Kimi's `updatedInput` is unverified, Qwen matchers are
+    // exact Bash/Read/Skill aliases, and Gemini's BeforeTool already fires with no matcher.
+    matched(
+        "claude",
+        "PreToolUse",
+        "PreToolUse",
+        "mcp__rtok__read",
+        false,
+    ),
     matched("claude", "PostToolUse", "PostToolUse", "*", false),
     row("claude", "UserPromptSubmit", "UserPromptSubmit", false),
     row("claude", "SessionStart", "SessionStart", false),
@@ -71,6 +81,13 @@ pub const HOOK_EVENTS: &[HookEvent] = &[
     matched("codebuddy", "PreToolUse", "PreToolUse", "Bash", true),
     matched("codebuddy", "PreToolUse", "PreToolUse", "Read", true),
     matched("codebuddy", "PreToolUse", "PreToolUse", "Skill", true),
+    matched(
+        "codebuddy",
+        "PreToolUse",
+        "PreToolUse",
+        "mcp__rtok__read",
+        true,
+    ),
     matched("codebuddy", "PostToolUse", "PostToolUse", "*", true),
     row("codebuddy", "UserPromptSubmit", "UserPromptSubmit", true),
     row("codebuddy", "SessionStart", "SessionStart", true),
@@ -187,4 +204,19 @@ pub fn installed(host: &str) -> impl Iterator<Item = (&'static str, &'static str
 /// with an optional matcher): the list `claude::insert_ours` and `strip_ours` walk.
 pub fn entries(host: &str) -> Vec<(&'static str, &'static str)> {
     for_host(host).map(|e| (e.host_event, e.matcher)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mcp_read_matcher_is_on_hosts_that_rewrite_mcp_input() {
+        let hosts: Vec<_> = HOOK_EVENTS
+            .iter()
+            .filter(|e| e.matcher == "mcp__rtok__read")
+            .map(|e| e.host)
+            .collect();
+        assert_eq!(hosts, ["claude", "codebuddy"]);
+    }
 }

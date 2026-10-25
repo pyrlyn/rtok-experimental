@@ -7,6 +7,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 mod common;
 
@@ -81,8 +82,8 @@ fn locked(worktree: &Path) -> bool {
 
 /// SessionEnd for A unlocks A's worktree and leaves B's lock. gc's dry run then
 /// plans to remove A's merged, clean, idle worktree.
-#[test]
-fn session_end_unlocks_that_agents_worktree_and_gc_drops_it() {
+#[rstest::rstest]
+fn session_end_unlocks_that_agents_worktree_and_gc_drops_it(#[values(false, true)] busy: bool) {
     let tmp = rtok::testutil::tmp_dir("t958-gc");
     let home = tmp.join("home");
     std::fs::create_dir_all(&home).unwrap();
@@ -122,13 +123,26 @@ fn session_end_unlocks_that_agents_worktree_and_gc_drops_it() {
     lock(&work, &wt_b, &b);
     assert!(locked(&wt_a) && locked(&wt_b));
 
+    let holder = busy.then(|| common::hold_store_writer(&db, Duration::from_millis(600)));
     let end = hook(&home, &db, "SessionEnd", "t958-a", &wt_a, None);
     assert!(
         end.status.success(),
         "{}",
         String::from_utf8_lossy(&end.stderr)
     );
-    assert!(!locked(&wt_a), "A's lock is released");
+    if let Some(holder) = holder {
+        holder.join().unwrap();
+    }
+    // A busy store hands SessionEnd to a detached child; the hook can exit before it unlocks.
+    let deadline = Instant::now() + common::scaled(Duration::from_secs(10));
+    while locked(&wt_a) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        !locked(&wt_a),
+        "A's lock is released: {}",
+        String::from_utf8_lossy(&end.stderr)
+    );
     assert!(locked(&wt_b), "B's lock stays");
 
     let out = Command::new(env!("CARGO_BIN_EXE_rtok"))

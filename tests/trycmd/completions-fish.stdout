@@ -624,14 +624,19 @@ complete -c rtok -n "__fish_rtok_using_subcommand expand" -l grep -d 'Regex filt
 complete -c rtok -n "__fish_rtok_using_subcommand expand" -l context -d 'With `--grep`: N lines around each hit, overlapping windows merged with `--`' -r
 complete -c rtok -n "__fish_rtok_using_subcommand expand" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand expand" -s h -l help -d 'Print help'
-complete -c rtok -n "__fish_rtok_using_subcommand archive; and not __fish_seen_subcommand_from rewrite help" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
-complete -c rtok -n "__fish_rtok_using_subcommand archive; and not __fish_seen_subcommand_from rewrite help" -s h -l help -d 'Print help'
-complete -c rtok -n "__fish_rtok_using_subcommand archive; and not __fish_seen_subcommand_from rewrite help" -f -a "rewrite" -d 'Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)'
-complete -c rtok -n "__fish_rtok_using_subcommand archive; and not __fish_seen_subcommand_from rewrite help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c rtok -n "__fish_rtok_using_subcommand archive; and not __fish_seen_subcommand_from rewrite prune help" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
+complete -c rtok -n "__fish_rtok_using_subcommand archive; and not __fish_seen_subcommand_from rewrite prune help" -s h -l help -d 'Print help'
+complete -c rtok -n "__fish_rtok_using_subcommand archive; and not __fish_seen_subcommand_from rewrite prune help" -f -a "rewrite" -d 'Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)'
+complete -c rtok -n "__fish_rtok_using_subcommand archive; and not __fish_seen_subcommand_from rewrite prune help" -f -a "prune" -d 'Delete old and surplus archive bodies and old calls, compact the store, print what was freed (the limits are `core.retain_archive_days`, `max_archive_mb`, `max_store_mb`)'
+complete -c rtok -n "__fish_rtok_using_subcommand archive; and not __fish_seen_subcommand_from rewrite prune help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c rtok -n "__fish_rtok_using_subcommand archive; and __fish_seen_subcommand_from rewrite" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand archive; and __fish_seen_subcommand_from rewrite" -l stdin -d 'Read the message array from stdin (pi `context` event)'
 complete -c rtok -n "__fish_rtok_using_subcommand archive; and __fish_seen_subcommand_from rewrite" -s h -l help -d 'Print help'
+complete -c rtok -n "__fish_rtok_using_subcommand archive; and __fish_seen_subcommand_from prune" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
+complete -c rtok -n "__fish_rtok_using_subcommand archive; and __fish_seen_subcommand_from prune" -l dry-run -d 'Print what would be deleted; delete nothing'
+complete -c rtok -n "__fish_rtok_using_subcommand archive; and __fish_seen_subcommand_from prune" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand archive; and __fish_seen_subcommand_from help" -f -a "rewrite" -d 'Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)'
+complete -c rtok -n "__fish_rtok_using_subcommand archive; and __fish_seen_subcommand_from help" -f -a "prune" -d 'Delete old and surplus archive bodies and old calls, compact the store, print what was freed (the limits are `core.retain_archive_days`, `max_archive_mb`, `max_store_mb`)'
 complete -c rtok -n "__fish_rtok_using_subcommand archive; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c rtok -n "__fish_rtok_using_subcommand completions" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand completions" -l install -d 'Write the script to the shell/'s per-user completions directory'
@@ -1020,6 +1025,7 @@ complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcomma
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from agents" -f -a "send" -d 'Send a message to an agent: `send <id-prefix> <text|->` or `send --all-live <text|->`'
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from agents" -f -a "inbox" -d 'Read messages: your own inbox from `RTOK_AGENT_ID` (marks them read), or with an id that agent/'s queue (marks nothing)'
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from archive" -f -a "rewrite" -d 'Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)'
+complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from archive" -f -a "prune" -d 'Delete old and surplus archive bodies and old calls, compact the store, print what was freed (the limits are `core.retain_archive_days`, `max_archive_mb`, `max_store_mb`)'
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from config" -f -a "init" -d 'Write the annotated reference file to `<home>/config.toml`'
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from config" -f -a "path" -d 'Print the path of the config file'
 complete -c rtok -n "__fish_rtok_using_subcommand help; and __fish_seen_subcommand_from config" -f -a "show" -d 'Print every effective key'

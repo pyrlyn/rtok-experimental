@@ -1,9 +1,9 @@
 ---
-status: todo
+status: in progress
 priority: P2
 complexity: 3
-readiness: 0%
-agent:
+readiness: 85%
+agent: Cursor / grok 4.6
 ---
 
 # T929.1. Tell MCP `read` which context window is calling
@@ -23,3 +23,16 @@ can rewrite an MCP call's input, and the hidden argument stays out of the tool's
 or is documented as internal.
 
 Check: MCP and hook tests with and without the `agent` argument; `just check`.
+
+Execution plan:
+1. Reuse `names::wrap_agent_id` (same shape as Bash `--agent`), `Ctx::with_agent`,
+   `identical_result`/`put_archive_for` context, and `hook_events` (the one table installers
+   and `tests/hook_manifests.rs` read). Do not add a second installer, move MCP, or put `agent`
+   on the visible `read` schema (T924's `with_agent` is a different id).
+2. PreToolUse on `mcp__rtok__read` / `mcp_rtok_read` rewrites `updatedInput` with `agent` from
+   the payload (empty string = parent). Malformed ids are dropped (fail open). Matcher row only
+   for hosts that honour MCP `updatedInput` (Claude, CodeBuddy); Gemini's BeforeTool has no
+   matcher so it already fires. Kimi's `updatedInput` is unverified — leave it off.
+3. MCP `read`: key present → skip the T929 `shared_session` fallback and scope cache / delta /
+   `identical_result` to `(session, agent)`; key absent → T929.
+4. Tests first (hook inject; parent vs sub-agent stubs; no-arg fallback), then `just check`.

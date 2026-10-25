@@ -954,7 +954,8 @@ mod all_or_nothing {
                 1
             );
         }
-        let retry = add(&work, Seams::HOST, 2048).unwrap();
+        // Retry real git with the same injected space reading as the failed attempts.
+        let retry = add(&work, seams(plenty, git::add_locked), 2048).unwrap();
         assert!(retry.path.is_dir());
     }
 
@@ -963,7 +964,7 @@ mod all_or_nothing {
         let tmp = rtok::testutil::tmp_dir("worktree-add-branch");
         let work = common::git::repo(&tmp);
         run(&work, &["branch", "t970-x"]);
-        let err = add(&work, Seams::HOST, 2048).unwrap_err();
+        let err = add(&work, seams(plenty, git::add_locked), 2048).unwrap_err();
         assert!(format!("{err:#}").contains("t970-x"), "{err:#}");
         assert_eq!(left(&work).1.trim(), "t970-x");
         assert_eq!(left(&work).0, 0);
@@ -1535,6 +1536,7 @@ fn mcp_worktree_tools_act_for_the_linked_agent() {
         got[0].0 && got[0].1.starts_with("not linked to an agent session"),
         "{got:?}"
     );
+    assert!(got[0].1.contains("rtok doctor"), "{got:?}");
     assert_eq!(inventory(&work).unwrap().len(), 2);
 }
 

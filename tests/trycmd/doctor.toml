@@ -1,11 +1,13 @@
 bin.name = "rtok"
-args = "--config tests/trycmd/input/json-readers.toml doctor"
+args = "--config json-readers.toml doctor"
 stdout = """
 hooks 0
 hooks check none found
 duplicate hooks none found
 duplicate mcp servers none found
-...
+permissions [CWD]/target/tmp/t60-2-doctor: 0755 -> 0700 (doctor --fix --only permissions --yes)
+permissions [CWD]/target/tmp/t60-2-doctor/config.toml: 0644 -> 0600 (doctor --fix --only permissions --yes)
+permissions [CWD]/target/tmp/t60-2-doctor/logs: 0755 -> 0700 (doctor --fix --only permissions --yes)
 mcp
   rtok ([..] tools, ~[..] desc tokens) [..]
 proxy 
@@ -117,11 +119,17 @@ agents
 ...
 """
 
-# Permission findings vary with Unix umask; commands_e2e covers their modes and repair.
-# Hermetic by construction: isolated HOME/RTOK_HOME, inherit = false.
+# Keep the real CLI and its output checks, but scan only fixtures, not the checkout's worktrees.
+[fs]
+base = "input"
+sandbox = true
+
+# Hermetic by construction: isolated cwd/HOME/RTOK_HOME, inherit = false.
 [env]
 inherit = false
 
 [env.add]
 HOME = "target/tmp/t60-2-doctor"
 RTOK_HOME = "target/tmp/t60-2-doctor"
+RTOK_STATS_TRANSCRIPTS_DIR = "stats-price-tx"
+RTOK_HOST_SANDBOX = "1"

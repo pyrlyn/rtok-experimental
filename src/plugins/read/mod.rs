@@ -66,6 +66,8 @@ impl Plugin for ReadPlugin {
             ToolDef {
                 name: "read",
                 description: "Read a file; mode full|lines|map|signatures|diff|stripped|density:X; range a-b for full|lines|stripped. From a worktree, pass absolute paths.",
+                // T929.1: `agent` is injected by PreToolUse and stays off this schema so the
+                // model does not try to set it. Extra properties are accepted.
                 input_schema: json!({"type":"object","properties":{"path":{"type":"string"},"mode":{"type":"string"},"range":{"type":"string"}},"required":["path"]}),
             },
             ToolDef {
@@ -83,8 +85,29 @@ impl Plugin for ReadPlugin {
 }
 
 pub fn read(cx: &Ctx, path: &str, mode: &str, range: Option<&str>) -> Result<String> {
+    read_for(cx, path, mode, range, false)
+}
+
+/// The hidden `agent` argument the PreToolUse matcher adds (T929.1). Present even when
+/// empty (the parent window). Missing or malformed leaves the T929 fallback.
+pub(crate) fn caller_arg(args: &Value) -> (Option<&str>, bool) {
+    match args.get("agent") {
+        Some(Value::String(s)) if s.is_empty() => (None, true),
+        Some(Value::String(s)) if crate::names::wrap_agent_id(s) => (Some(s.as_str()), true),
+        _ => (None, false),
+    }
+}
+
+/// [`read`] when the caller window is known (`known_caller`) or the T929 fallback applies.
+pub(crate) fn read_for(
+    cx: &Ctx,
+    path: &str,
+    mode: &str,
+    range: Option<&str>,
+    known_caller: bool,
+) -> Result<String> {
     let cwd = roots::cwd()?;
-    read_with(cx, &fs::HostFs, &cwd, path, mode, range)
+    read_called(cx, &fs::HostFs, &cwd, path, mode, range, known_caller)
 }
 
 /// The file a Read/Edit/Write input names: Claude Code's `file_path`, or Copilot's
@@ -104,6 +127,18 @@ pub(crate) fn read_with(
     path: &str,
     mode: &str,
     range: Option<&str>,
+) -> Result<String> {
+    read_called(cx, fs, cwd, path, mode, range, false)
+}
+
+fn read_called(
+    cx: &Ctx,
+    fs: &impl fs::ReadFs,
+    cwd: &Path,
+    path: &str,
+    mode: &str,
+    range: Option<&str>,
+    known_caller: bool,
 ) -> Result<String> {
     let cfg = cx.plugin_config::<crate::config::Read>("read");
     let abs = resolve_with(fs, cwd, Path::new(path), &cfg.allow_paths)?;
@@ -153,7 +188,7 @@ pub(crate) fn read_with(
             .collect::<Vec<_>>()
             .join("\n")
     };
-    let key = cache::key(abs.to_string_lossy().as_ref(), mode, range);
+    let key = cache::key_for(abs.to_string_lossy().as_ref(), mode, range, cx.agent_id());
     // T122: a ranged read is keyed on the bytes it returns, never the whole file.
     let payload = if mode == "map"
         || mode == "signatures"
@@ -165,13 +200,11 @@ pub(crate) fn read_with(
     } else {
         raw.as_bytes()
     };
-    // T929: this call runs only inside the MCP `read` tool (`src/mcp.rs`), which cannot tell
-    // which context window — the parent or a sub-agent — is asking, so once a sub-agent shares
-    // the session no read is answered with a pointer, a delta or a remembered body: another
-    // window may never have seen the bytes it names (the creator allowed revisiting T127's
-    // session-only scoping, 2026-10-21). A session without a sub-agent keeps both.
-    let shared = cx.shared_session();
-    if !shared {
+    // T929: without a caller, MCP cannot tell which window is asking, so once a sub-agent
+    // shares the session no read is a pointer, a delta or a remembered body. T929.1: when
+    // the hook added `agent`, skip that fallback and scope those lookups to the window.
+    let skip_pointers = !known_caller && cx.shared_session();
+    if !skip_pointers {
         if let Some(hit) = cache::hit(
             cx,
             &key,
@@ -181,8 +214,8 @@ pub(crate) fn read_with(
         ) {
             return Ok(hit);
         }
-        // A same-session content-hash hit on those bytes is a pointer.
-        if let Some(msg) = crate::plugin::identical_result(&**cx, "read", payload, None) {
+        // A same-window content-hash hit on those bytes is a pointer.
+        if let Some(msg) = crate::plugin::identical_result(&**cx, "read", payload, cx.agent_id()) {
             let _ = cache::remember(cx, &key, payload);
             return Ok(msg);
         }
@@ -343,6 +376,28 @@ pub(crate) mod tests {
         let (mut c, dir) = crate::testutil::config(name);
         c.plugins.read.allow_paths = vec![dir.clone()];
         (crate::plugin::Runtime::open(c, name).unwrap(), dir)
+    }
+
+    #[test]
+    fn caller_arg_treats_empty_as_the_parent_and_drops_junk() {
+        assert_eq!(caller_arg(&json!({})), (None, false));
+        assert_eq!(caller_arg(&json!({"agent": ""})), (None, true));
+        assert_eq!(
+            caller_arg(&json!({"agent": "child"})),
+            (Some("child"), true)
+        );
+        assert_eq!(caller_arg(&json!({"agent": "../x"})), (None, false));
+        assert_eq!(caller_arg(&json!({"agent": 1})), (None, false));
+    }
+
+    #[test]
+    fn read_schema_omits_the_hidden_agent_argument() {
+        let read = ReadPlugin
+            .mcp_tools()
+            .into_iter()
+            .find(|t| t.name == "read")
+            .unwrap();
+        assert!(read.input_schema["properties"].get("agent").is_none());
     }
 
     // Disk e2e kept; Vfs twins below call `read_with` / `resolve_with` (T56.5 ReadFs).

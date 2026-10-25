@@ -35,6 +35,17 @@ pub fn embed_settings(embed: &crate::config::MemoryEmbed) -> rtok_store::EmbedSe
     }
 }
 
+/// T968: `[core]` limits as the store takes them, in bytes.
+pub fn prune_policy(cfg: &crate::config::Config) -> rtok_store::PrunePolicy {
+    const MIB: u64 = 1024 * 1024;
+    rtok_store::PrunePolicy {
+        retain_calls_days: cfg.core.retain_calls_days,
+        retain_archive_days: cfg.core.retain_archive_days,
+        max_store_bytes: u64::from(cfg.core.max_store_mb) * MIB,
+        max_archive_bytes: u64::from(cfg.core.max_archive_mb) * MIB,
+    }
+}
+
 /// T352: run [`Store::housekeeping`] on a background thread, so the `initialize` handshake
 /// (mcp) or the listener (proxy) is never delayed by it. The thread dies with the process;
 /// one that is killed mid-run only rolls back its current batch (or its `VACUUM`).
@@ -43,6 +54,7 @@ pub fn spawn_retention(cfg: &crate::config::Config, surface: &'static str) {
         db_path: cfg.core.db_path.clone(),
         retain_calls_days: cfg.core.retain_calls_days,
         retain_hook_bodies_days: cfg.core.retain_hook_bodies_days,
+        prune: prune_policy(cfg),
     };
     let log_path = cfg.log.path.clone();
     let max_bytes = cfg.log.max_bytes;

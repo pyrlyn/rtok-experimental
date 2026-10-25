@@ -54,39 +54,56 @@ fn sample(
     setup: impl FnOnce(&std::path::Path),
     ok: impl Fn(&[u8]) -> bool,
 ) -> Option<Vec<Duration>> {
+    sample_between(event, tag, fixture, setup, |_, _| {}, ok)
+}
+
+/// One `rtok hook <event>` over `home`, `fixture` on stdin.
+fn spawn_hook(event: &str, home: &std::path::Path, fixture: &[u8]) -> std::process::Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+        .args(["hook", event])
+        .env("RTOK_HOME", home)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn rtok");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(fixture)
+        .expect("write fixture");
+    child.wait_with_output().expect("wait")
+}
+
+/// [`sample`] that runs `between(home, i)` before each timed spawn, outside the timing: a
+/// fixture that never changes the store lets dedup paths (an archive body already stored)
+/// answer for work a real session repeats.
+fn sample_between(
+    event: &str,
+    tag: &str,
+    fixture: &[u8],
+    setup: impl FnOnce(&std::path::Path),
+    mut between: impl FnMut(&std::path::Path, usize),
+    ok: impl Fn(&[u8]) -> bool,
+) -> Option<Vec<Duration>> {
     if cfg!(debug_assertions) {
         eprintln!("skip: T2.2 Check is `cargo test --release latency`");
         return None;
     }
 
-    let bin = env!("CARGO_BIN_EXE_rtok");
     let tmp =
         std::env::temp_dir().join(format!("rtok-latency-{event}{tag}-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).expect("temp home");
     setup(&tmp);
 
-    let spawn = || {
-        let mut child = Command::new(bin)
-            .args(["hook", event])
-            .env("RTOK_HOME", &tmp)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("spawn rtok");
-        child
-            .stdin
-            .take()
-            .expect("stdin")
-            .write_all(fixture)
-            .expect("write fixture");
-        child.wait_with_output().expect("wait")
-    };
+    let spawn = || spawn_hook(event, &tmp, fixture);
     let warm = spawn();
     assert!(warm.status.success(), "warmup hook must exit 0");
 
     let mut samples = Vec::with_capacity(N);
-    for _ in 0..N {
+    for i in 0..N {
+        between(&tmp, i);
         let start = std::time::Instant::now();
         let out = spawn();
         samples.push(start.elapsed());
@@ -522,4 +539,218 @@ fn seed_pagerank_home(home: &std::path::Path) {
 fn now_nanos() -> i64 {
     let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
     since.map_or(0, |d| d.as_nanos() as i64)
+}
+
+/// T525: a hook's own work is the wall time of `rtok hook <event>` over that of a cheap
+/// baseline hook (`PreToolUse`, 0.8 ms live) spawned right before it, so a loaded host (the
+/// process start alone took 11 ms at load 90) does not decide the result. The gap's median
+/// is what `[hook] max_ms` promises; `baseline` is spawned inside `between`, untimed by the
+/// event's own sample.
+struct Gap {
+    baseline: std::cell::RefCell<Vec<Duration>>,
+}
+
+impl Gap {
+    fn new() -> Self {
+        Gap {
+            baseline: Default::default(),
+        }
+    }
+
+    /// Time one baseline spawn over `home`.
+    fn spawn_baseline(&self, home: &std::path::Path) {
+        let fixture = include_bytes!("fixtures/hooks/pre_tool_read.json");
+        let start = std::time::Instant::now();
+        let out = spawn_hook("PreToolUse", home, fixture);
+        let took = start.elapsed();
+        assert!(out.status.success(), "baseline hook must exit 0");
+        self.baseline.borrow_mut().push(took);
+    }
+
+    fn assert_median_under(&self, limit: Duration, event: &str, mut samples: Vec<Duration>) {
+        let mut base = self.baseline.borrow().clone();
+        base.sort();
+        samples.sort();
+        let (p50, floor) = (samples[N / 2], base[base.len() / 2]);
+        let gap = p50.saturating_sub(floor);
+        eprintln!(
+            "{event}: n={N} p50 {p50:?} baseline p50 {floor:?} gap {gap:?} max {:?}",
+            samples[N - 1]
+        );
+        assert!(gap < limit, "{event} p50 gap {gap:?} is not < {limit:?}");
+    }
+}
+
+/// One `PreToolUse` row of a session's ledger: a `Read` window or an `Edit` of `f<k>.rs`, the
+/// two inputs the spawn brief turns into pointers and symbol ranges.
+fn ledger_row(project: &std::path::Path, session: &str, i: usize) -> String {
+    let file = project.join(format!("f{}.rs", i % 10));
+    let input = if i.is_multiple_of(2) {
+        serde_json::json!({"file_path": file, "offset": 1, "limit": 40})
+    } else {
+        serde_json::json!({
+            "file_path": file,
+            "old_string": "a",
+            "new_string": format!("    let x{i} = {i};\n{}", "    // body line\n".repeat(60)),
+        })
+    };
+    serde_json::json!({
+        "hook_event_name": "PreToolUse", "session_id": session, "cwd": project,
+        "tool_name": if i.is_multiple_of(2) { "Read" } else { "Edit" }, "tool_input": input,
+    })
+    .to_string()
+}
+
+/// Records `rows` more ledger rows for `session` in `home`'s store, through the dispatcher.
+fn push_ledger_rows(home: &std::path::Path, project: &std::path::Path, session: &str, rows: usize) {
+    let cfg = rtok::testutil::config_in(home);
+    for i in 0..rows {
+        let mut out = Vec::new();
+        let row = ledger_row(project, session, i);
+        rtok::hooks::run("PreToolUse", row.as_bytes(), &mut out, &cfg);
+    }
+}
+
+/// `rows` hook calls of other sessions: the store's history, which the spawn brief's query
+/// must not walk (a live store held about 500,000 hook rows in 2026-10).
+fn push_other_sessions_history(home: &std::path::Path, rows: usize) {
+    let store = rtok::store::Store::open(&home.join("rtok.db")).expect("open store");
+    store
+        .upsert_session("history", None, None, None, None)
+        .expect("seed session");
+    for _ in 0..rows {
+        store
+            .insert_call(
+                "history",
+                "hook",
+                "hook",
+                None,
+                None,
+                None,
+                None,
+                Some("PreToolUse"),
+            )
+            .expect("seed call");
+    }
+}
+
+/// T525: live `SubagentStart` ran at a 48.6 ms median (n=758, 2026-10-03..10); the cause was
+/// the spawn brief's ledger query, which scanned every hook row in the store (37 ms at 60,000
+/// rows, 0.2 ms with `calls_session_name`). A fresh store has no history and no brief, so the
+/// case seeds what a working store holds: 40,000 hook calls of other sessions, 100
+/// `Read`/`Edit` rows over ten indexed files in this one, and one more row before every spawn
+/// so the digest differs each time instead of hitting the archive's dedup.
+#[test]
+fn latency_hook_subagent_start_with_a_populated_ledger_median_under_10ms() {
+    let session = "t525-subagent";
+    let project =
+        std::env::temp_dir().join(format!("rtok-latency-sub-proj-{}", std::process::id()));
+    let fixture = serde_json::json!({
+        "hook_event_name": "SubagentStart", "session_id": session, "cwd": project,
+        "agent_id": "t525-child", "agent_type": "general-purpose",
+        "task_description": "edit f1.rs and f2.rs",
+    })
+    .to_string();
+    let setup = |home: &std::path::Path| {
+        std::fs::create_dir_all(&project).unwrap();
+        for k in 0..10 {
+            let body = "fn a() {\n    let x = 1;\n}\n\nfn b() {\n    let y = 2;\n}\n".repeat(20);
+            std::fs::write(project.join(format!("f{k}.rs")), body).unwrap();
+        }
+        let out = Command::new(env!("CARGO_BIN_EXE_rtok"))
+            .args(["graph", "index"])
+            .arg(&project)
+            .env("RTOK_HOME", home)
+            .output()
+            .expect("rtok graph index");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        push_other_sessions_history(home, 40_000);
+        push_ledger_rows(home, &project, session, 100);
+    };
+    let gap = Gap::new();
+    let between = |home: &std::path::Path, i: usize| {
+        push_ledger_rows(home, &project, session, 1 + i % 2);
+        gap.spawn_baseline(home);
+    };
+    let brief = |out: &[u8]| String::from_utf8_lossy(out).contains("rtok expand");
+    let Some(samples) = sample_between(
+        "SubagentStart",
+        "-ledger",
+        fixture.as_bytes(),
+        setup,
+        between,
+        brief,
+    ) else {
+        return;
+    };
+    gap.assert_median_under(P95_MAX, "SubagentStart", samples);
+    let _ = std::fs::remove_dir_all(&project);
+}
+
+/// T525: live `PreCompact` ran at a 25.7 ms median (n=189). The checkpoint reads the whole
+/// transcript, and a session worth compacting has a large one: 400 turns of a prompt, a
+/// `Read` call and a 4 KB tool result, about 2 MB, with 40 notes of a few thousand tokens in
+/// the store (as T428). The scan costs about 2.4 ms per MB, so a transcript several times this
+/// size is over `max_ms` by its length alone (plan/T525/done.md); this one must not be.
+#[test]
+fn latency_hook_pre_compact_with_a_long_transcript_median_under_10ms() {
+    let dir = std::env::temp_dir().join(format!("rtok-latency-compact-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let transcript = dir.join("t.jsonl");
+    let mut lines = String::new();
+    for i in 0..400 {
+        let line = |role: &str, content: serde_json::Value| {
+            let v =
+                serde_json::json!({"type": role, "message": {"role": role, "content": content}});
+            format!("{v}\n")
+        };
+        lines.push_str(&line("user", format!("step {i}: fix the build").into()));
+        lines.push_str(&line(
+            "assistant",
+            serde_json::json!([{"type": "tool_use", "id": format!("toolu_{i}"), "name": "Read",
+                "input": {"file_path": format!("/repo/src/f{}.rs", i % 40)}}]),
+        ));
+        lines.push_str(&line(
+            "user",
+            serde_json::json!([{"type": "tool_result", "tool_use_id": format!("toolu_{i}"),
+                "content": "fn body line\n".repeat(320)}]),
+        ));
+    }
+    std::fs::write(&transcript, lines).unwrap();
+    let fixture = serde_json::json!({
+        "hook_event_name": "PreCompact", "session_id": "t525-compact", "cwd": dir,
+        "transcript_path": transcript, "trigger": "auto",
+    })
+    .to_string();
+    let seed_notes = |home: &std::path::Path| {
+        let store = rtok::store::Store::open(&home.join("rtok.db")).expect("open store");
+        let body = "recalled body line\n".repeat(900);
+        // The hook files recall under the project of its cwd, or of the process's own when
+        // that is none: the temp dir the fixture names is not a checkout.
+        let project = rtok::project::project_name(&std::env::current_dir().unwrap());
+        for i in 0..40 {
+            store
+                .upsert_note(project.as_deref(), "note", &format!("note {i}"), &body)
+                .expect("seed note");
+        }
+    };
+    let gap = Gap::new();
+    let between = |home: &std::path::Path, _: usize| gap.spawn_baseline(home);
+    // A title in the context line proves the notes and the checkpoint path both ran.
+    let Some(samples) = sample_between(
+        "PreCompact",
+        "",
+        fixture.as_bytes(),
+        seed_notes,
+        between,
+        |out| String::from_utf8_lossy(out).contains("hookEventName"),
+    ) else {
+        return;
+    };
+    gap.assert_median_under(P95_MAX, "PreCompact", samples);
+    let _ = std::fs::remove_dir_all(&dir);
 }

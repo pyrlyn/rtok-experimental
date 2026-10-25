@@ -236,6 +236,7 @@ pub struct RetentionJob {
     pub db_path: PathBuf,
     pub retain_calls_days: u32,
     pub retain_hook_bodies_days: u32,
+    pub prune: PrunePolicy,
 }
 
 type MigrateHook = fn(&str, &mut dyn FnMut() -> Result<usize>) -> Result<usize>;
@@ -405,6 +406,10 @@ mod call_log;
 mod handle;
 mod measure_rows;
 mod note_store;
+mod prune;
+pub use prune::{
+    OPEN_SESSION_SECS, PrunePolicy, PruneReport, RETAIN_CALLS_FLOOR_DAYS, store_file_bytes,
+};
 mod retention;
 mod session_rows;
 
@@ -927,6 +932,8 @@ impl Store {
 mod support;
 #[cfg(test)]
 mod tests_archive;
+#[cfg(test)]
+mod tests_prune;
 #[cfg(test)]
 mod tests_schema;
 #[cfg(test)]

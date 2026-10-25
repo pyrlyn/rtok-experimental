@@ -1284,3 +1284,29 @@ fn file_linked_observations_are_distinct_before_the_limit() {
     assert_eq!(ids(Some("q"), &paths, 5), vec![other]);
     assert!(ids(Some("p"), &[], 5).is_empty());
 }
+
+/// T525: the spawn brief reads a session's newest `PreToolUse` rows on the `SubagentStart`
+/// hook path. Without an index on `(session_id, name, id)` SQLite walked every hook row of the
+/// store through `calls_kind` and sorted them: 37 ms at 60,000 rows, over 40 ms live. The
+/// plan must search by session and name, with no sort and no walk of `calls_kind`.
+#[test]
+fn recent_hook_inputs_query_plan_searches_by_session_and_name() {
+    let store = Store::open_in_memory().unwrap();
+    let mut conn = store.lock().unwrap();
+    let rows: Vec<(i32, i32, i32, String)> = sql_ext::ExplainRecentHookInputsPlan
+        .load(&mut *conn)
+        .unwrap();
+    let plan = rows
+        .iter()
+        .map(|r| r.3.as_str())
+        .collect::<Vec<_>>()
+        .join(" | ");
+    assert!(
+        plan.contains("USING INDEX calls_session_name (session_id=? AND name=?)"),
+        "expected the (session_id, name) index on calls, got: {plan}"
+    );
+    assert!(
+        !plan.contains("TEMP B-TREE") && !plan.contains("calls_kind"),
+        "hook rows of every session are walked or sorted: {plan}"
+    );
+}

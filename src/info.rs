@@ -86,6 +86,8 @@ pub struct Info {
     pub proxy: ProxyInfo,
     pub otel: OtelInfo,
     pub store: Option<StoreInfo>,
+    /// T968: a store or archive over its `core.max_*_mb` limit, with the command that fixes it.
+    pub warnings: Vec<String>,
     /// Sum of the known files above (config, db + wal + shm, archive, log).
     pub total_bytes: u64,
 }
@@ -256,6 +258,11 @@ pub fn collect(cfg: &Config, config_file: Option<&Path>) -> Info {
         endpoint,
     };
     let store = store_info(cfg);
+    let warnings = size_warnings(
+        cfg,
+        db.bytes.unwrap_or(0) + db_wal.bytes.unwrap_or(0),
+        archive.bytes,
+    );
     let total_bytes = config.bytes.unwrap_or(0)
         + db.bytes.unwrap_or(0)
         + db_wal.bytes.unwrap_or(0)
@@ -275,8 +282,33 @@ pub fn collect(cfg: &Config, config_file: Option<&Path>) -> Info {
         proxy,
         otel,
         store,
+        warnings,
         total_bytes,
     }
+}
+
+/// A limit of 0 is off, like the setting.
+fn size_warnings(cfg: &Config, store_bytes: u64, archive_bytes: u64) -> Vec<String> {
+    const MIB: u64 = 1024 * 1024;
+    [
+        ("store", "max_store_mb", store_bytes, cfg.core.max_store_mb),
+        (
+            "archive",
+            "max_archive_mb",
+            archive_bytes,
+            cfg.core.max_archive_mb,
+        ),
+    ]
+    .into_iter()
+    .filter(|&(_, _, bytes, mb)| mb > 0 && bytes > u64::from(mb) * MIB)
+    .map(|(what, key, bytes, mb)| {
+        format!(
+            "{what} {} is over core.{key} ({}); run `rtok archive prune`",
+            human_bytes(bytes),
+            human_bytes(u64::from(mb) * MIB)
+        )
+    })
+    .collect()
 }
 
 fn show(file: &FileInfo) -> String {
@@ -337,6 +369,9 @@ impl Info {
             )),
             None => out.push_str("store - (unreadable)\n"),
         }
+        for w in &self.warnings {
+            out.push_str(&format!("warning {w}\n"));
+        }
         out.push_str(&format!("disk {}\n", human_bytes(self.total_bytes)));
         out
     }
@@ -375,6 +410,25 @@ mod tests {
         let v = serde_json::to_value(&info).unwrap();
         assert!(v["db"]["bytes"].is_null());
         assert_eq!(v["proxy"]["port"], cfg.proxy.port);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_store_or_archive_over_its_limit_warns_and_zero_is_off() {
+        let dir = std::env::temp_dir().join(format!("rtok-info-limit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut cfg = Config::load_from(&dir).unwrap();
+        cfg.core.max_store_mb = 1;
+        cfg.core.max_archive_mb = 0;
+        let mib = 1024 * 1024;
+        assert!(size_warnings(&cfg, mib, 50 * mib).is_empty());
+        let w = size_warnings(&cfg, 3 * mib, 50 * mib);
+        assert_eq!(w.len(), 1);
+        assert!(
+            w[0].starts_with("store 3.0 MB is over core.max_store_mb"),
+            "{w:?}"
+        );
+        assert!(w[0].contains("rtok archive prune"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
