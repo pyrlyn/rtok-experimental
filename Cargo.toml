@@ -231,6 +231,7 @@ d2-render = { version = "0.1", default-features = false, features = ["native"] }
 [profile.dev]
 # Backtraces keep `file:line`; the full DWARF that dominated every artifact goes.
 debug = "line-tables-only"
+split-debuginfo = "unpacked"
 
 # Nobody steps through the 450-odd dependencies, but their debug info is copied into every
 # one of the integration test binaries (one per file under tests/*.rs), which is most of
@@ -242,6 +243,7 @@ debug = false
 # Build scripts and proc macros are run, not debugged.
 [profile.dev.build-override]
 debug = false
+opt-level = 3
 
 [profile.release]
 strip = "symbols"
