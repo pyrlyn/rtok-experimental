@@ -908,6 +908,10 @@ const EXEMPT: &[(&str, &str)] = &[
     ("config init", "writes the annotated reference file"),
     ("config set", "edits one key in the user file"),
     ("bench", "runs the A/B schedule and writes Measurement rows"),
+    (
+        "review",
+        "builds a review prompt from a git diff and sends it to a reviewer model; no store page",
+    ),
     ("memory import", "inserts note rows"),
     (
         "memory extract",

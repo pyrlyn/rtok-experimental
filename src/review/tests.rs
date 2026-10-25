@@ -351,7 +351,6 @@ fn many_unproven_same_name_defs_are_ambiguous_and_ranked_last() {
 }
 
 fn git(dir: &std::path::Path, args: &[&str]) -> String {
-    #[allow(clippy::disallowed_methods)]
     let out = std::process::Command::new("git")
         .current_dir(dir)
         .envs([

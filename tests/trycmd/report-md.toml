@@ -123,6 +123,9 @@ Every effective key with its origin — the `config show --sources` page.
 | log.path | ~/.rtok/logs/rtok.log | default |
 | log.to_db | true | default |
 | log.tspin | auto | default |
+| mcp.cache_enabled | true | default |
+| mcp.cache_max_entries | 256 | default |
+| mcp.cache_ttl_secs | 300 | default |
 | mcp.http | 127.0.0.1:8791 | default |
 | mcp.http_tools | [read, search, tree] | default |
 | mcp.max_description_tokens | 60 | default |
@@ -477,7 +480,7 @@ Every effective key with its origin — the `config show --sources` page.
 | worktree.seed | true | default |
 | worktree.seed_dirs | [target, node_modules] | default |
 
-428 keys.
+431 keys.
 
 ## Doctor
 
@@ -489,7 +492,7 @@ hooks check none found
 duplicate hooks none found
 duplicate mcp servers none found
 mcp
-  rtok (41 tools, ~1137 desc tokens) /Users/listepo/Grok/target/rtok/debug/rtok
+  rtok (41 tools, ~1137 desc tokens) [..]/debug/rtok
 proxy 
 proxy openai 
 BASH_MAX_OUTPUT_LENGTH (unset)
