@@ -23,6 +23,40 @@ plugins behind one trait, they share one SQLite file, and a saving that is not a
 `measurements` row does not exist — including rtok's own, which is why the A/B table in the
 README is currently all zeros instead of a marketing figure.
 
+## 1a. rtok vs ponytail and other prompt-level tools
+
+[ponytail](https://ponytail.dev) is a prompt-rules pack: it tells the agent to write less code.
+That is a real lever, and it works on the output side. rtok mostly cuts the input side — what
+the model reads each turn — and also ships the same idea as an optional mode, so choosing rtok
+does not mean giving up the minimal-code rules.
+
+**Why rtok**
+
+- Input-side reduction through hooks, the MCP server and the API proxy, as plugins behind one
+  trait (see the plugin table in the [README](../README.md)); a prompt pack touches none of these.
+- The ponytail idea is built in: `modes/yagni.md` is a minimal-code ladder, injected by the
+  inject hook (alias `pony`, `src/plugins/inject/mod.rs`) inside the shared 800-token inject
+  budget, so it is byte-stable and counted with every other injection.
+- `rtok stats` reports what was saved and, with per-model prices in `[stats.prices]`, what it
+  costs in USD (`src/cli/stats.rs`); `rtok dashboard` shows the same store in a local UI.
+- `rtok doctor --instructions` audits your instruction files, and `rtok doctor` also audits what the
+  installed skills cost to list on every turn (`src/cli/doctor.rs`, `src/doctor.rs`).
+- `rtok task` keeps the plan as tasks the agent can claim instead of loose TODO prose
+  ([commands](commands.md)).
+- `rtok graph review` turns a git diff into a deterministic reading list, with no model call
+  ([review](review.md)).
+
+- `rtok review` hands a reviewer model the diff plus signature digests
+  ([review-context](review-context.md)).
+
+**Benchmarks.** ponytail is [not measurable in this suite](../bench/competitors/ponytail/README.md):
+it is prompt-only and needs a live model. A side-by-side reading is in
+[rtok-vs-ponytail](comparison/rtok-vs-ponytail.md); the `mode_bench` fixture results for the
+yagni mode are in section 2, "Prompt-level", and the survey is in [research.md](../research.md).
+There are no live end-to-end numbers comparing rtok and ponytail.
+ponytail 5 reports −53 % lines of code, −45 % output tokens and −26 % cost from its own
+bench ([ponytail.dev](https://ponytail.dev)); these numbers are unverified here.
+
 ## 2. What each category does well
 
 ### Command-output filters — rtk

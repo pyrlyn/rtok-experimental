@@ -110,6 +110,8 @@ Maple — see [`docs/otel.md`](docs/otel.md).
 rtok replaces a stack of separate hooks, MCP servers and proxies with one process and one
 ledger. It has no live end-to-end cost win yet, and its reference lookups find fewer sites than
 an LSP. Tool-by-tool detail and evidence: **[docs/comparison.md](docs/comparison.md)**.
+For prompt-rules packs such as ponytail, see
+[rtok vs ponytail and other prompt-level tools](docs/comparison.md#1a-rtok-vs-ponytail-and-other-prompt-level-tools).
 
 ## Guarantees and caveats
 
