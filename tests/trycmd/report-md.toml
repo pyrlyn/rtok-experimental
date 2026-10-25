@@ -489,7 +489,7 @@ hooks check none found
 duplicate hooks none found
 duplicate mcp servers none found
 mcp
-  rtok (41 tools, ~1137 desc tokens) /Users/listepo/Grok/target/rtok/debug/rtok
+  rtok (41 tools, ~1137 desc tokens) [..]/debug/rtok
 proxy 
 proxy openai 
 BASH_MAX_OUTPUT_LENGTH (unset)
