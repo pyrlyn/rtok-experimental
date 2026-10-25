@@ -833,13 +833,10 @@ fn auto_add_on_tool(cx: &Runtime) {
         return;
     };
     let path = std::path::Path::new(cwd);
-    match cx.store.project_by_root(path) {
-        Ok(None) => {
-            let _ = cx
-                .store
-                .auto_add_project(path, crate::store::Origin::Session, None);
-        }
-        Ok(Some(_)) | Err(_) => {}
+    if let Ok(None) = cx.store.project_by_root(path) {
+        let _ = cx
+            .store
+            .auto_add_project(path, crate::store::Origin::Session, None);
     }
 }
 
