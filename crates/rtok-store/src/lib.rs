@@ -399,6 +399,8 @@ pub fn rank_blend(rank: usize, retention: f64) -> f64 {
 
 mod archive_rows;
 mod cache;
+mod mcp_memo;
+pub use mcp_memo::{MemoRow, memo_key_hash};
 mod call_log;
 mod handle;
 mod measure_rows;

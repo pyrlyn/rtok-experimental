@@ -159,6 +159,9 @@ extra                   = []          # paths you vouch for as junk (D36), e.g. 
 tools                   = []          # [] = all tools from enabled plugins; else an allow-list; `expand` always stays listed (D4)
 max_description_tokens  = 60          # enforced by a test (T4.1)
 max_result_chars        = 20000       # above this, head/tail + archive id
+cache_enabled           = true        # MCP tool-result memo (docs/mcp-cache.md); RTOK_MCP_CACHE=0 also turns it off
+cache_ttl_secs          = 300         # how long a memoized result is served; 0 = off
+cache_max_entries       = 256         # LRU bound, in memory and in the store; 0 = off
 http                    = "127.0.0.1:8791"  # `rtok mcp --http` with no address; keep it on loopback
 # HTTP expand can retrieve only payloads archived by this running server; restarting resets access.
 http_tools              = ["read", "search", "tree"]  # HTTP allow-list, used instead of `tools`; `expand` always stays listed; tools that act as the calling agent (`whoami`, `agent_send`, `worktree_add`, …) never are
