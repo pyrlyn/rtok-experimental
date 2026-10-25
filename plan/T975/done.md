@@ -1,0 +1,10 @@
+Done: `rtok doctor` now prints a `rtok skills outdated` section: one `WARN <path> (<host>)` line per installed rtok skill whose copy differs from the one this binary ships, then the update command. `rtok doctor --fix` gains the `stale-skills` class (in the default set and in `--only`): without a terminal it lists the copies and writes nothing, in a terminal it asks `update N rtok skills? [y/N]`, `--yes` updates; `--agent <host>` limits it. The update is `agents::skill::sync`, the copy `agents update` makes, so for a host with an outdated skill it also installs that host's missing rtok skills.
+
+- `rtok-agent-sdk`: `skill_outdated(SkillView)` and `SkillCopy::outdated`: present, ours, and `skill_plan` would copy. A missing skill and a foreign tree are not outdated.
+- `src/agents/skill.rs`: `outdated(cfg)` over every host with a skill root (plus the Antigravity CLI root).
+- `src/doctor.rs`: `Report.stale_skills`, text only like `config_notes`, so the JSON schema and the web client are unchanged; `src/doctor/skills_fix.rs` runs the fix; `src/cli/doctor.rs` wires `FixClass::StaleSkills`.
+- Docs: `docs/agents.md` and its `ru`/`uk` copies. The trycmd snapshots of `doctor --help`, the completions and the two `doctor --fix` cases gained the new value and the `rtok skills: up to date` line; `config-init.toml` and `report-md.toml` only re-counted lines and keys that T969 and T970 each added on `main`.
+
+Checked: `cargo test -p rtok-agent-sdk outdated`, `cargo test --lib doctor` (149 passed), `cargo test --test cli_trycmd`, `just check`. By hand against a throwaway `HOME` holding an alpha.2 `rtok-tasks` copy, a foreign `rtok-x` and a user skill: `doctor` warned about `rtok-tasks` only, `--fix --only stale-skills` through a pipe listed it and wrote nothing, `--yes` updated it (and installed the missing `rtok-worktrees`) and printed `0 left`, a second run said `up to date`, and the two other directories kept their bytes. The terminal prompt was not driven by hand.
+
+Found on the way: Cursor's installer no longer calls `skill::sync`, so `agents install|update cursor` leaves `~/.cursor/skills` without rtok skills, although `skill::root` lists it.

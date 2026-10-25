@@ -1,0 +1,49 @@
+{
+  "rows": [
+    {
+      "sha": "badf2ec3c",
+      "range": "badf2ec3c~1..badf2ec3c",
+      "tokens_none": 2636,
+      "review_none_secs": 284,
+      "review_none": "review-none-bonsai.md",
+      "tokens_digest": 8796,
+      "review_digest_secs": 548,
+      "review_digest": "review-digest-bonsai.md",
+      "tokens_full": 65482,
+      "review_full": "skipped: prompt exceeds the model context",
+      "saving_vs_full_pct": 86.6
+    },
+    {
+      "sha": "8a292af85",
+      "range": "8a292af85~1..8a292af85",
+      "tokens_none": 3564,
+      "review_none_secs": 391,
+      "review_none": "review-none-bonsai.md",
+      "tokens_digest": 21161,
+      "review_digest_secs": 669,
+      "review_digest": "review-digest-bonsai.md",
+      "tokens_full": 127379,
+      "review_full": "skipped: prompt exceeds the model context",
+      "saving_vs_full_pct": 83.4
+    },
+    {
+      "sha": "659e107f2",
+      "range": "659e107f2~1..659e107f2",
+      "tokens_none": 5643,
+      "review_none_secs": 389,
+      "review_none": "review-none-bonsai.md",
+      "tokens_digest": 14535,
+      "review_digest_secs": 605,
+      "review_digest": "review-digest-bonsai.md",
+      "tokens_full": 119977,
+      "review_full": "skipped: prompt exceeds the model context",
+      "saving_vs_full_pct": 87.9
+    }
+  ],
+  "total": {
+    "none": 11843,
+    "digest": 44492,
+    "full": 312838
+  },
+  "total_saving_vs_full_pct": 85.8
+}

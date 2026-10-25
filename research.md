@@ -3418,3 +3418,17 @@ Gaps 1–3 decide whether the pass rate and the mean cost are real; they are an 
 3. Copy the overlay with absolute paths and, from the fixture repo, run `RTOK_BENCH_LIVE=1 rtok --config <copy> bench --tasks <file> --runs 1`, as many times as the sample needs; keep each printed table (the per-arm JSON under `<tasks dir>/results/` is overwritten). Discard any run with a zero row.
 4. Per arm, record mean input, cache and output tokens, mean `total_cost_usd`, passes and cost per passed task, `claude --version` and the model; for `b`, `RTOK_HOME=<dir>/b rtok stats --plugin archive --since 1d`; for `context`, the count of `proxy` / `context_management` rows.
 5. One dated row per setting under this section. A setting becomes default-on in a follow-up only if cost per passed task falls with the pass rate held (T385.3); otherwise it stays off with its row.
+
+## 48. Claude Code workspace trust and what `rtok doctor` reads (T978, checked 2026-10-24)
+
+Source: Claude Code docs, [Permissions → Project allow rules and workspace trust](https://code.claude.com/docs/en/permissions#project-allow-rules-and-workspace-trust) and [Security → Additional safeguards](https://code.claude.com/docs/en/security#additional-safeguards), both checked 2026-10-24.
+
+- Trust is stored as `projects["<path>"].hasTrustDialogAccepted = true` in `~/.claude.json`; the docs name that key as the way to trust a folder by hand.
+- In a git repository the key is the repository root, covering the whole repository except a nested repository (a submodule needs its own). A worktree uses the main checkout's root.
+- Outside a repository the key is the folder Claude Code started in, covering its subfolders except a nested repository.
+- Started in the home folder, the trust is held for that session only and never written, so the prompt comes back each launch.
+- The dialog appears only in interactive sessions; `claude -p` and the SDK never show it.
+
+What `doctor` does with it (`src/doctor/trust.rs`): it finds the key folder from `.git` (a directory is a root; a `.git` file's `gitdir` with a `commondir` leads to the main checkout, anything else keeps the folder), checks only that key inside a repository and every ancestor outside one, and reports `untrusted-folder` when none is `true`. It never writes the flag. The home folder, a missing or unparsable `~/.claude.json`, and a file without `projects` are no finding.
+
+On the creator's machine (2026-10-24) 123 `projects` entries all carried the key, 14 of them `false`.

@@ -40,6 +40,8 @@ mod otel;
 mod plugins;
 mod proxy;
 mod report;
+#[cfg(feature = "graph")]
+mod review;
 mod run_cmd;
 mod stats;
 mod task;
@@ -182,6 +184,10 @@ enum Cmd {
         action: docs::DocsCmd,
     },
 
+    /// Token-efficient code review: the diff plus signature digests of the code it touches
+    #[cfg(feature = "graph")]
+    Review(review::ReviewArgs),
+
     /// Symbol index (`rtok graph index`)
     #[cfg(feature = "graph")]
     Graph {
@@ -275,6 +281,8 @@ pub fn run() -> Result<()> {
         Cmd::Docs { action } => docs::run(&config_file, action),
         #[cfg(feature = "graph")]
         Cmd::Graph { action } => graph::run(&config_file, action),
+        #[cfg(feature = "graph")]
+        Cmd::Review(args) => review::run(&config_file, args),
         #[cfg(feature = "guard")]
         Cmd::Guard { action } => guard::run(&config_file, action),
         Cmd::Dashboard(args) => web::dashboard(&config_file, args),

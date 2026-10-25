@@ -2489,7 +2489,7 @@
           "type": "boolean"
         },
         "kind": {
-          "description": "`broken-hook`, `suspect-hook`, `unverified-hook`, `duplicate-hook`, `duplicate-mcp`,\n`conflicting-mcp`, `own-mcp`, `stale-plugin` or `unreadable-config`.",
+          "description": "`broken-hook`, `suspect-hook`, `unverified-hook`, `duplicate-hook`, `duplicate-mcp`,\n`conflicting-mcp`, `own-mcp`, `stale-plugin`, `unreadable-config` or `untrusted-folder`.",
           "type": "string"
         },
         "matcher": {

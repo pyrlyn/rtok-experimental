@@ -126,13 +126,15 @@ Options:
       --config <PATH>     User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
       --instructions      Also run the instruction-file audit
       --json              JSON instead of the table
-      --fix               Clean up broken hooks and duplicate hooks and MCP entries: a terminal gets
-                          a checklist, a pipe the diff; --yes writes without asking
+      --fix               Clean up broken hooks and duplicate hooks and MCP entries, and update
+                          outdated rtok skills: a terminal gets a checklist, a pipe the diff; --yes
+                          writes without asking
       --yes               With --fix: write the changes (a copy goes to `.backup_configs/` first)
       --dry-run           With --fix --yes: print the diffs and write nothing
       --stat              With --fix: stat lines and totals instead of the diffs (a dry run)
       --only <ONLY>       With --fix: limit it to these problems (repeatable; default: all of them)
-                          [possible values: broken-hooks, duplicate-hooks, duplicate-mcp]
+                          [possible values: broken-hooks, duplicate-hooks, duplicate-mcp,
+                          stale-skills]
       --agent <HOST>      Check (and with --fix, repair) the hooks of one host only (an id of `rtok
                           agents list`)
       --project [<PATH>]  Add setup advice for the git checkout holding PATH (default: the working
