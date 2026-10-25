@@ -132,5 +132,4 @@ rtok config show --sources
 - Getting started: <https://github.com/pyrlyn/rtok/blob/main/docs/getting-started.md>
 - Releases: <https://github.com/pyrlyn/rtok/releases>
 - Changelog: <https://github.com/pyrlyn/rtok/blob/main/CHANGELOG.md>
-- License: your choice of GNU GPLv3, a royalty-free license for proprietary desktop, mobile and web
-  apps (with attribution), or a commercial license (see <https://github.com/pyrlyn/rtok#license>)
+- License: your choice of GNU GPLv3 or a commercial license (see <https://github.com/pyrlyn/rtok#license>)
