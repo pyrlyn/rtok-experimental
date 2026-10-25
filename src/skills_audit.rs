@@ -409,7 +409,7 @@ fn imports(lang: &str, text: &str) -> Vec<String> {
             "python" => l
                 .strip_prefix("import ")
                 .or_else(|| l.strip_prefix("from "))
-                .and_then(|r| r.split(|c: char| c == '.' || c == ' ' || c == ',').next()),
+                .and_then(|r| r.split(['.', ' ', ',']).next()),
             "typescript" | "javascript" => l
                 .rsplit_once(" from ")
                 .map(|(_, m)| m)
