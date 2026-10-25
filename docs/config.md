@@ -179,9 +179,9 @@ context_management = false            # Anthropic /v1/messages only: add clear_t
 dry_run         = false               # --dry-run: print effective [proxy] settings and exit, don't serve
 # TLS: Mozilla webpki roots (`use_preconfigured_tls`). Corporate CAs: SSL_CERT_FILE (PEM, curl). See "TLS and corporate CAs".
 
-[proxy.tools_rewrite]                 # T59.5; off: request bytes stay identical
-enabled = false
-compact_schema = false                # T686: also first-sentence property descriptions + redundant default/examples inside input_schema; originals archived (Measurement.ref_id)
+[proxy.tools_rewrite]                 # T59.5; on by default (see token-savings.md); off: request bytes stay identical
+enabled = true
+compact_schema = true                 # T686: also first-sentence property descriptions + redundant default/examples inside input_schema; originals archived (Measurement.ref_id)
 max_description_tokens = 60           # 0 = no truncate; sentence boundary; estimator Class::Prose
 allow = []                            # empty = keep all names not in deny
 deny = []                             # drop these names from tools[]; later calls still forward
@@ -568,6 +568,7 @@ keep_turns = 4                        # never touch the last N turns
 min_tokens = 1500                     # only rewrite tool results above this (estimated)
 head_lines = 8
 tail_lines = 4
+signal_lines = 8                      # elided error/fail/panic lines inlined as N:line (saves an expand); 0 = off
 tiers      = false                    # opt-in tiered loading (default off); OpenViking L0/L1/L2 behaviour spec is AGPL-3.0 — rtok does not vendor, link, or subprocess it (D6); gates native impl in T33.2
 live_blobs = false                    # shrink nested JSON dumps + data: blobs in user blocks, never results/system/tools/last-2-turns (T51.1, opt-in)
 skills     = false                    # archive skill bodies outside keep_turns (T61.2, opt-in)
