@@ -120,15 +120,78 @@ pub fn mcp_path(cfg: &Config) -> PathBuf {
     cfg.setup.commandcode.dir.join("mcp.json")
 }
 
-/// Merge, dry-run, or strip rtok's hook entries in `settings.json`.
+/// Merge, dry-run, or strip rtok's hook entries and worktree hooks in `settings.json`.
 pub fn run(cfg: &Config, remove: bool) -> Result<String> {
     edit_json(&apply(cfg), &settings_path(cfg), |root| {
-        if remove {
-            strip_ours(root)
+        let reports = if remove {
+            [strip_ours(root), strip_worktree(root)]
         } else {
-            insert_ours(root)
+            [insert_ours(root), insert_worktree(root)]
+        };
+        let changed: Vec<_> = reports.into_iter().filter(|r| r != NO_CHANGES).collect();
+        if changed.is_empty() {
+            NO_CHANGES.into()
+        } else {
+            changed.join("\n")
         }
     })
+}
+
+/// T995.2: the `worktree` keys that replace Command Code's own git worktree create and remove
+/// (https://commandcode.ai/docs/worktrees, `research.md` §18.6), with the hook event each runs.
+const WORKTREE_HOOKS: [(&str, &str); 2] = [
+    ("createHook", "WorktreeCreate"),
+    ("removeHook", "WorktreeRemove"),
+];
+
+/// Each key is one command, so a user's own hook keeps its place and rtok's is not written.
+fn insert_worktree(root: &mut Value) -> String {
+    if root.get("worktree").is_some_and(|w| !w.is_object()) {
+        return NO_CHANGES.into();
+    }
+    let worktree = object_at(root, "worktree");
+    let mut added = Vec::new();
+    for (key, event) in WORKTREE_HOOKS {
+        if worktree.get(key).is_none() {
+            let cmd = hook_cmd(event);
+            added.push(format!("+ worktree.{key} {cmd}"));
+            worktree[key] = Value::String(cmd);
+        }
+    }
+    if added.is_empty() {
+        NO_CHANGES.into()
+    } else {
+        added.join("\n")
+    }
+}
+
+/// Takes out only a key that still holds rtok's command, and the `worktree` object it leaves
+/// empty.
+fn strip_worktree(root: &mut Value) -> String {
+    let Some(worktree) = root.get_mut("worktree").and_then(Value::as_object_mut) else {
+        return NO_CHANGES.into();
+    };
+    let mut removed = Vec::new();
+    for (key, event) in WORKTREE_HOOKS {
+        let ours = worktree
+            .get(key)
+            .and_then(Value::as_str)
+            .is_some_and(|cmd| is_rtok_cmd(cmd, event));
+        if ours {
+            worktree.remove(key);
+            removed.push(format!("- worktree.{key}"));
+        }
+    }
+    if worktree.is_empty() {
+        root.as_object_mut()
+            .expect("root holds the worktree object")
+            .remove("worktree");
+    }
+    if removed.is_empty() {
+        NO_CHANGES.into()
+    } else {
+        removed.join("\n")
+    }
 }
 
 /// Register `rtok mcp` in the user-scope `mcp.json`.
@@ -257,15 +320,14 @@ fn is_ours(entry: &Value) -> bool {
         return false;
     };
     // The events `insert_ours` writes (`rtok hook <Claude event> --host commandcode`).
-    for (_, claude) in hook_events::installed("commandcode") {
-        let suffix = format!(" hook {claude} --host commandcode");
-        if let Some(bin) = cmd.strip_suffix(&suffix)
-            && super::is_rtok_bin(super::unquote_bin(bin))
-        {
-            return true;
-        }
-    }
-    false
+    hook_events::installed("commandcode").any(|(_, claude)| is_rtok_cmd(cmd, claude))
+}
+
+/// `cmd` is [`hook_cmd`] for `event`, with any rtok binary.
+fn is_rtok_cmd(cmd: &str, event: &str) -> bool {
+    let suffix = format!(" hook {event} --host commandcode");
+    cmd.strip_suffix(&suffix)
+        .is_some_and(|bin| super::is_rtok_bin(super::unquote_bin(bin)))
 }
 
 #[cfg(test)]
@@ -338,6 +400,40 @@ mod tests {
         let left = fs::read_to_string(settings_path(&c)).unwrap();
         assert!(!left.contains("rtok hook"), "{left}");
         assert_eq!(run(&c, true).unwrap(), NO_CHANGES);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn worktree_hooks_route_to_rtok_and_a_users_own_hook_stays() {
+        let dir = tmp("worktree");
+        let c = cfg(dir.clone(), false);
+        let doc = |c: &Config| -> Value {
+            serde_json::from_str(&fs::read_to_string(settings_path(c)).unwrap()).unwrap()
+        };
+        let out = run(&c, false).unwrap();
+        assert!(out.contains("+ worktree.createHook"), "{out}");
+        let wt = doc(&c)["worktree"].clone();
+        assert_eq!(wt["createHook"], hook_cmd("WorktreeCreate"));
+        assert_eq!(wt["removeHook"], hook_cmd("WorktreeRemove"));
+        assert_eq!(run(&c, false).unwrap(), NO_CHANGES);
+        let gone = run(&c, true).unwrap();
+        assert!(gone.contains("- worktree.removeHook"), "{gone}");
+        assert!(doc(&c).get("worktree").is_none(), "{}", doc(&c));
+
+        // A user's own create hook and other worktree keys are never touched; only the free
+        // key gets rtok's command, and only that one leaves again.
+        let mine = r#"{"worktree":{"createHook":"./mine.sh","baseRef":"head"}}"#;
+        fs::write(settings_path(&c), mine).unwrap();
+        let out = run(&c, false).unwrap();
+        assert!(!out.contains("createHook"), "{out}");
+        let wt = doc(&c)["worktree"].clone();
+        assert_eq!(wt["createHook"], "./mine.sh");
+        assert_eq!(wt["removeHook"], hook_cmd("WorktreeRemove"));
+        run(&c, true).unwrap();
+        assert_eq!(
+            doc(&c)["worktree"],
+            json!({"createHook": "./mine.sh", "baseRef": "head"})
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

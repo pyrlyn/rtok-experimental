@@ -116,6 +116,44 @@ pub fn sync(host: &str, cfg: &Config, remove: bool) -> Result<String> {
     })
 }
 
+/// One installed rtok skill older than the one this binary ships (T975).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Outdated {
+    /// The [`sync`] key: a host id, or `antigravity-cli` for that host's CLI root.
+    pub key: &'static str,
+    pub path: PathBuf,
+}
+
+impl Outdated {
+    /// The host id `--agent` names: the CLI root belongs to `antigravity`.
+    pub fn host(&self) -> &'static str {
+        match self.key {
+            "antigravity-cli" => "antigravity",
+            key => key,
+        }
+    }
+}
+
+/// Every installed rtok skill, over every host skill root, that an install would replace.
+pub fn outdated(cfg: &Config) -> Vec<Outdated> {
+    let keys = super::HOSTS.iter().copied().chain(["antigravity-cli"]);
+    keys.filter_map(|key| root(key, cfg).map(|r| (key, r)))
+        .flat_map(|(key, root)| {
+            SKILLS.iter().filter_map(move |name| {
+                let copy = SkillCopy {
+                    src: skill_src(name),
+                    dest: root.join(name),
+                    label: None,
+                };
+                copy.outdated().then_some(Outdated {
+                    key,
+                    path: copy.dest,
+                })
+            })
+        })
+        .collect()
+}
+
 /// Drop the pre-T380 `worktrees` install when [`SkillCopy`] can already prove it ours.
 /// A foreign directory or a symlink (never followed) stays, and is named once.
 fn retire_legacy(host: &str, root: &Path, cfg: &Config) -> Result<Option<String>> {

@@ -166,10 +166,11 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
         'rtok;doctor' {
             [CompletionResult]::new('--only', '--only', [CompletionResultType]::ParameterName, 'With --fix: limit it to these problems (repeatable; default: all of them)')
             [CompletionResult]::new('--agent', '--agent', [CompletionResultType]::ParameterName, 'Check (and with --fix, repair) the hooks of one host only (an id of `rtok agents list`)')
+            [CompletionResult]::new('--project', '--project', [CompletionResultType]::ParameterName, 'Add setup advice for the git checkout holding PATH (default: the working directory): language servers, graph index, instruction files, plugins left off')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)')
             [CompletionResult]::new('--instructions', '--instructions', [CompletionResultType]::ParameterName, 'Also run the instruction-file audit')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'JSON instead of the table')
-            [CompletionResult]::new('--fix', '--fix', [CompletionResultType]::ParameterName, 'Clean up broken hooks and duplicate hooks and MCP entries: a terminal gets a checklist, a pipe the diff; --yes writes without asking')
+            [CompletionResult]::new('--fix', '--fix', [CompletionResultType]::ParameterName, 'Clean up broken hooks and duplicate hooks and MCP entries, and update outdated rtok skills: a terminal gets a checklist, a pipe the diff; --yes writes without asking')
             [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'With --fix: write the changes (a copy goes to `.backup_configs/` first)')
             [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'With --fix --yes: print the diffs and write nothing')
             [CompletionResult]::new('--stat', '--stat', [CompletionResultType]::ParameterName, 'With --fix: stat lines and totals instead of the diffs (a dry run)')
@@ -195,7 +196,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             break
         }
         'rtok;worktree;add' {
-            [CompletionResult]::new('--owner', '--owner', [CompletionResultType]::ParameterName, 'Who holds it, as `<provider> / <model>`; written into the lock reason. Defaults to `<host> / <model>` of the agent')
+            [CompletionResult]::new('--owner', '--owner', [CompletionResultType]::ParameterName, 'Who holds it, as `<provider> / <model>`; written into the lock reason. Defaults to `<host> / <model>` of the agent, else `RTOK_OWNER`, else the login user')
             [CompletionResult]::new('--agent', '--agent', [CompletionResultType]::ParameterName, 'The rtok agent id (any unique prefix) to bind it to; defaults to `RTOK_AGENT_ID`')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)')
             [CompletionResult]::new('--no-seed', '--no-seed', [CompletionResultType]::ParameterName, 'Do not seed `[worktree] seed_dirs` from a sibling checkout this time')

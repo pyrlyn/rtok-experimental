@@ -907,6 +907,12 @@ pub fn skill_plan(remove: bool, view: SkillView) -> SkillPlan {
     SkillPlan::LeaveForeign
 }
 
+/// An installed skill of ours that [`skill_plan`] would copy over (T975). A missing skill is
+/// not outdated: a host may run rtok without its skills.
+pub fn skill_outdated(view: SkillView) -> bool {
+    view.present && view.ours() && skill_plan(false, view) == SkillPlan::Copy
+}
+
 /// Hub skill directory (`skills/rtok/`) copied into a host's documented skill root.
 ///
 /// A directory whose name starts with `rtok` is ours. Anything else is ours only with
@@ -965,6 +971,11 @@ impl SkillCopy {
             Some(label) => format!("{label} ({})", self.dest.display()),
             None => self.dest.display().to_string(),
         }
+    }
+
+    /// An installed copy of ours that an install would replace (T975).
+    pub fn outdated(&self) -> bool {
+        skill_outdated(self.view())
     }
 
     /// Copy or remove the hub skill tree. Returns one report line; a dry run describes the
@@ -2392,6 +2403,22 @@ mod tests {
             skill_plan(true, skill_view(true, true, false, false, false)),
             NoChanges
         );
+    }
+
+    #[test]
+    fn outdated_is_an_installed_copy_of_ours_that_install_would_replace() {
+        // An older rtok copy under the prefixed name.
+        assert!(skill_outdated(skill_view(true, false, true, true, false)));
+        assert!(skill_outdated(skill_view(true, true, true, false, false)));
+        // Current, missing, an edited unprefixed copy, a foreign tree.
+        assert!(!skill_outdated(skill_view(true, false, true, true, true)));
+        assert!(!skill_outdated(skill_view(
+            false, false, true, false, false
+        )));
+        assert!(!skill_outdated(skill_view(true, false, false, true, false)));
+        assert!(!skill_outdated(skill_view(
+            true, false, false, false, false
+        )));
     }
 
     #[test]

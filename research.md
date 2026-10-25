@@ -2028,6 +2028,47 @@ Still **unverified** (needs the creator's live run, T156 part 1): whether a sub-
 3. Inventory first, then deletion: T150 → T151 → T152/T153. Conventions ship as a skill so they cost one description line, not `AGENTS.md` budget → T155.
 4. Every measured problem starts at creation (location, name, reason-less lock), and creation is the only moment the owner is known for certain. rtok creates the worktree itself → T158. A skill is advice; on Claude Code the `WorktreeCreate`/`WorktreeRemove` hooks are the one place the rules cannot be skipped, at the price of a decision on what fail-open and the 10 ms budget mean for a hook that must spawn git → T159.
 
+### 18.6 Which hosts let rtok create, remove or stop their worktrees (T995, vendor docs checked 2026-10-24)
+
+The question for every host is whether it can run an outside command instead of its own worktree create and remove, as Claude Code's `WorktreeCreate`/`WorktreeRemove` do. If it cannot, the next questions are whether it can run a script after it creates a worktree, so that `rtok worktree adopt` claims it, and whether the feature can be turned off. Nothing below was confirmed by running the host.
+
+**Hosts that can replace create and remove.**
+
+- CodeBuddy: https://www.workbuddy.ai/docs/cli/worktree.
+  - Hooks `hooks.WorktreeCreate` and `hooks.WorktreeRemove`, in `~/.codebuddy/settings.json` or `.codebuddy/settings{,.local}.json`.
+  - Create receives `hook_event_name`, `session_id`, `cwd`, `transcript_path` and `name` on stdin. The last non-empty stdout line is the absolute path. A non-zero exit fails the creation, and the host does not fall back to git.
+  - Remove receives the same fields with `worktree_path` in place of `name`. Its exit code only produces a warning.
+  - This is the Claude Code contract.
+- Command Code: https://commandcode.ai/docs/worktrees.
+  - Keys `worktree.createHook` and `worktree.removeHook`, in `~/.commandcode/settings.json` or `.commandcode/settings{,.local}.json`.
+  - Create gets the env var `COMMAND_CODE_WORKTREE_NAME` and prints the absolute path on its last stdout line. The host makes no git branch itself.
+  - Remove gets `COMMAND_CODE_WORKTREE_PATH` and `COMMAND_CODE_WORKTREE_NAME`, and must delete what create made.
+- OpenCode v1.18.22: https://github.com/anomalyco/opencode, `packages/opencode/src/control-plane/adapters/`.
+  - Only a JS plugin API: `experimental_workspace.register(type, adapter)`.
+  - The feature is off unless `OPENCODE_EXPERIMENTAL_WORKSPACES` is set (`effect/runtime-flags.ts`, default false).
+  - Not taken up in T995.
+
+**Hosts with an off switch only.**
+
+- Gemini CLI: `experimental.worktrees`, a boolean that defaults to `false`, in `settings.json` (https://geminicli.com/docs/cli/settings/, https://geminicli.com/docs/cli/git-worktrees/).
+- Grok CLI: `new_session_worktree_mode` and `fork_worktree_mode` under `[hints]` in `~/.grok/config.toml`, with values `ask`, `always` or `never` (https://docs.x.ai/build/settings/reference).
+  - These only stop `/new` and `/fork` from offering a worktree. An explicit `-w` still makes one.
+
+**Hosts with a post-create script, used for `adopt`.**
+
+- Already wired by `rtok agents install <host> --project` (T289.3, §26): Cursor, Kilo, Windsurf and Devin Desktop.
+- Zed: a task with `"hooks": ["create_worktree"]` in `~/.config/zed/tasks.json` or `.zed/tasks.json`. It gets the env vars `ZED_WORKTREE_ROOT` and `ZED_MAIN_GIT_WORKTREE` (https://zed.dev/docs/tasks.md, https://zed.dev/docs/ai/parallel-agents.md).
+- Factory Droid: profile files `.factory/worktree-setups/*.yml`, with fields `name`, `script`, `initial_prompt` and `cleanup_script` (https://docs.factory.com/factory-app/worktrees.md).
+- Codex app: setup scripts under `.codex` (https://learn.chatgpt.com/docs/environments/local-environment.md). The file name `.codex/environments/environment.toml` is **unverified**.
+
+**Hosts with worktrees and none of the above.** Copilot CLI (https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference), VS Code's Agents window (https://code.visualstudio.com/docs/agents/run/agents-window), Qwen Code (https://qwenlm.github.io/qwen-code-docs/en/users/features/worktree/), Junie (https://junie.jetbrains.com/docs/junie-cli-worktrees.html), Roo Code (manual only, https://roocodeinc.github.io/Roo-Code/features/worktrees) and Cline's Kanban app (https://docs.cline.bot/usage/kanban.md).
+
+- Amp creates worktrees (https://ampcode.com/news/one-runner-many-worktrees). How it creates and removes them is **unverified**.
+- oh-my-pi's `task.isolation.enabled` appears only in a migration table in `docs/settings.md` of https://github.com/can1357/oh-my-pi, so it is **unverified**. Its isolation is a file clone, not a git worktree.
+- These hosts' worktrees are still found by `rtok worktree gc` and `rtok junk`.
+
+**No worktree feature found:** Codex CLI, Kimi, Auggie, Aider, Goose, Crush, Continue, Kiro, Devin CLI, OpenHands, Pi, Reasonix, Mimo, CodeWhale and Zcode. Warp only detects worktrees made by hand. Antigravity has no vendor docs, so it is **unverified**.
+
 ## 19. Hook wall-clock time as Claude Code sees it (2026-09-23)
 
 T178. Machine: the creator's Mac (Apple silicon, macOS, `/bin/sh` → bash), shared with other agents' cargo builds, so every run states its load average. Release build of `68760c6` (`target/release/rtok`, 26,831,904 bytes). All runs use an isolated `RTOK_HOME` and two payloads recorded in the store (a 968-byte `PreToolUse` Bash call and a 2,692-byte `PostToolUse` Bash call, `cwd` rewritten to the worktree). Not a token saving: no `Measurement` row follows.

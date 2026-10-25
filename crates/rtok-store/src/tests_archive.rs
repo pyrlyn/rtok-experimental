@@ -715,9 +715,15 @@ fn insert_measurements_once_is_all_or_none() {
 #[rstest]
 fn measurement_saved_by_project_splits_sessions_by_project() {
     let store = Store::open_in_memory().unwrap();
-    store.upsert_session("a1", None, Some("alpha"), None, None).unwrap();
-    store.upsert_session("a2", None, Some("alpha"), None, None).unwrap();
-    store.upsert_session("b1", None, Some("beta"), None, None).unwrap();
+    store
+        .upsert_session("a1", None, Some("alpha"), None, None)
+        .unwrap();
+    store
+        .upsert_session("a2", None, Some("alpha"), None, None)
+        .unwrap();
+    store
+        .upsert_session("b1", None, Some("beta"), None, None)
+        .unwrap();
     let row = |plugin, kind, est_before, est_after| Measurement {
         plugin,
         kind,
@@ -728,11 +734,21 @@ fn measurement_saved_by_project_splits_sessions_by_project() {
         ref_id: None,
         call_id: None,
     };
-    store.insert_measurement("a1", &row("read", "map", 100, 40)).unwrap();
-    store.insert_measurement("a2", &row("read", "map", 50, 10)).unwrap();
-    store.insert_measurement("a2", &row("read", "expand", 0, 30)).unwrap();
-    store.insert_measurement("b1", &row("read", "map", 70, 20)).unwrap();
-    store.insert_measurement("loose", &row("read", "map", 9, 1)).unwrap();
+    store
+        .insert_measurement("a1", &row("read", "map", 100, 40))
+        .unwrap();
+    store
+        .insert_measurement("a2", &row("read", "map", 50, 10))
+        .unwrap();
+    store
+        .insert_measurement("a2", &row("read", "expand", 0, 30))
+        .unwrap();
+    store
+        .insert_measurement("b1", &row("read", "map", 70, 20))
+        .unwrap();
+    store
+        .insert_measurement("loose", &row("read", "map", 9, 1))
+        .unwrap();
 
     let got = store.measurement_saved_by_project(0).unwrap();
     let find = |project: Option<&str>, kind: &str| {
@@ -744,7 +760,12 @@ fn measurement_saved_by_project_splits_sessions_by_project() {
     assert_eq!(find(Some("alpha"), "expand"), Some((1, -30)));
     assert_eq!(find(Some("beta"), "map"), Some((1, 50)));
     assert_eq!(find(None, "map"), Some((1, 8)));
-    assert!(store.measurement_saved_by_project(i64::MAX).unwrap().is_empty());
+    assert!(
+        store
+            .measurement_saved_by_project(i64::MAX)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[rstest]

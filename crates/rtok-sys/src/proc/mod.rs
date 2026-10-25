@@ -452,7 +452,7 @@ impl Budget {
         let n = n as u64;
         let got = self
             .left
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
                 Some(left - left.min(n))
             })
             .map_or(0, |left| left.min(n));

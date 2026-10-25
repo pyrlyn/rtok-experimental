@@ -2912,17 +2912,21 @@ _rtok() {
             return 0
             ;;
         rtok__subcmd__doctor)
-            opts="-h --instructions --json --fix --yes --dry-run --stat --only --agent --config --help"
+            opts="-h --instructions --json --fix --yes --dry-run --stat --only --agent --project --config --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
                 --only)
-                    COMPREPLY=($(compgen -W "broken-hooks duplicate-hooks duplicate-mcp" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "broken-hooks duplicate-hooks duplicate-mcp stale-skills" -- "${cur}"))
                     return 0
                     ;;
                 --agent)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --project)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

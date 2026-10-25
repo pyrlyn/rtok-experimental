@@ -473,7 +473,7 @@ Every effective key with its origin — the `config show --sources` page.
 | worktree.seed | true | default |
 | worktree.seed_dirs | [target, node_modules] | default |
 
-426 keys.
+427 keys.
 
 ## Doctor
 
@@ -757,9 +757,12 @@ agents
     mcp     not installed
     proxy   not supported: Reasonix has no single endpoint setting; each [[providers]] entry carries its own base_url
     plugin  not supported: Reasonix plugin packages are its own format; rtok ships no Reasonix plugin
-skills (1 listed, 154 desc bytes ≈ 38 tokens per request)
-  descriptions over 120 chars: 1 skills, ≈ 8 tokens/request recoverable
+skills (4 listed, 2102 desc bytes ≈ 525 tokens per request)
+  descriptions over 120 chars: 4 skills, ≈ 405 tokens/request recoverable
+  core project desc 563c body 37629B calls - WARN desc>120 WARN body>8K (references/) WARN never invoked
+  dogfood project desc 460c body 10285B calls - WARN desc>120 WARN body>8K (references/) WARN never invoked
   dry-refactoring project desc 154c body 2772B calls - WARN desc>120 WARN never invoked
+  agent-browser project desc 925c body 2413B calls - WARN desc>120 WARN never invoked
 config
   note tests/trycmd/input/json-readers.toml:2: stats.transcripts_dir = "tests/trycmd/input/stats-price-tx" (default ~/.claude/projects)
 ```
