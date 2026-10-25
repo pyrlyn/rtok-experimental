@@ -84,6 +84,9 @@ Every effective key with its origin — the `config show --sources` page.
 | core.db_path | ~/.rtok/rtok.db | default |
 | core.enabled | true | default |
 | core.hook_max_input_bytes | 8388608 | default |
+| core.max_archive_mb | 1024 | default |
+| core.max_store_mb | 2048 | default |
+| core.retain_archive_days | 90 | default |
 | core.retain_calls_days | 30 | default |
 | core.retain_hook_bodies_days | 3 | default |
 | core.session_env | CLAUDE_SESSION_ID | default |
@@ -477,7 +480,7 @@ Every effective key with its origin — the `config show --sources` page.
 | worktree.seed | true | default |
 | worktree.seed_dirs | [target, node_modules] | default |
 
-431 keys.
+434 keys.
 
 ## Doctor
 

@@ -458,15 +458,19 @@ clink.argmatcher("rtok")
         "rewrite" .. clink.argmatcher()
           :addflags({ "--stdin", "--config" .. clink.argmatcher():addarg(clink.filematches), "--help", "-h" })
           :adddescriptions({ ["--stdin"] = "Read the message array from stdin (pi `context` event)", ["--config"] = "User config file (else `RTOK_CONFIG` or `<home>/config.toml`)", ["--help"] = "Print help", ["-h"] = "Print help" }),
+        "prune" .. clink.argmatcher()
+          :addflags({ "--dry-run", "--config" .. clink.argmatcher():addarg(clink.filematches), "--help", "-h" })
+          :adddescriptions({ ["--dry-run"] = "Print what would be deleted; delete nothing", ["--config"] = "User config file (else `RTOK_CONFIG` or `<home>/config.toml`)", ["--help"] = "Print help", ["-h"] = "Print help" }),
         "help" .. clink.argmatcher()
           :addarg({
             "rewrite" .. clink.argmatcher(),
+            "prune" .. clink.argmatcher(),
             "help" .. clink.argmatcher()
           })
-          :adddescriptions({ ["rewrite"] = "Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)", ["help"] = "Print this message or the help of the given subcommand(s)" })
+          :adddescriptions({ ["rewrite"] = "Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)", ["prune"] = "Delete old and surplus archive bodies and old calls, compact the store, print what was freed (the limits are `core.retain_archive_days`, `max_archive_mb`, `max_store_mb`)", ["help"] = "Print this message or the help of the given subcommand(s)" })
       })
       :addflags({ "--config" .. clink.argmatcher():addarg(clink.filematches), "--help", "-h" })
-      :adddescriptions({ ["rewrite"] = "Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)", ["help"] = "Print this message or the help of the given subcommand(s)", ["--config"] = "User config file (else `RTOK_CONFIG` or `<home>/config.toml`)", ["--help"] = "Print help", ["-h"] = "Print help" }),
+      :adddescriptions({ ["rewrite"] = "Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)", ["prune"] = "Delete old and surplus archive bodies and old calls, compact the store, print what was freed (the limits are `core.retain_archive_days`, `max_archive_mb`, `max_store_mb`)", ["help"] = "Print this message or the help of the given subcommand(s)", ["--config"] = "User config file (else `RTOK_CONFIG` or `<home>/config.toml`)", ["--help"] = "Print help", ["-h"] = "Print help" }),
     "completions" .. clink.argmatcher()
       :addarg({ "bash", "zsh", "fish", "powershell", "elvish", "clink" })
       :addflags({ "--install", "--uninstall", "--list", "--dry-run", "--config" .. clink.argmatcher():addarg(clink.filematches), "--help", "-h" })
@@ -867,9 +871,10 @@ clink.argmatcher("rtok")
         "expand" .. clink.argmatcher(),
         "archive" .. clink.argmatcher()
           :addarg({
-            "rewrite" .. clink.argmatcher()
+            "rewrite" .. clink.argmatcher(),
+            "prune" .. clink.argmatcher()
           })
-          :adddescriptions({ ["rewrite"] = "Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)" }),
+          :adddescriptions({ ["rewrite"] = "Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)", ["prune"] = "Delete old and surplus archive bodies and old calls, compact the store, print what was freed (the limits are `core.retain_archive_days`, `max_archive_mb`, `max_store_mb`)" }),
         "completions" .. clink.argmatcher(),
         "man" .. clink.argmatcher(),
         "plugins" .. clink.argmatcher(),

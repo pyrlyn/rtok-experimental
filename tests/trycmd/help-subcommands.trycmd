@@ -591,6 +591,8 @@ Usage: rtok archive [OPTIONS] <COMMAND>
 Commands:
   rewrite  Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten
            array on stdout (input bytes echoed when nothing is eligible)
+  prune    Delete old and surplus archive bodies and old calls, compact the store, print what was
+           freed (the limits are `core.retain_archive_days`, `max_archive_mb`, `max_store_mb`)
   help     Print this message or the help of the given subcommand(s)
 
 Options:

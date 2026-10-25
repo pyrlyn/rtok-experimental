@@ -184,6 +184,15 @@ section! {
         /// T352: hook stdin bodies in `call_io` are cleared after this many days; the call row,
         /// sizes and shas stay. 0 keeps bodies as long as `calls`.
         retain_hook_bodies_days: u32 = 3,
+        /// T968: archive bodies of sessions with no recent calls are deleted after this many
+        /// days; 0 keeps them. A session that is still being used is never pruned.
+        retain_archive_days: u32 = 90,
+        /// T968: the database file (with its WAL) is held under this many MiB by shortening
+        /// call retention, never below 7 days; 0 = no limit.
+        max_store_mb: u32 = 2048,
+        /// T968: the archive is held under this many MiB by deleting the oldest bodies of
+        /// sessions with no recent calls; 0 = no limit.
+        max_archive_mb: u32 = 1024,
         /// T431: request bodies are saved without terminal escapes, control and zero-width
         /// characters, harness wrapper blocks and trailing whitespace; `true` saves them verbatim.
         store_raw: bool = false,

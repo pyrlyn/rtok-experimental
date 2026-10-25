@@ -256,11 +256,17 @@ _rtok() {
             rtok__subcmd__archive,help)
                 cmd="rtok__subcmd__archive__subcmd__help"
                 ;;
+            rtok__subcmd__archive,prune)
+                cmd="rtok__subcmd__archive__subcmd__prune"
+                ;;
             rtok__subcmd__archive,rewrite)
                 cmd="rtok__subcmd__archive__subcmd__rewrite"
                 ;;
             rtok__subcmd__archive__subcmd__help,help)
                 cmd="rtok__subcmd__archive__subcmd__help__subcmd__help"
+                ;;
+            rtok__subcmd__archive__subcmd__help,prune)
+                cmd="rtok__subcmd__archive__subcmd__help__subcmd__prune"
                 ;;
             rtok__subcmd__archive__subcmd__help,rewrite)
                 cmd="rtok__subcmd__archive__subcmd__help__subcmd__rewrite"
@@ -675,6 +681,9 @@ _rtok() {
                 ;;
             rtok__subcmd__help__subcmd__agents__subcmd__sessions,watch)
                 cmd="rtok__subcmd__help__subcmd__agents__subcmd__sessions__subcmd__watch"
+                ;;
+            rtok__subcmd__help__subcmd__archive,prune)
+                cmd="rtok__subcmd__help__subcmd__archive__subcmd__prune"
                 ;;
             rtok__subcmd__help__subcmd__archive,rewrite)
                 cmd="rtok__subcmd__help__subcmd__archive__subcmd__rewrite"
@@ -1984,7 +1993,7 @@ _rtok() {
             return 0
             ;;
         rtok__subcmd__archive)
-            opts="-h --config --help rewrite help"
+            opts="-h --config --help rewrite prune help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2002,7 +2011,7 @@ _rtok() {
             return 0
             ;;
         rtok__subcmd__archive__subcmd__help)
-            opts="rewrite help"
+            opts="rewrite prune help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2029,6 +2038,20 @@ _rtok() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        rtok__subcmd__archive__subcmd__help__subcmd__prune)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         rtok__subcmd__archive__subcmd__help__subcmd__rewrite)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
@@ -2036,6 +2059,24 @@ _rtok() {
                 return 0
             fi
             case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rtok__subcmd__archive__subcmd__prune)
+            opts="-h --dry-run --config --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --config)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 *)
                     COMPREPLY=()
                     ;;
@@ -4106,8 +4147,22 @@ _rtok() {
             return 0
             ;;
         rtok__subcmd__help__subcmd__archive)
-            opts="rewrite"
+            opts="rewrite prune"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rtok__subcmd__help__subcmd__archive__subcmd__prune)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi

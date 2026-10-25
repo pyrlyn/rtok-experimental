@@ -1294,6 +1294,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('rewrite', 'rewrite', [CompletionResultType]::ParameterValue, 'Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)')
+            [CompletionResult]::new('prune', 'prune', [CompletionResultType]::ParameterValue, 'Delete old and surplus archive bodies and old calls, compact the store, print what was freed (the limits are `core.retain_archive_days`, `max_archive_mb`, `max_store_mb`)')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -1304,12 +1305,23 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'rtok;archive;prune' {
+            [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Print what would be deleted; delete nothing')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'rtok;archive;help' {
             [CompletionResult]::new('rewrite', 'rewrite', [CompletionResultType]::ParameterValue, 'Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)')
+            [CompletionResult]::new('prune', 'prune', [CompletionResultType]::ParameterValue, 'Delete old and surplus archive bodies and old calls, compact the store, print what was freed (the limits are `core.retain_archive_days`, `max_archive_mb`, `max_store_mb`)')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'rtok;archive;help;rewrite' {
+            break
+        }
+        'rtok;archive;help;prune' {
             break
         }
         'rtok;archive;help;help' {
@@ -2375,9 +2387,13 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
         }
         'rtok;help;archive' {
             [CompletionResult]::new('rewrite', 'rewrite', [CompletionResultType]::ParameterValue, 'Rewrite old tool results to archive pointers; message array JSON on stdin, rewritten array on stdout (input bytes echoed when nothing is eligible)')
+            [CompletionResult]::new('prune', 'prune', [CompletionResultType]::ParameterValue, 'Delete old and surplus archive bodies and old calls, compact the store, print what was freed (the limits are `core.retain_archive_days`, `max_archive_mb`, `max_store_mb`)')
             break
         }
         'rtok;help;archive;rewrite' {
+            break
+        }
+        'rtok;help;archive;prune' {
             break
         }
         'rtok;help;completions' {

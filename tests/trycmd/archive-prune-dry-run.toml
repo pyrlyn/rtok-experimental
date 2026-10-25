@@ -1,0 +1,15 @@
+bin.name = "rtok"
+args = "archive prune --dry-run"
+stdout = """
+archive would delete 0 bodies ([..])
+calls not previewed
+store [..] -> [..] (freed [..])
+"""
+
+# Hermetic by construction: isolated HOME/RTOK_HOME, inherit = false.
+[env]
+inherit = false
+
+[env.add]
+HOME = "target/tmp/archive-prune-dry-run"
+RTOK_HOME = "target/tmp/archive-prune-dry-run"
