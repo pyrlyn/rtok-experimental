@@ -1610,6 +1610,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('--budget', '--budget', [CompletionResultType]::ParameterName, 'Stop adding context once the prompt reaches this many estimated tokens')
             [CompletionResult]::new('--max-related', '--max-related', [CompletionResultType]::ParameterName, 'Related files kept at most')
             [CompletionResult]::new('--context', '--context', [CompletionResultType]::ParameterName, 'Context next to the diff: digests (default), none or full files (baselines)')
+            [CompletionResult]::new('--max-defs', '--max-defs', [CompletionResultType]::ParameterName, 'Same-name definitions above which a link with no import or directory evidence is ambiguous and ranked last')
             [CompletionResult]::new('--provider', '--provider', [CompletionResultType]::ParameterName, 'Reviewer provider; default: the first of ANTHROPIC_API_KEY / OPENAI_API_KEY that is set')
             [CompletionResult]::new('--model', '--model', [CompletionResultType]::ParameterName, 'Model id (default per provider, or RTOK_REVIEW_MODEL)')
             [CompletionResult]::new('--base-url', '--base-url', [CompletionResultType]::ParameterName, 'API base URL (default per provider, or RTOK_REVIEW_BASE_URL)')

@@ -6526,7 +6526,7 @@ _rtok() {
             return 0
             ;;
         rtok__subcmd__review)
-            opts="-h --range --diff --budget --max-related --context --dry-run --print-prompt --json --provider --model --base-url --config --help"
+            opts="-h --range --diff --budget --max-related --context --max-defs --dry-run --print-prompt --json --provider --model --base-url --config --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -6550,6 +6550,10 @@ _rtok() {
                     ;;
                 --context)
                     COMPREPLY=($(compgen -W "digest none full" -- "${cur}"))
+                    return 0
+                    ;;
+                --max-defs)
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
                 --provider)

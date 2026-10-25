@@ -759,6 +759,7 @@ complete -c rtok -n "__fish_rtok_using_subcommand review" -l max-related -d 'Rel
 complete -c rtok -n "__fish_rtok_using_subcommand review" -l context -d 'Context next to the diff: digests (default), none or full files (baselines)' -r -f -a "digest/t'Digests of changed and related files (the point of this command)'
 none/t'The diff alone (a baseline for evaluation)'
 full/t'Changed and related files in full (a baseline for evaluation)'"
+complete -c rtok -n "__fish_rtok_using_subcommand review" -l max-defs -d 'Same-name definitions above which a link with no import or directory evidence is ambiguous and ranked last' -r
 complete -c rtok -n "__fish_rtok_using_subcommand review" -l provider -d 'Reviewer provider; default: the first of ANTHROPIC_API_KEY / OPENAI_API_KEY that is set' -r -f -a "anthropic/t''
 openai/t''"
 complete -c rtok -n "__fish_rtok_using_subcommand review" -l model -d 'Model id (default per provider, or RTOK_REVIEW_MODEL)' -r

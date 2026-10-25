@@ -11,7 +11,11 @@ need to see next to the diff".
 
 ## How it works
 
-1. **Diff in** ([`diff.rs`](diff.rs)). The diff comes from `--diff FILE`, from `--diff -` or
+1. **Diff in** ([`diff.rs`](diff.rs)). With `--range A..B` the post-change tree `B` is
+   indexed, not whatever is checked out. That tree is a detached `git worktree` under
+   `RTOK_REVIEW_TREES` (default: the temp dir), one per commit SHA and reused, so its index
+   is cached by commit too. A clean checkout already at `B`, and a single-revision range
+   (compared with the working tree), use the checkout as is. The diff comes from `--diff FILE`, from `--diff -` or
    piped stdin, or from `git diff <--range>`. With no flag and no pipe it is `git diff HEAD`.
    The parser reads `git diff` and plain `diff -u` output into files, hunks and
    added/removed lines. It also handles new, deleted and renamed files.
@@ -23,16 +27,34 @@ need to see next to the diff".
      These catch deletions and renames, which the new-side index no longer has.
 
    Only source files count, by extension.
-3. **Usage search** ([`usage.rs`](usage.rs)).
-   - **Dependents** reference a changed symbol (`symbol_ref_groups`). Their digest shows
-     the calling definitions.
+3. **Usage search** ([`usage.rs`](usage.rs), [`imports.rs`](imports.rs)).
+   - **Dependents** reference a changed symbol (`symbol_ref_groups`), or an alias of it
+     (`use … as X`, found through the files that import the name). Their digest shows the
+     calling definitions.
    - **Dependencies** define something the changed code calls (`symbol_callees` →
      `symbol_defs`). Their digest shows the callee.
 
-   Generic names are skipped: a changed name defined in more than 6 files, a callee defined
-   in more than 2 files, and common std or trait methods (`new`, `push`, `unwrap`, ...).
-   Related files are ranked dependents first, then by hits, then by path. `--max-related`
-   caps them (default 12).
+   The index links references by bare name. Each link is checked before it counts:
+   1. **Imports.** The referencing file's `use` / `from … import` / `import … from`
+      statements are parsed, and a definition file's module path is derived from its path
+      (`crates/rtok-store/src/symbols.rs` → `rtok_store::symbols`). A file that imports the
+      name from one definition's module, or from a parent that re-exports it, belongs to
+      that definition only. A name imported from a module no indexed file is in (another
+      crate, std) links to none of them.
+   2. **Qualified paths.** An inline `store::value::Value` counts as an import, but only if
+      the whole path points at the file, so `crate::web::value::Value` does not count for
+      `store/value.rs`.
+   3. **Kinds.** Reference kinds come from the index (`symbol_ref_kinds`). A `call` links
+      only to callables, or to a struct or class (constructors). A `type`, `class` or
+      `implementation` reference links only to types. A module is never a dependency.
+   4. **Ambiguity.** If imports cannot decide, exactly one same-directory definition is
+      taken as evidence. Otherwise a name with more than `--max-defs` (default 3)
+      definitions makes the link `ambiguous`. Ambiguous files are kept but ranked last, so
+      `--max-related` and `--budget` drop them first.
+
+   Common std and trait method names (`new`, `push`, `unwrap`, `cfg`, ...) are not followed
+   as callees. Related files are ranked unambiguous first, then dependents, then by hits,
+   then by path. `--max-related` caps them (default 12).
 4. **Digests** ([`digest.rs`](digest.rs)). The text is cut from the file by the index's line
    spans:
    - imports;
@@ -152,14 +174,22 @@ cargo test --lib review::
 | prompt order, dedup, determinism, token budget, over-budget diff | `prompt.rs` tests |
 | provider request and reply shapes | `provider.rs` tests |
 | fixture repo: usage search finds the dependent and the dependency and skips the unrelated file; digests land in the prompt without bodies; full mode costs more and none less; budget; pluggable reviewer | `tests.rs` |
+| import parsing (Rust trees, aliases, multiline, Python, JS/TS), module paths, `points_at`, inline qualified paths | `imports.rs` tests |
+| same-name `Value` in several modules: the import filter keeps only the importer of the changed module and drops an external-crate import; qualified paths and `use … as` aliases count; a call does not link to a same-name trait or a module; more than `max_defs` unproven definitions are ambiguous and ranked last; `--range` indexes the right-hand commit and caches it by SHA | `tests.rs` |
 
 ## Limitations
 
-- **The index is the working tree.** A `--range` that ends at an old commit is mapped onto
-  the files as they are now. Review a branch from its own checkout.
-- **Name-based links.** Callers and callees are linked by name, as everywhere in the graph
-  index. Generic names are skipped, so a call through a common name is missed, and
-  same-name types in other crates can add noise.
+- **Trees for `--range` stay.** Each reviewed commit leaves a worktree (and its index) under
+  `RTOK_REVIEW_TREES`. Remove them with `git worktree remove <dir>` or delete the directory
+  and run `git worktree prune`. A rhs that is not a commit (`--diff`, stdin) uses the
+  checkout.
+- **Text-level import parsing.** Rust, Python and JS/TS imports are parsed line by line.
+  Glob imports (`use x::*`), `import x as m` followed by `m.f`, macros, re-exports through
+  several hops and `#[path]` modules give no evidence. Those links fall back to directory
+  or name and may be marked ambiguous. There is no type resolution and no SCIP: a method
+  call `x.len()` is still matched by name.
+- **Common names skipped.** A call through a common name (`new`, `run`, ...) is not
+  followed.
 - **Line-based digests.** The digest is cut from text by spans. A signature that runs past
   8 lines is truncated, and an odd brace layout can leave part of a line.
 - **Rough budget.** The budget uses rtok's chars-per-token estimate, not the provider's

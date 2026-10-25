@@ -2055,6 +2055,7 @@ _arguments "${_arguments_options[@]}" : /
 '--context=[Context next to the diff/: digests (default), none or full files (baselines)]:CONTEXT:((digest/:"Digests of changed and related files (the point of this command)"
 none/:"The diff alone (a baseline for evaluation)"
 full/:"Changed and related files in full (a baseline for evaluation)"))' /
+'--max-defs=[Same-name definitions above which a link with no import or directory evidence is ambiguous and ranked last]:MAX_DEFS:_default' /
 '--provider=[Reviewer provider; default/: the first of ANTHROPIC_API_KEY / OPENAI_API_KEY that is set]:PROVIDER:(anthropic openai)' /
 '--model=[Model id (default per provider, or RTOK_REVIEW_MODEL)]:MODEL:_default' /
 '--base-url=[API base URL (default per provider, or RTOK_REVIEW_BASE_URL)]:BASE_URL:_default' /

@@ -30,6 +30,10 @@ pub(super) struct ReviewArgs {
     /// Context next to the diff: digests (default), none or full files (baselines)
     #[arg(long, value_enum, default_value_t = ContextMode::Digest)]
     context: ContextMode,
+    /// Same-name definitions above which a link with no import or directory evidence is
+    /// ambiguous and ranked last
+    #[arg(long, default_value_t = crate::review::usage::MAX_DEFS)]
+    max_defs: usize,
     /// Build the prompt and report its size, call no model
     #[arg(long)]
     dry_run: bool,
@@ -90,8 +94,14 @@ pub(super) fn run(config_file: &Option<PathBuf>, a: ReviewArgs) -> Result<()> {
         budget: a.budget,
         max_related: a.max_related,
         mode: a.context,
+        max_defs: a.max_defs,
     };
-    let b = build(&cx, &root, &text, &opts)?;
+    // Index the post-change side of a range, not whatever is checked out.
+    let tree = match &a.range {
+        Some(r) => crate::review::tree_for(&root, r)?,
+        None => root.clone(),
+    };
+    let b = build(&cx, &tree, &text, &opts)?;
     if a.print_prompt {
         print!("{}", b.prompt.text);
         eprintln!(

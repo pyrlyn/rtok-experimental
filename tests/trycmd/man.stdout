@@ -112,7 +112,7 @@ rtok/*(Aqs own log (`rtok logs` prints, `rtok logs export` strips numbering and 
 rtok/-report(1)
 The operator model as one document: Markdown, HTML and PDF
 .SH VERSION
-v0.17.0/-alpha.3 (9ed1355ba)
+v0.17.0/-alpha.3 (368ed84d3)
 .SH "SEE ALSO"
 /fBrtok-hook/fR(1),
 /fBrtok-mcp/fR(1),
