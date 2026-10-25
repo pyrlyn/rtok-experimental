@@ -214,7 +214,7 @@ fn gemini_cli(cfg: &Config, args: &[&str]) -> std::result::Result<(), String> {
     let dir = cfg.setup.gemini.dir.as_path();
     let default = super::home_dir().join(".gemini");
     let env = (dir != default).then_some(("GEMINI_CLI_HOME", dir));
-    super::run_cli("gemini", args, env)
+    super::run_cli(cfg, "gemini", args, env)
 }
 
 /// Offer, install, or uninstall `plugins/gemini` through `gemini extensions` (T118.3): the

@@ -9,9 +9,9 @@
 
 use rtok_plugin_sdk::{DashboardPage, Manifest, Plugin, Surface};
 
-pub struct Proxy;
+pub struct ProxyPlugin;
 
-impl Plugin for Proxy {
+impl Plugin for ProxyPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "proxy",

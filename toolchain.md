@@ -139,7 +139,7 @@ Project programs and direct packages from the manifests.
 | rmcp | local | https://crates.io/crates/rmcp | MCP types; feature `transport-streamable-http-server` serves `rtok mcp --http` (T401) |
 | rstest | local | https://crates.io/crates/rstest | Rust dependency |
 | rust-embed | local | https://crates.io/crates/rust-embed | Embeds the built SPA (`web/dist`) in the binary in every profile; memory-serve reads disk in debug builds and has no run-time override, include_dir has no media types or digests |
-| rustix | local | https://crates.io/crates/rustix | Rust dependency |
+| rustix | local | https://crates.io/crates/rustix | System calls in rtok-sys; Unix no-follow rotation locks in rtok-log |
 | rustls | local | https://crates.io/crates/rustls | Preconfigured webpki TLS client config (T53.3); built-in pki-types PEM reader for `SSL_CERT_FILE` (T962) |
 | semver | local | https://crates.io/crates/semver | T279: plugin version compare + `.rtok-plugin-version` (de)serialization |
 | serde | local | https://crates.io/crates/serde | Serialization |
@@ -170,6 +170,7 @@ Project programs and direct packages from the manifests.
 | tree-sitter-tags | local | https://crates.io/crates/tree-sitter-tags | Rust dependency |
 | tree-sitter-typescript | local | https://crates.io/crates/tree-sitter-typescript | Rust dependency |
 | trycmd | local | https://crates.io/crates/trycmd | Full CLI command-output fixtures in tests/trycmd/ |
+| d2-render | local (dev) | https://github.com/pyrlyn/crates/tree/main/rust/d2-render | Renders docs/architecture/*.d2 to SVG in-process (native backend, no d2 binary); source-hash stamps for the freshness gate in tests/diagrams.rs (T959) |
 | pulldown-cmark | local (dev) | https://crates.io/crates/pulldown-cmark | CommonMark parse of README and docs in tests/docs_structure.rs: unclosed fences, skipped heading levels (T359) |
 | tokio-tungstenite | local | https://crates.io/crates/tokio-tungstenite | WebSocket client for the `rtok web` e2e (tests/web_e2e.rs) |
 | toml | local | https://crates.io/crates/toml | Cargo.lock `[[package]]` parse for `docs_resolve` (already in the lock via figment) |

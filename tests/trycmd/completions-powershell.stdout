@@ -52,6 +52,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'The one config file')
             [CompletionResult]::new('memory', 'memory', [CompletionResultType]::ParameterValue, 'Notes (`mem_save` / import / export)')
             [CompletionResult]::new('docs', 'docs', [CompletionResultType]::ParameterValue, 'Cached rustdoc for Cargo.lock dependencies (`rtok docs fetch`)')
+            [CompletionResult]::new('review', 'review', [CompletionResultType]::ParameterValue, 'Token-efficient code review: the diff plus signature digests of the code it touches')
             [CompletionResult]::new('graph', 'graph', [CompletionResultType]::ParameterValue, 'Symbol index (`rtok graph index`)')
             [CompletionResult]::new('guard', 'guard', [CompletionResultType]::ParameterValue, 'Duplicate-call verdict (`rtok guard check` — pi / OpenCode plugin path)')
             [CompletionResult]::new('dashboard', 'dashboard', [CompletionResultType]::ParameterValue, 'Deprecated spelling of `rtok web`; still runs, still prints where to go')
@@ -166,10 +167,11 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
         'rtok;doctor' {
             [CompletionResult]::new('--only', '--only', [CompletionResultType]::ParameterName, 'With --fix: limit it to these problems (repeatable; default: all of them)')
             [CompletionResult]::new('--agent', '--agent', [CompletionResultType]::ParameterName, 'Check (and with --fix, repair) the hooks of one host only (an id of `rtok agents list`)')
+            [CompletionResult]::new('--project', '--project', [CompletionResultType]::ParameterName, 'Add setup advice for the git checkout holding PATH (default: the working directory): language servers, graph index, instruction files, plugins left off')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)')
             [CompletionResult]::new('--instructions', '--instructions', [CompletionResultType]::ParameterName, 'Also run the instruction-file audit')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'JSON instead of the table')
-            [CompletionResult]::new('--fix', '--fix', [CompletionResultType]::ParameterName, 'Repair hooks, MCP entries and private data permissions; --yes applies, a pipe previews')
+            [CompletionResult]::new('--fix', '--fix', [CompletionResultType]::ParameterName, 'Clean up broken hooks and duplicate hooks and MCP entries, update outdated rtok skills, and repair private data permissions: a terminal gets a checklist, a pipe the diff; --yes writes without asking')
             [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'With --fix: apply changes (config edits are backed up; permissions change in place)')
             [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'With --fix --yes: print the diffs and write nothing')
             [CompletionResult]::new('--stat', '--stat', [CompletionResultType]::ParameterName, 'With --fix: stat lines and totals instead of the diffs (a dry run)')
@@ -186,7 +188,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('adopt', 'adopt', [CompletionResultType]::ParameterValue, 'Bind the worktree you are in (made by a host''s own tool) to your agent. A worktree in a pool its host evicts (Cursor, Codex, Windsurf, Devin) is claimed in the store only. With no agent (a post-create script) the one live agent of that host in the repository takes it; with none or several the claim waits for the next agent that adopts or starts there')
             [CompletionResult]::new('remove', 'remove', [CompletionResultType]::ParameterValue, 'Remove your own finished worktree: unlock, `git worktree remove`, delete the branch when merged, release the claim; refuses dirty or current worktrees, and a foreign lock unless the task is finished (merged, clean, with commits of its own)')
             [CompletionResult]::new('finish', 'finish', [CompletionResultType]::ParameterValue, 'Hand your task worktree to review: commit what is left, push, open or reuse the PR, ask for squash auto-merge, then unlock. Refuses the main checkout, another agent''s lock and credential files; never closes the task')
-            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'Every worktree and orphan with its owner, state, source and build-cache bytes')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'Every worktree and orphan with its owner, state and source bytes')
             [CompletionResult]::new('whoami', 'whoami', [CompletionResultType]::ParameterValue, 'Your agent, where new worktrees go, the worktree you are in and the ones you hold')
             [CompletionResult]::new('gc', 'gc', [CompletionResultType]::ParameterValue, 'Remove merged, clean, idle worktrees with their branches; drop records of deleted ones')
             [CompletionResult]::new('clean', 'clean', [CompletionResultType]::ParameterValue, 'Delete idle tagged build caches (`CACHEDIR.TAG`) and keep the worktrees; dry run without `--yes`')
@@ -195,7 +197,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             break
         }
         'rtok;worktree;add' {
-            [CompletionResult]::new('--owner', '--owner', [CompletionResultType]::ParameterName, 'Who holds it, as `<provider> / <model>`; written into the lock reason. Defaults to `<host> / <model>` of the agent')
+            [CompletionResult]::new('--owner', '--owner', [CompletionResultType]::ParameterName, 'Who holds it, as `<provider> / <model>`; written into the lock reason. Defaults to `<host> / <model>` of the agent, else `RTOK_OWNER`, else the login user')
             [CompletionResult]::new('--agent', '--agent', [CompletionResultType]::ParameterName, 'The rtok agent id (any unique prefix) to bind it to; defaults to `RTOK_AGENT_ID`')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)')
             [CompletionResult]::new('--no-seed', '--no-seed', [CompletionResultType]::ParameterName, 'Do not seed `[worktree] seed_dirs` from a sibling checkout this time')
@@ -248,6 +250,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
         'rtok;worktree;list' {
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'JSON instead of the table')
+            [CompletionResult]::new('--sizes', '--sizes', [CompletionResultType]::ParameterName, 'Also walk every build cache for its bytes (slow with large target/ folders)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -298,7 +301,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('adopt', 'adopt', [CompletionResultType]::ParameterValue, 'Bind the worktree you are in (made by a host''s own tool) to your agent. A worktree in a pool its host evicts (Cursor, Codex, Windsurf, Devin) is claimed in the store only. With no agent (a post-create script) the one live agent of that host in the repository takes it; with none or several the claim waits for the next agent that adopts or starts there')
             [CompletionResult]::new('remove', 'remove', [CompletionResultType]::ParameterValue, 'Remove your own finished worktree: unlock, `git worktree remove`, delete the branch when merged, release the claim; refuses dirty or current worktrees, and a foreign lock unless the task is finished (merged, clean, with commits of its own)')
             [CompletionResult]::new('finish', 'finish', [CompletionResultType]::ParameterValue, 'Hand your task worktree to review: commit what is left, push, open or reuse the PR, ask for squash auto-merge, then unlock. Refuses the main checkout, another agent''s lock and credential files; never closes the task')
-            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'Every worktree and orphan with its owner, state, source and build-cache bytes')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'Every worktree and orphan with its owner, state and source bytes')
             [CompletionResult]::new('whoami', 'whoami', [CompletionResultType]::ParameterValue, 'Your agent, where new worktrees go, the worktree you are in and the ones you hold')
             [CompletionResult]::new('gc', 'gc', [CompletionResultType]::ParameterValue, 'Remove merged, clean, idle worktrees with their branches; drop records of deleted ones')
             [CompletionResult]::new('clean', 'clean', [CompletionResultType]::ParameterValue, 'Delete idle tagged build caches (`CACHEDIR.TAG`) and keep the worktrees; dry run without `--yes`')
@@ -1601,6 +1604,24 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
         'rtok;docs;help;help' {
             break
         }
+        'rtok;review' {
+            [CompletionResult]::new('--range', '--range', [CompletionResultType]::ParameterName, '`git diff` this range (`main...HEAD`, `HEAD~1`); default: stdin when piped, else `git diff HEAD`')
+            [CompletionResult]::new('--diff', '--diff', [CompletionResultType]::ParameterName, 'Read the unified diff from this file (`-` = stdin)')
+            [CompletionResult]::new('--budget', '--budget', [CompletionResultType]::ParameterName, 'Stop adding context once the prompt reaches this many estimated tokens')
+            [CompletionResult]::new('--max-related', '--max-related', [CompletionResultType]::ParameterName, 'Related files kept at most')
+            [CompletionResult]::new('--context', '--context', [CompletionResultType]::ParameterName, 'Context next to the diff: digests (default), none or full files (baselines)')
+            [CompletionResult]::new('--max-defs', '--max-defs', [CompletionResultType]::ParameterName, 'Same-name definitions above which a link with no import or directory evidence is ambiguous and ranked last')
+            [CompletionResult]::new('--provider', '--provider', [CompletionResultType]::ParameterName, 'Reviewer provider; default: the first of ANTHROPIC_API_KEY / OPENAI_API_KEY that is set')
+            [CompletionResult]::new('--model', '--model', [CompletionResultType]::ParameterName, 'Model id (default per provider, or RTOK_REVIEW_MODEL)')
+            [CompletionResult]::new('--base-url', '--base-url', [CompletionResultType]::ParameterName, 'API base URL (default per provider, or RTOK_REVIEW_BASE_URL)')
+            [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Build the prompt and report its size, call no model')
+            [CompletionResult]::new('--print-prompt', '--print-prompt', [CompletionResultType]::ParameterName, 'Print the prompt itself (implies --dry-run)')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
+            break
+        }
         'rtok;graph' {
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
@@ -2103,6 +2124,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'The one config file')
             [CompletionResult]::new('memory', 'memory', [CompletionResultType]::ParameterValue, 'Notes (`mem_save` / import / export)')
             [CompletionResult]::new('docs', 'docs', [CompletionResultType]::ParameterValue, 'Cached rustdoc for Cargo.lock dependencies (`rtok docs fetch`)')
+            [CompletionResult]::new('review', 'review', [CompletionResultType]::ParameterValue, 'Token-efficient code review: the diff plus signature digests of the code it touches')
             [CompletionResult]::new('graph', 'graph', [CompletionResultType]::ParameterValue, 'Symbol index (`rtok graph index`)')
             [CompletionResult]::new('guard', 'guard', [CompletionResultType]::ParameterValue, 'Duplicate-call verdict (`rtok guard check` — pi / OpenCode plugin path)')
             [CompletionResult]::new('dashboard', 'dashboard', [CompletionResultType]::ParameterValue, 'Deprecated spelling of `rtok web`; still runs, still prints where to go')
@@ -2150,7 +2172,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('adopt', 'adopt', [CompletionResultType]::ParameterValue, 'Bind the worktree you are in (made by a host''s own tool) to your agent. A worktree in a pool its host evicts (Cursor, Codex, Windsurf, Devin) is claimed in the store only. With no agent (a post-create script) the one live agent of that host in the repository takes it; with none or several the claim waits for the next agent that adopts or starts there')
             [CompletionResult]::new('remove', 'remove', [CompletionResultType]::ParameterValue, 'Remove your own finished worktree: unlock, `git worktree remove`, delete the branch when merged, release the claim; refuses dirty or current worktrees, and a foreign lock unless the task is finished (merged, clean, with commits of its own)')
             [CompletionResult]::new('finish', 'finish', [CompletionResultType]::ParameterValue, 'Hand your task worktree to review: commit what is left, push, open or reuse the PR, ask for squash auto-merge, then unlock. Refuses the main checkout, another agent''s lock and credential files; never closes the task')
-            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'Every worktree and orphan with its owner, state, source and build-cache bytes')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'Every worktree and orphan with its owner, state and source bytes')
             [CompletionResult]::new('whoami', 'whoami', [CompletionResultType]::ParameterValue, 'Your agent, where new worktrees go, the worktree you are in and the ones you hold')
             [CompletionResult]::new('gc', 'gc', [CompletionResultType]::ParameterValue, 'Remove merged, clean, idle worktrees with their branches; drop records of deleted ones')
             [CompletionResult]::new('clean', 'clean', [CompletionResultType]::ParameterValue, 'Delete idle tagged build caches (`CACHEDIR.TAG`) and keep the worktrees; dry run without `--yes`')
@@ -2446,6 +2468,9 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             break
         }
         'rtok;help;docs;fetch' {
+            break
+        }
+        'rtok;help;review' {
             break
         }
         'rtok;help;graph' {

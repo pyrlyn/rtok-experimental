@@ -1,0 +1,81 @@
+# Production modules form a layered DAG; tests/module_graph.rs fails on an upward edge or a cycle.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+surfaces: "surfaces (may print)" {
+  class: surface
+  grid-columns: 7
+  cli: cli {class: surface}
+  hooks: hooks {class: surface}
+  mcp: mcp {class: surface}
+  proxy: proxy {class: surface}
+  web: web {class: surface}
+  tui: tui {class: surface}
+  demon: demon {class: surface}
+}
+
+app: app {
+  class: plugin
+  grid-columns: 5
+  plugins: plugins {class: plugin}
+  agents: agents {class: plugin}
+  measure: measure {class: plugin}
+  report: report {class: plugin}
+  doctor: doctor {class: plugin}
+}
+
+core: core {
+  class: core
+  grid-columns: 5
+  plugin: "plugin\n(host Runtime)" {class: core}
+  config: config {class: core}
+  store: store {class: core}
+  log: log {class: core}
+  tokens: tokens {class: core}
+}
+
+foundation: foundation {
+  class: data
+  grid-columns: 8
+  fs: fs {class: data}
+  sanitize: sanitize {class: data}
+  proc: proc {class: data}
+  tls: tls {class: data}
+  names: names {class: data}
+  lane: lane {class: data}
+  diff: diff {class: data}
+  since: since {class: data}
+  stdio: stdio {class: data}
+  task_id: task_id {class: data}
+  logfile: logfile {class: data}
+  progress: progress {class: data}
+  bytes: bytes {class: data}
+  project: project {class: data}
+  disk_usage: disk_usage {class: data}
+  removal_preview: removal_preview {class: data}
+}
+
+sdk: "crates/rtok-plugin-sdk\nthe published contract (D25)" {
+  shape: package
+  class: host
+}
+
+beside: "beside the stack\nrender · model · expand · info\notel · worktree · …\nnever name cli, web or tui" {
+  shape: page
+  class: ops
+}
+
+surfaces -> app: may use
+app -> core: may use
+core -> foundation: may use
+foundation -> sdk
+surfaces -> beside: may use
+beside -> core: may use

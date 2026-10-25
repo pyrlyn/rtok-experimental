@@ -548,6 +548,40 @@ mod tests {
         }
     }
 
+    /// T933: the exact commands the host guard refused for three weft sub-agents on
+    /// 2026-10-16 (an installed binary older than T437 had wrapped them, `--agent` and all).
+    /// Each must reach the host unwrapped with a real sub-agent id, and the same commands
+    /// from the main session, which has no guard, keep their wrap.
+    #[test]
+    fn weft_2026_10_16_refused_commands_are_never_wrapped() {
+        let wt = "/work/_worktrees/weft-agent-a10131a73e855515f";
+        let cmds = [
+            "git fetch origin -q && git checkout -q -B t105.17-winui-keywords origin/main && git log --oneline -3 && ls && grep -n \"T105.17\" -A12 plan.md | head -40".to_string(),
+            "git fetch origin -q && git checkout -q -B t105.17-winui-keywords origin/main && git log --oneline -3".to_string(),
+            "git fetch origin -q && git checkout -B t903-macos-save-as origin/main 2>&1 | tail -2 && ls && grep -n \"T903\" -A15 plan.md | head -60".to_string(),
+            "git fetch origin -q && git checkout -B t105.15-winui-tokens origin/main 2>&1 | tail -2 && git log --oneline -3 && ls".to_string(),
+            format!("git -C {wt} fetch origin -q"),
+            "git status".to_string(),
+            "git status --short --branch".to_string(),
+            "git fetch origin -q".to_string(),
+            "git fetch origin -q && echo ok".to_string(),
+            "/usr/bin/git fetch origin -q && echo ok".to_string(),
+            "/usr/bin/git status | head -3".to_string(),
+            "/usr/bin/env git log --oneline -S\"@class\" | cat; grep -n \"keyword\\|@class\\|verbatim\" research.md | head -20; grep -n \"account\" crates/weft-winui/tests/common/mod.rs".to_string(),
+        ];
+        for cmd in &cmds {
+            assert!(
+                decide_as(Some("a10131a73e855515f"), cmd).is_none(),
+                "sub-agent git wrapped: {cmd}"
+            );
+            let d = decide_as(None, cmd).unwrap();
+            assert!(
+                wrapped(&d).starts_with("rtok run -- '"),
+                "main session: {cmd}"
+            );
+        }
+    }
+
     /// Only git is exempt: the sub-agent still gets compressed output for everything
     /// else, including words that merely contain the letters.
     #[test]

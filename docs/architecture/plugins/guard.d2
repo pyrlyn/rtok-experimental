@@ -1,0 +1,91 @@
+# guard: PostToolUse remembers read-only results; PreToolUse denies a repeat, a big skill body or a symbol Grep.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent\n(Claude Code, pi, OpenCode, …)" {class: host}
+
+surfaces: Entry points {
+  class: surface
+  pre: "hook PreToolUse" {class: surface}
+  post: "hook PostToolUse" {class: surface}
+  compact: "hook PreCompact\nSessionStart source=compact" {class: surface}
+  check: "rtok guard check\n(pi / OpenCode plugin)" {class: surface}
+}
+
+guard: guard plugin {
+  class: plugin
+  tool: "tool_name?" {shape: diamond; class: plugin}
+  skill: "skill::digest\nskills = true?\nbody > skill_max_bytes?\nno host frontmatter key?" {shape: diamond; class: plugin}
+  grep: "grep_symbol::answer\ngrep_symbol = true?\n1 to 5 fresh definitions?" {shape: diamond; class: plugin}
+  redirect: "native_redirect\ndeny_grep_glob = true\nand read plugin on" {shape: diamond; class: plugin}
+  key: "cache_key\nread / bash / slice,\nread_only, cwd, agent_id" {class: plugin}
+  hit: "cache hit within\nwindow_turns?\narchive_size > 0?" {shape: diamond; class: plugin}
+  store_post: "post_tool\nput_archive if body\nwithin ARCHIVE_CAP_BYTES\nput_read_cache" {class: plugin}
+  invalidate: "mutating Bash / Edit / Write\nclear_read_cache\nbash, read, or the one path" {class: plugin}
+  note: "skill::note_load\none-line context\nif loaded before" {class: plugin}
+  forget: "skill::forget_loads" {class: plugin}
+}
+
+core: Runtime (Ctx) {
+  class: core
+  ctx: "put_archive · archive_size\nget/put/clear_read_cache\ncalls_since · record" {class: core}
+  symbols: "symbol_defs · symbol_ref_groups\ngraph::def_text" {class: core}
+}
+
+data: Stores {
+  class: data
+  rc: "SQLite read_cache\nbash, read and skill keys" {shape: cylinder; class: data}
+  ar: "archive table +\narchive_dir/<id>" {shape: stored_data; class: data}
+  me: "SQLite measurements\nkind guard · skill\ngrep_symbol · native_deny" {shape: cylinder; class: data}
+}
+
+model: "Model sees" {
+  class: host
+  deny: "denied call\nreason with expand pointer,\nheading map, or definitions" {class: host}
+  run: "call runs unmodified\n(fail open)" {class: host}
+  extra: "added context line\n(already loaded skill)" {class: host}
+}
+
+agent -> surfaces.pre
+agent -> surfaces.post
+agent -> surfaces.compact
+agent -> surfaces.check
+surfaces.pre -> guard.tool
+surfaces.check -> guard.tool: Guard.pre_tool
+
+guard.tool -> guard.skill: Skill
+guard.tool -> guard.grep: Grep
+guard.tool -> guard.redirect: Grep or Glob
+guard.tool -> guard.key: Read or Bash
+guard.key -> guard.hit
+guard.hit -> model.deny: "yes: duplicate; rtok expand <id>"
+guard.hit -> model.run: no
+guard.skill -> model.deny: "yes: map + expand <id>"
+guard.skill -> model.run: no
+guard.grep -> model.deny: "yes: ANSWERED"
+guard.grep -> model.run: no
+guard.redirect -> model.deny: yes
+guard.redirect -> model.run: no
+
+surfaces.post -> guard.store_post: Read or read-only Bash
+surfaces.post -> guard.invalidate: other Bash, Edit, Write
+surfaces.post -> guard.note: Skill
+guard.note -> model.extra
+surfaces.compact -> guard.forget
+
+guard.hit -> core.ctx: lookups
+guard.store_post -> core.ctx
+guard.invalidate -> core.ctx
+guard.skill -> core.ctx: put_archive
+guard.grep -> core.symbols
+core.ctx -> data.rc
+core.ctx -> data.ar
+core.ctx -> data.me: Measurement rows

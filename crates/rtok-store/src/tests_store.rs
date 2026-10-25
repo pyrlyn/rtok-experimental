@@ -226,6 +226,49 @@ fn migration_0047_numbers_old_claims_in_their_old_order() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// T927: `memory`/`observe` rows claimed the whole tool output as saved; 0052 drops them and
+/// leaves every other row, `memory`/`brief` included, as it was.
+#[test]
+fn migration_0052_drops_observe_rows_only() {
+    let (dir, mut conn) = db_before_migration("0052");
+    let db = dir.join("rtok.db");
+    for (plugin, kind) in [
+        ("memory", "observe"),
+        ("memory", "observe"),
+        ("memory", "brief"),
+        ("read", "observe"),
+    ] {
+        diesel::insert_into(measurements::table)
+            .values((
+                measurements::session.eq("s"),
+                measurements::plugin.eq(plugin),
+                measurements::kind.eq(kind),
+                measurements::before_bytes.eq(99_589_i64),
+                measurements::after_bytes.eq(404_i64),
+                measurements::est_before.eq(25_000_i32),
+                measurements::est_after.eq(100_i32),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+    }
+    drop(conn);
+    let store = Store::open(&db).unwrap();
+    let left: Vec<_> = store
+        .measurement_totals()
+        .unwrap()
+        .into_iter()
+        .map(|t| (t.plugin, t.kind, t.rows))
+        .collect();
+    assert_eq!(
+        left,
+        [
+            ("memory".to_string(), "brief".to_string(), 1),
+            ("read".to_string(), "observe".to_string(), 1),
+        ]
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// T592: sessions that ended before `end_seq` existed are numbered in (ended_at, id) order,
 /// and the old per-second mark resumes in front of its whole second, replaying rather than
 /// guessing which tied sessions were posted.

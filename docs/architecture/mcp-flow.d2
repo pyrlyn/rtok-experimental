@@ -1,0 +1,91 @@
+# rtok mcp: one JSON-RPC line in, one line out; every tools/call is recorded.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+  fail: {style: {fill: "#FEE2E2"; stroke: "#DC2626"; border-radius: 8}}
+}
+
+agent: "Coding agent\n(MCP client)" {class: host}
+
+transports: Transports {
+  class: surface
+  stdio: "rtok mcp\nstdio, newline JSON-RPC\nmcp::run → handle_line" {class: surface}
+  http: "rtok mcp --http\nStreamable HTTP (rmcp)\nsame Server" {class: surface}
+  wrap: "rtok mcp -- <server argv>\nwrap a foreign MCP server" {class: surface}
+}
+
+background: "background threads\ngraph watch · graph health\nworktree reaper · OTLP ticker" {class: core}
+
+server: "Server::new\nRuntime · listed tools" {class: core}
+
+listed: Listed tools {
+  class: core
+  builtin: "built-in\nexpand · ping · whoami" {class: core}
+  coord: "coordination\nworktree_* · agent_* · task_*" {class: core}
+  plugins: "Plugin::mcp_tools()\nread · search · tree · mem_*\nsymbol · callers · explore · docs_*" {class: plugin}
+}
+
+method: "method" {
+  shape: diamond
+  class: core
+}
+init: "initialize\nnegotiate protocol version\nroots capability" {class: core}
+list: "tools/list\nListToolsResult" {class: core}
+
+call: Server::call_tool {
+  class: core
+  allow: "listed?" {shape: diamond; class: core}
+  schema: "required fields\nmissing_required" {shape: diamond; class: core}
+  invoke: "invoke(name, args)\nroutes to the plugin" {class: plugin}
+  allow -> schema: yes
+  schema -> invoke: ok
+}
+
+err: "CallToolResult::error\nunknown tool · invalid params" {class: fail}
+
+record: "record()\ncalls (kind mcp_call) · call_io\ntokens before / after / mcp" {class: core}
+
+store: "SQLite" {
+  shape: cylinder
+  class: data
+}
+
+upstream: "foreign MCP server\n(child process)" {class: host}
+cut: "long text block?\narchive raw · rules::apply\nexpand trailer" {
+  shape: diamond
+  class: plugin
+}
+blobs: "archive_dir/<id>" {
+  shape: stored_data
+  class: data
+}
+
+agent -> transports.stdio
+agent -> transports.http
+agent -> transports.wrap
+transports.stdio -> server
+transports.http -> server
+transports.stdio -> background: spawns
+server -> listed: builds once
+transports.stdio -> method: each line
+method -> init
+method -> list
+method -> call.allow: tools/call
+list -> listed
+call.allow -> err: no
+call.schema -> err: missing
+call.invoke -> record
+err -> record
+record -> store
+call.invoke -> agent: text result
+
+transports.wrap -> upstream: forwards frames
+upstream -> cut: tools/call response
+cut -> blobs
+cut -> agent: shortened, lossless

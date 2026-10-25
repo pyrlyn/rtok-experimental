@@ -6,6 +6,7 @@ import type {
   CallRow,
   PluginPage,
   Report,
+  Saving,
   SessionTotals,
   Snapshot,
   UsagePage,
@@ -56,6 +57,15 @@ export function callBuckets(calls: readonly CallRow[], n = 24) {
     if (!c.ok) b.err++;
   }
   return { buckets, step };
+}
+
+/** Mirrors `saving_text` in `src/doctor/project.rs`: no measurement row, no number. */
+export function savingText(s: Saving | null, days: number): string {
+  if (!s) return "no measurements yet";
+  const per = `≈ ${fmt(s.saved_per_call)} tok per call over ${fmt(s.calls)} calls`;
+  return s.project_calls != null && s.approx_tokens != null
+    ? `${per}; here ≈ ${fmt(s.approx_tokens)} tok (${fmt(s.project_calls)} calls in ${days} days)`
+    : per;
 }
 
 export type CheckState = "pass" | "warn" | "fail" | "skip";

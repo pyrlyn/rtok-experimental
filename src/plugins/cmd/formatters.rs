@@ -1284,6 +1284,37 @@ mod tests {
         assert!(cut.len() < log.len(), "unbounded output is still filtered");
     }
 
+    /// T931: a chain whose every segment is an explicit `sed -n a,bp` window printed what
+    /// was asked for, however it is joined or labelled; one unbounded segment still cuts.
+    #[test]
+    fn a_chain_of_bounded_sed_windows_passes_through_whole() {
+        let settings = rules::Settings::builtin();
+        let body = (0..240)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for cmd in [
+            "sed -n 1,80p a; sed -n 1,40p b",
+            "sed -n 1,80p a && sed -n 1,40p b",
+            "git show x | sed -n 1,100p",
+            "sed -n 1,80p a; echo ---; sed -n 1,40p b",
+            "sed -n 1,80p a\necho \"=== b ===\"\nsed -n 1,40p b",
+            "cd /repo && sed -n 1,80p a; printf '\\n--\\n'; sed -n 1,40p b",
+        ] {
+            let (got, kind) = compress(&settings, &[cmd.to_string()], &body, 0, "id");
+            assert_eq!((got.as_str(), kind), (body.as_str(), "raw"), "{cmd}");
+        }
+        for cmd in [
+            "sed -n 1,80p a; cargo test",
+            "sed -n 1,80p a; echo ---; cargo test",
+            "echo ---; cargo test",
+            "sed -n 1,80p a; echo $(cat big)",
+        ] {
+            let (got, _) = compress(&settings, &[cmd.to_string()], &body, 0, "id");
+            assert!(got.len() < body.len(), "{cmd} must still be cut");
+        }
+    }
+
     fn goldens() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/cmd_golden")
     }

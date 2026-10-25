@@ -526,7 +526,7 @@ fn claude_cli(cfg: &Config, args: &[&str]) -> std::result::Result<(), String> {
     let dir = config_dir(cfg);
     let default = super::home_dir().join(".claude");
     let env = (dir != default).then_some(("CLAUDE_CONFIG_DIR", dir.as_path()));
-    super::run_cli("claude", args, env)
+    super::run_cli(cfg, "claude", args, env)
 }
 
 /// [`plugin`]'s body, generalized over `target` (a GitHub `owner/repo` shorthand or a local
@@ -544,7 +544,7 @@ fn plugin_against(cfg: &Config, remove: bool, target: &str, force: bool) -> Resu
             format!("offer {PLUGIN_SRC} → {shown} {KETCH_INSTALL}")
         });
     }
-    if !remove && super::find_on_path("claude").is_none() {
+    if !remove && super::locate::cli(cfg, "claude").is_none() {
         return Ok(claude_missing(&shown));
     }
     let mut removed = false;
@@ -798,7 +798,7 @@ fn update_in_place(
             available.version
         ));
     }
-    if super::find_on_path("claude").is_none() {
+    if super::locate::cli(cfg, "claude").is_none() {
         return Ok(claude_missing(&shown));
     }
     match steps.iter().try_for_each(|s| claude_cli(cfg, s)) {
@@ -853,7 +853,7 @@ fn plugin_update(cfg: &Config) -> Result<String> {
     let refreshed = source == Source::Marketplace
         && currently_installed
         && !dry_run
-        && super::find_on_path("claude").is_some()
+        && super::locate::cli(cfg, "claude").is_some()
         && claude_cli(cfg, &["plugin", "marketplace", "update", "rtok"]).is_ok();
     let available = plugin_version::available(
         source,

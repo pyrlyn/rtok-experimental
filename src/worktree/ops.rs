@@ -39,8 +39,7 @@ pub fn add(
         cwd,
         &wt,
         (task, slug),
-        agent.as_ref(),
-        owner,
+        (agent.as_ref(), owner),
         cfg.plugins.graph.auto_add_projects,
     )
 }
@@ -148,8 +147,13 @@ pub fn whoami(cfg: &Config, cwd: &Path) -> Whoami {
     super::whoami::run(cwd, &cfg.worktree.root, agent.as_ref(), store.as_ref())
 }
 
-pub fn list(cfg: &Config, cwd: &Path) -> Result<Vec<Row>> {
-    let mut rows = super::list::rows(cwd)?;
+/// `sized` also walks the build caches for their bytes (T936); the default does not.
+pub fn list(cfg: &Config, cwd: &Path, sized: bool) -> Result<Vec<Row>> {
+    let mut rows = if sized {
+        super::list::rows_sized(cwd)?
+    } else {
+        super::list::rows(cwd)?
+    };
     let store = opened(cfg);
     super::list::attribute_with_store(&mut rows, store.as_ref(), &cfg.agents.idle);
     Ok(rows)

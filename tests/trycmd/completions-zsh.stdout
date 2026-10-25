@@ -167,12 +167,13 @@ _arguments "${_arguments_options[@]}" : /
 ;;
 (doctor)
 _arguments "${_arguments_options[@]}" : /
-'*--only=[With --fix/: limit it to these problems (repeatable; default/: all of them)]:ONLY:(broken-hooks duplicate-hooks duplicate-mcp permissions)' /
+'*--only=[With --fix/: limit it to these problems (repeatable; default/: all of them)]:ONLY:(broken-hooks duplicate-hooks duplicate-mcp stale-skills permissions)' /
 '--agent=[Check (and with --fix, repair) the hooks of one host only (an id of /`rtok agents list/`)]:HOST:_default' /
+'(--fix)--project=[Add setup advice for the git checkout holding PATH (default/: the working directory)/: language servers, graph index, instruction files, plugins left off]::PATH:_files' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--instructions[Also run the instruction-file audit]' /
 '(--fix)--json[JSON instead of the table]' /
-'--fix[Repair hooks, MCP entries and private data permissions; --yes applies, a pipe previews]' /
+'--fix[Clean up broken hooks and duplicate hooks and MCP entries, update outdated rtok skills, and repair private data permissions/: a terminal gets a checklist, a pipe the diff; --yes writes without asking]' /
 '--yes[With --fix/: apply changes (config edits are backed up; permissions change in place)]' /
 '--dry-run[With --fix --yes/: print the diffs and write nothing]' /
 '--stat[With --fix/: stat lines and totals instead of the diffs (a dry run)]' /
@@ -197,14 +198,14 @@ _arguments "${_arguments_options[@]}" : /
         case $line[1] in
             (add)
 _arguments "${_arguments_options[@]}" : /
-'--owner=[Who holds it, as /`<provider> / <model>/`; written into the lock reason. Defaults to /`<host> / <model>/` of the agent]:OWNER:_default' /
+'--owner=[Who holds it, as /`<provider> / <model>/`; written into the lock reason. Defaults to /`<host> / <model>/` of the agent, else /`RTOK_OWNER/`, else the login user]:OWNER:_default' /
 '--agent=[The rtok agent id (any unique prefix) to bind it to; defaults to /`RTOK_AGENT_ID/`]:AGENT:_default' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--no-seed[Do not seed /`/[worktree/] seed_dirs/` from a sibling checkout this time]' /
 '-h[Print help]' /
 '--help[Print help]' /
-':task -- Task id, e.g. `t158`; directory `<repo>-<task>`, branch `<task>/[-<slug>/]`:_default' /
-'::slug -- Optional branch suffix:_default' /
+':task -- Task id, e.g. `t158`, or `t158 read-hook-same-path` as one argument; directory `<repo>-<task>`, branch `<task>/[-<slug>/]`:_default' /
+'::slug -- Optional branch suffix (spaces become dashes, as in the one-argument form):_default' /
 && ret=0
 ;;
 (claim)
@@ -261,6 +262,7 @@ _arguments "${_arguments_options[@]}" : /
 _arguments "${_arguments_options[@]}" : /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--json[JSON instead of the table]' /
+'--sizes[Also walk every build cache for its bytes (slow with large target/ folders)]' /
 '-h[Print help]' /
 '--help[Print help]' /
 && ret=0
@@ -2044,6 +2046,27 @@ esac
     ;;
 esac
 ;;
+(review)
+_arguments "${_arguments_options[@]}" : /
+'(--diff)--range=[/`git diff/` this range (/`main...HEAD/`, /`HEAD~1/`); default/: stdin when piped, else /`git diff HEAD/`]:RANGE:_default' /
+'--diff=[Read the unified diff from this file (/`-/` = stdin)]:DIFF:_files' /
+'--budget=[Stop adding context once the prompt reaches this many estimated tokens]:BUDGET:_default' /
+'--max-related=[Related files kept at most]:MAX_RELATED:_default' /
+'--context=[Context next to the diff/: digests (default), none or full files (baselines)]:CONTEXT:((digest/:"Digests of changed and related files (the point of this command)"
+none/:"The diff alone (a baseline for evaluation)"
+full/:"Changed and related files in full (a baseline for evaluation)"))' /
+'--max-defs=[Same-name definitions above which a link with no import or directory evidence is ambiguous and ranked last]:MAX_DEFS:_default' /
+'--provider=[Reviewer provider; default/: the first of ANTHROPIC_API_KEY / OPENAI_API_KEY that is set]:PROVIDER:(anthropic openai)' /
+'--model=[Model id (default per provider, or RTOK_REVIEW_MODEL)]:MODEL:_default' /
+'--base-url=[API base URL (default per provider, or RTOK_REVIEW_BASE_URL)]:BASE_URL:_default' /
+'--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
+'--dry-run[Build the prompt and report its size, call no model]' /
+'--print-prompt[Print the prompt itself (implies --dry-run)]' /
+'--json[JSON instead of text]' /
+'-h[Print help (see more with '/''--help'/'')]' /
+'--help[Print help (see more with '/''--help'/'')]' /
+&& ret=0
+;;
 (graph)
 _arguments "${_arguments_options[@]}" : /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
@@ -3204,6 +3227,10 @@ _arguments "${_arguments_options[@]}" : /
     ;;
 esac
 ;;
+(review)
+_arguments "${_arguments_options[@]}" : /
+&& ret=0
+;;
 (graph)
 _arguments "${_arguments_options[@]}" : /
 ":: :_rtok__subcmd__help__subcmd__graph_commands" /
@@ -3454,6 +3481,7 @@ _rtok_commands() {
 'config:The one config file' /
 'memory:Notes (/`mem_save/` / import / export)' /
 'docs:Cached rustdoc for Cargo.lock dependencies (/`rtok docs fetch/`)' /
+'review:Token-efficient code review/: the diff plus signature digests of the code it touches' /
 'graph:Symbol index (/`rtok graph index/`)' /
 'guard:Duplicate-call verdict (/`rtok guard check/` — pi / OpenCode plugin path)' /
 'dashboard:Deprecated spelling of /`rtok web/`; still runs, still prints where to go' /
@@ -4392,6 +4420,7 @@ _rtok__subcmd__help_commands() {
 'config:The one config file' /
 'memory:Notes (/`mem_save/` / import / export)' /
 'docs:Cached rustdoc for Cargo.lock dependencies (/`rtok docs fetch/`)' /
+'review:Token-efficient code review/: the diff plus signature digests of the code it touches' /
 'graph:Symbol index (/`rtok graph index/`)' /
 'guard:Duplicate-call verdict (/`rtok guard check/` — pi / OpenCode plugin path)' /
 'dashboard:Deprecated spelling of /`rtok web/`; still runs, still prints where to go' /
@@ -4950,6 +4979,11 @@ _rtok__subcmd__help__subcmd__report_commands() {
     local commands; commands=()
     _describe -t commands 'rtok help report commands' commands "$@"
 }
+(( $+functions[_rtok__subcmd__help__subcmd__review_commands] )) ||
+_rtok__subcmd__help__subcmd__review_commands() {
+    local commands; commands=()
+    _describe -t commands 'rtok help review commands' commands "$@"
+}
 (( $+functions[_rtok__subcmd__help__subcmd__run_commands] )) ||
 _rtok__subcmd__help__subcmd__run_commands() {
     local commands; commands=()
@@ -5079,7 +5113,7 @@ _rtok__subcmd__help__subcmd__worktree_commands() {
 'adopt:Bind the worktree you are in (made by a host'/''s own tool) to your agent. A worktree in a pool its host evicts (Cursor, Codex, Windsurf, Devin) is claimed in the store only. With no agent (a post-create script) the one live agent of that host in the repository takes it; with none or several the claim waits for the next agent that adopts or starts there' /
 'remove:Remove your own finished worktree/: unlock, /`git worktree remove/`, delete the branch when merged, release the claim; refuses dirty or current worktrees, and a foreign lock unless the task is finished (merged, clean, with commits of its own)' /
 'finish:Hand your task worktree to review/: commit what is left, push, open or reuse the PR, ask for squash auto-merge, then unlock. Refuses the main checkout, another agent'/''s lock and credential files; never closes the task' /
-'list:Every worktree and orphan with its owner, state, source and build-cache bytes' /
+'list:Every worktree and orphan with its owner, state and source bytes' /
 'whoami:Your agent, where new worktrees go, the worktree you are in and the ones you hold' /
 'gc:Remove merged, clean, idle worktrees with their branches; drop records of deleted ones' /
 'clean:Delete idle tagged build caches (/`CACHEDIR.TAG/`) and keep the worktrees; dry run without /`--yes/`' /
@@ -5435,6 +5469,11 @@ _rtok__subcmd__report_commands() {
     local commands; commands=()
     _describe -t commands 'rtok report commands' commands "$@"
 }
+(( $+functions[_rtok__subcmd__review_commands] )) ||
+_rtok__subcmd__review_commands() {
+    local commands; commands=()
+    _describe -t commands 'rtok review commands' commands "$@"
+}
 (( $+functions[_rtok__subcmd__run_commands] )) ||
 _rtok__subcmd__run_commands() {
     local commands; commands=()
@@ -5667,7 +5706,7 @@ _rtok__subcmd__worktree_commands() {
 'adopt:Bind the worktree you are in (made by a host'/''s own tool) to your agent. A worktree in a pool its host evicts (Cursor, Codex, Windsurf, Devin) is claimed in the store only. With no agent (a post-create script) the one live agent of that host in the repository takes it; with none or several the claim waits for the next agent that adopts or starts there' /
 'remove:Remove your own finished worktree/: unlock, /`git worktree remove/`, delete the branch when merged, release the claim; refuses dirty or current worktrees, and a foreign lock unless the task is finished (merged, clean, with commits of its own)' /
 'finish:Hand your task worktree to review/: commit what is left, push, open or reuse the PR, ask for squash auto-merge, then unlock. Refuses the main checkout, another agent'/''s lock and credential files; never closes the task' /
-'list:Every worktree and orphan with its owner, state, source and build-cache bytes' /
+'list:Every worktree and orphan with its owner, state and source bytes' /
 'whoami:Your agent, where new worktrees go, the worktree you are in and the ones you hold' /
 'gc:Remove merged, clean, idle worktrees with their branches; drop records of deleted ones' /
 'clean:Delete idle tagged build caches (/`CACHEDIR.TAG/`) and keep the worktrees; dry run without /`--yes/`' /
@@ -5714,7 +5753,7 @@ _rtok__subcmd__worktree__subcmd__help_commands() {
 'adopt:Bind the worktree you are in (made by a host'/''s own tool) to your agent. A worktree in a pool its host evicts (Cursor, Codex, Windsurf, Devin) is claimed in the store only. With no agent (a post-create script) the one live agent of that host in the repository takes it; with none or several the claim waits for the next agent that adopts or starts there' /
 'remove:Remove your own finished worktree/: unlock, /`git worktree remove/`, delete the branch when merged, release the claim; refuses dirty or current worktrees, and a foreign lock unless the task is finished (merged, clean, with commits of its own)' /
 'finish:Hand your task worktree to review/: commit what is left, push, open or reuse the PR, ask for squash auto-merge, then unlock. Refuses the main checkout, another agent'/''s lock and credential files; never closes the task' /
-'list:Every worktree and orphan with its owner, state, source and build-cache bytes' /
+'list:Every worktree and orphan with its owner, state and source bytes' /
 'whoami:Your agent, where new worktrees go, the worktree you are in and the ones you hold' /
 'gc:Remove merged, clean, idle worktrees with their branches; drop records of deleted ones' /
 'clean:Delete idle tagged build caches (/`CACHEDIR.TAG/`) and keep the worktrees; dry run without /`--yes/`' /

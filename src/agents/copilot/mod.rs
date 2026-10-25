@@ -250,7 +250,7 @@ fn copilot_cli(cfg: &Config, args: &[&str]) -> std::result::Result<(), String> {
     let dir = cfg.setup.copilot.dir.as_path();
     let default = super::home_dir().join(".copilot");
     let env = (dir != default).then_some(("COPILOT_HOME", dir));
-    super::run_cli("copilot", args, env)
+    super::run_cli(cfg, "copilot", args, env)
 }
 
 /// Offer, install, or uninstall `plugins/copilot` through `copilot plugin` (T116): the

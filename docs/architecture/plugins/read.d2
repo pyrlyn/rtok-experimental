@@ -1,0 +1,112 @@
+# read plugin: MCP read/search/tree with outline modes, re-read dedup and delta, plus a PreToolUse(Read) advice hook.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent\n(Claude Code, ...)" {class: host}
+
+surfaces: Surfaces {
+  class: surface
+  hook: "rtok hook PreToolUse (Read)\nrtok hook PostToolUse (Edit, Write)" {class: surface}
+  mcp: "rtok mcp\ntools: read, search, tree" {class: surface}
+}
+
+advice: "Read advice (hook.rs)" {
+  class: plugin
+  direction: down
+  gate: "advice on, tool is Read,\nfile > native_max_bytes?" {
+    shape: diamond
+    class: plugin
+  }
+  ranged: "native limit in\n1..=range_max_lines?" {
+    shape: diamond
+    class: plugin
+  }
+  edited: "Edit/Write of this path in the\nlast 5 PostToolUse rows?" {
+    shape: diamond
+    class: plugin
+  }
+  gate -> ranged: yes
+  ranged -> edited: no
+}
+
+deny: "Deny with a reason:\nuse mcp__rtok__read, or\nread(mode=diff) vs <id>\n(read/deny cost row)" {class: plugin}
+pass: "call passes unmodified\n(fail open)" {class: host}
+
+readtool: "MCP read (mod.rs read_with)" {
+  class: plugin
+  direction: down
+  guard: "resolve_with\nroot guard: cwd, allow_paths,\nworktrees, client roots" {
+    shape: diamond
+    class: plugin
+  }
+  mode: "mode switch\nfull | lines | stripped\nmap | signatures | density:X" {class: plugin}
+  outline: "outline.rs\ntree-sitter tags,\nmarkdown headings" {class: plugin}
+  dens: "density.rs\nrarest-word lines kept" {class: plugin}
+  seen: "cache::hit\nsame key, same bytes?" {
+    shape: diamond
+    class: plugin
+  }
+  delta: "changed and diff below\ndelta_max_ratio?" {
+    shape: diamond
+    class: plugin
+  }
+  ident: "identical_result\nsame sha256 in session?" {
+    shape: diamond
+    class: plugin
+  }
+  cap: "cap / cap_recording\nmax_chars cut + archive id" {class: plugin}
+  guard -> mode: inside
+  mode -> outline
+  mode -> dens
+  mode -> seen
+  outline -> seen
+  dens -> seen
+  seen -> delta: changed
+  delta -> ident: no
+  seen -> ident: not cached
+  ident -> cap: no
+}
+
+walk: "search / tree (search.rs)\nWalkBuilder respects .gitignore,\nskips .git and linked worktrees\npath:line: snippet, max hits" {class: plugin}
+
+refuse: "error: path outside cwd" {class: core}
+
+store: "SQLite\nread_cache · measurements\ncalls" {
+  shape: cylinder
+  class: data
+}
+blobs: "archive_dir/<id>\nfull text for expand <id>" {
+  shape: stored_data
+  class: data
+}
+
+model: "What the model sees\nnumbered lines, outline, unchanged id <8>,\ndiff + previous <id>, or cut + archived <id>" {class: host}
+
+agent -> surfaces.hook: Read about to run
+agent -> surfaces.mcp: tool call
+surfaces.hook -> advice.gate
+advice.gate -> pass: no
+advice.ranged -> pass: yes
+advice.edited -> deny: "no (or yes with delta\nand a cached read)"
+advice.edited -> pass: "yes, no cached read"
+deny -> agent: PreToolUse deny
+surfaces.mcp -> readtool.guard: read
+surfaces.mcp -> walk: "search, tree"
+readtool.guard -> refuse: outside
+readtool.seen -> model: "unchanged id <8>\n(dedup row)"
+readtool.delta -> model: "unified diff\n(delta row)"
+readtool.ident -> model: "pointer to earlier result\n(dedup row)"
+readtool.cap -> model: "body, rows map/signatures/\ndensity/stripped/read_cap"
+walk -> readtool.cap: text
+readtool.seen -> store: read_cache
+readtool.cap -> blobs
+readtool.cap -> store: Measurement rows
+surfaces.hook -> store: "PostToolUse: cache::invalidate\n(only when delta = false)" {style: {stroke-dash: 3}}

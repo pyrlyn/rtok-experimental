@@ -15,7 +15,7 @@
 use std::path::PathBuf;
 
 use rtok::plugin::{Ctx, Plugin, Runtime, SessionStart};
-use rtok::plugins::memory::{Memory, mem_revise, mem_save, mem_search};
+use rtok::plugins::memory::{MemoryPlugin, mem_revise, mem_save, mem_search};
 
 const NS: [u32; 4] = [1, 10, 30, 100];
 const K: u32 = 6;
@@ -170,7 +170,7 @@ fn memory_recall_bench() {
                 hybrid += 1;
             }
         }
-        let recall_b = Memory
+        let recall_b = MemoryPlugin
             .session_start(&SessionStart { source: "startup" }, &Ctx::new(&cx))
             .map(|i| i.text.len() as u64)
             .unwrap_or(0);

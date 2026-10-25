@@ -6,7 +6,7 @@ prompt cache.
 | | |
 |---|---|
 | Surfaces | proxy `compress` mode; MCP `expand`; `rtok archive rewrite --stdin` (pi `context`) |
-| Spec | the `spec (replaces)` column of the catalogue in `plan.md` §1 |
+| Spec | the **Replaces** column of [`docs/plugins.md`](../../../docs/plugins.md) |
 | Default | on (active only when the proxy runs in `compress` mode, or when a carrier invokes it) |
 
 ## Mechanism
@@ -58,4 +58,5 @@ T70.2 pi `context` carrier.
 
 ## Status
 
-Manifest only. First task: T5.3 (after T5.1 proxy).
+Implemented: live-zone rewrite (T5.3), `expand` through the proxy (T5.4), across wires
+(T11.4), pi `context` carrier (T70.2).

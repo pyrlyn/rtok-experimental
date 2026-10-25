@@ -17,7 +17,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use rtok_sys::proc::ProgressRunner;
 
-use super::{Agent, Kind, Request, Variant};
+use super::{Agent, Kind, Request, Variant, locate};
 use crate::config::Config;
 
 /// Process control seam (T141): the real impl shells out; tests fake it and record calls.
@@ -204,17 +204,10 @@ fn image_name(name: &str) -> String {
     }
 }
 
-/// `~/x` and `$VAR/x` as a path on this machine. On Windows an extensionless file also
-/// matches `name.exe` beside it, so `~/.grok/bin/grok` opens `grok.exe`.
-fn expand_app_path(spec: &str) -> PathBuf {
-    let path = super::expand_spec(spec);
-    super::probe_installed(path.clone()).unwrap_or(path)
-}
-
-/// The display/process name our path parsing reads from one `apps[]` entry — the same string
-/// asked of [`Procs::app_running`] and handed to [`Procs::quit`]/[`Procs::open`].
-fn desktop_app_name(spec: &str, fallback: &str) -> (String, PathBuf) {
-    let path = expand_app_path(spec);
+/// The display/process name our path parsing reads from one app path ([`locate::app_paths`]:
+/// the user's, then each `apps[]` entry) — the same string asked of [`Procs::app_running`] and
+/// handed to [`Procs::quit`]/[`Procs::open`].
+fn desktop_app_name(path: PathBuf, fallback: &str) -> (String, PathBuf) {
     let name = path
         .file_name()
         .and_then(OsStr::to_str)
@@ -223,11 +216,16 @@ fn desktop_app_name(spec: &str, fallback: &str) -> (String, PathBuf) {
     (name, path)
 }
 
-/// The first `apps[]` entry of a desktop variant that `procs` reports as currently running.
-fn running_desktop_app(v: &Variant, procs: &dyn Procs) -> Option<(String, PathBuf)> {
-    v.apps
-        .iter()
-        .map(|spec| desktop_app_name(spec, v.name))
+/// The first app path of a desktop variant that `procs` reports as currently running.
+fn running_desktop_app(
+    cfg: &Config,
+    host: &str,
+    v: &Variant,
+    procs: &dyn Procs,
+) -> Option<(String, PathBuf)> {
+    locate::app_paths(cfg, host, v)
+        .into_iter()
+        .map(|path| desktop_app_name(path, v.name))
         .find(|(name, _)| procs.app_running(name))
 }
 
@@ -242,12 +240,12 @@ fn running_cli_bin(agent: &dyn Agent, procs: &dyn Procs) -> Option<&'static str>
 
 /// Whether a CLI binary or an installed desktop app of `agent` runs now. Only installed apps
 /// are asked: on macOS `osascript` may open a "Choose Application" dialog for an unknown name.
-pub fn host_running(agent: &dyn Agent, procs: &dyn Procs) -> bool {
+pub fn host_running(cfg: &Config, agent: &dyn Agent, procs: &dyn Procs) -> bool {
     let apps = agent.variants().iter().filter(|v| v.kind == Kind::Desktop);
     running_cli_bin(agent, procs).is_some()
         || apps
-            .filter(|v| super::present(v))
-            .any(|v| running_desktop_app(v, procs).is_some())
+            .filter(|v| super::present(cfg, agent.id(), v))
+            .any(|v| running_desktop_app(cfg, agent.id(), v, procs).is_some())
 }
 
 /// How long a quit app gets to exit. Electron apps often need well over 5 s, and reopening one
@@ -315,7 +313,7 @@ fn with_restart(
                 .variants()
                 .iter()
                 .filter(|v| v.kind == Kind::Desktop)
-                .find_map(|v| running_desktop_app(v, procs));
+                .find_map(|v| running_desktop_app(cfg, agent.id(), v, procs));
             let bin = running_cli_bin(agent, procs);
             // Nothing of this host's is running: skip the dry-run entirely (T141 review).
             if target.is_none() && bin.is_none() {
@@ -729,7 +727,7 @@ mod tests {
             for v in agent.variants().iter().filter(|v| v.kind == Kind::Desktop) {
                 had_desktop = true;
                 assert!(!v.apps.is_empty(), "{id}/{} has no apps[]", v.name);
-                let (name, _) = desktop_app_name(v.apps[0], v.name);
+                let (name, _) = desktop_app_name(crate::agents::expand_spec(v.apps[0]), v.name);
                 assert_eq!(name, expected_desktop_name(v.name), "host {id}");
             }
             if !had_desktop {
@@ -747,7 +745,7 @@ mod tests {
                         .variants()
                         .iter()
                         .filter(|v| v.kind == Kind::Desktop)
-                        .find_map(|v| running_desktop_app(v, &procs))
+                        .find_map(|v| running_desktop_app(&Config::default(), id, v, &procs))
                         .is_none(),
                     "CLI-only host {id} must never produce a desktop restart target"
                 );

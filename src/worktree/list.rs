@@ -54,6 +54,15 @@ pub fn usage(dir: &Path) -> Usage {
     total
 }
 
+/// [`usage`] without the tagged cache roots (T936): they hold nearly every file of a built
+/// worktree, so skipping them turns a minutes-long walk into one over the sources. Cache bytes
+/// are left at zero and `modified` is the newest source file, as for [`newest_until`].
+pub fn usage_sources(dir: &Path) -> Usage {
+    let mut total = Usage::default();
+    let _ = walk(dir, true, true, None, &mut total, None, &|_| false);
+    total
+}
+
 /// [`usage`] that stops at `deadline`; the flag says the walk was cut short, so the result is
 /// a lower bound. A cut walk's mtimes are incomplete: a newer file may be the one not visited,
 /// so a caller that decides "idle" from them must keep the cache.
@@ -201,15 +210,17 @@ fn walk(
 /// *file* names a `…/worktrees/<id>` admin directory that no longer exists — the
 /// repository moved, or the record was pruned. Looked for next to the known worktrees
 /// and in `<main>/.claude/worktrees`.
-pub fn orphans(entries: &[Entry]) -> Vec<PathBuf> {
+/// `listed` is the path of every worktree git lists, the main checkout first.
+pub fn orphans(listed: &[PathBuf]) -> Vec<PathBuf> {
     let real = |p: &Path| crate::fs::canon(p);
-    let known: HashSet<PathBuf> = entries.iter().map(|e| real(&e.record.path)).collect();
-    let linked = entries.iter().skip(1);
-    let mut parents: BTreeSet<PathBuf> = linked
-        .filter_map(|e| e.record.path.parent().map(real))
+    let known: HashSet<PathBuf> = listed.iter().map(|p| real(p)).collect();
+    let mut parents: BTreeSet<PathBuf> = listed
+        .iter()
+        .skip(1)
+        .filter_map(|p| p.parent().map(real))
         .collect();
-    if let Some(main) = entries.first() {
-        parents.insert(real(&main.record.path.join(".claude/worktrees")));
+    if let Some(main) = listed.first() {
+        parents.insert(real(&main.join(".claude/worktrees")));
     }
     let children = parents
         .iter()
@@ -249,7 +260,8 @@ pub struct Row {
     /// The newest session the hooks saw working here (T154); never set on the main checkout.
     pub session: Option<Seen>,
     pub source_bytes: u64,
-    pub cache_bytes: u64,
+    /// `None` when the build caches were not walked (T936); see [`rows_sized`].
+    pub cache_bytes: Option<u64>,
     pub modified_unix: Option<u64>,
 }
 
@@ -315,8 +327,12 @@ pub struct Seen {
 }
 
 impl Row {
-    fn new(path: PathBuf, state: &'static str) -> Self {
-        let used = usage(&path);
+    fn new(path: PathBuf, state: &'static str, sized: bool) -> Self {
+        let used = if sized {
+            usage(&path)
+        } else {
+            usage_sources(&path)
+        };
         let unix = |t: SystemTime| t.duration_since(UNIX_EPOCH).ok().map(|d| d.as_secs());
         let origin = if state == "main" {
             "main"
@@ -333,7 +349,7 @@ impl Row {
             agent: None,
             session: None,
             source_bytes: used.source,
-            cache_bytes: used.cache,
+            cache_bytes: sized.then_some(used.cache),
             modified_unix: used.modified.and_then(unix),
         }
     }
@@ -364,8 +380,18 @@ pub fn attribute(rows: &mut [Row], sessions: &[crate::store::SessionSeen]) {
     }
 }
 
-/// Every worktree of the repository `cwd` belongs to, then the orphans.
+/// Every worktree of the repository `cwd` belongs to, then the orphans. The build caches are not
+/// walked (T936): their bytes are the slow part and most callers never show them.
 pub fn rows(cwd: &Path) -> anyhow::Result<Vec<Row>> {
+    rows_with(cwd, false)
+}
+
+/// [`rows`] with every tagged build cache walked and its bytes filled in.
+pub fn rows_sized(cwd: &Path) -> anyhow::Result<Vec<Row>> {
+    rows_with(cwd, true)
+}
+
+fn rows_with(cwd: &Path, sized: bool) -> anyhow::Result<Vec<Row>> {
     let listed = inventory_with(cwd, |e| {
         let owner = e.record.owner();
         Row {
@@ -373,12 +399,15 @@ pub fn rows(cwd: &Path) -> anyhow::Result<Vec<Row>> {
             agent: owner.as_ref().and_then(|o| o.agent.clone()).map(Bound::new),
             owner: owner.map(|o| o.owner),
             locked: e.record.locked.is_some(),
-            ..Row::new(e.record.path.clone(), e.state.label())
+            ..Row::new(e.record.path.clone(), e.state.label(), sized)
         }
     })?;
     let (entries, mut rows): (Vec<Entry>, Vec<Row>) = listed.into_iter().unzip();
-    let orphans = orphans(&entries);
-    rows.extend(par_map(&orphans, |_, p| Row::new(p.clone(), "orphan")));
+    let listed: Vec<PathBuf> = entries.iter().map(|e| e.record.path.clone()).collect();
+    let orphans = orphans(&listed);
+    rows.extend(par_map(&orphans, |_, p| {
+        Row::new(p.clone(), "orphan", sized)
+    }));
     Ok(rows)
 }
 
@@ -446,20 +475,23 @@ pub fn to_table(rows: &[Row], now: SystemTime) -> String {
             seen.unwrap_or_else(dash),
             age.unwrap_or_else(dash),
             human_bytes(r.source_bytes),
-            human_bytes(r.cache_bytes),
+            r.cache_bytes.map_or_else(dash, human_bytes),
         ]
     }));
     let cols = [0; 9].map(Col::left).into_iter();
     let cols: Vec<Col> = cols.chain([Col::right(0), Col::right(0)]).collect();
-    let (source, cache) = rows
-        .iter()
-        .fold((0, 0), |(s, c), r| (s + r.source_bytes, c + r.cache_bytes));
+    let source: u64 = rows.iter().map(|r| r.source_bytes).sum();
+    let cache = if rows.iter().all(|r| r.cache_bytes.is_some()) {
+        let cache: u64 = rows.iter().filter_map(|r| r.cache_bytes).sum();
+        format!("{} build cache", human_bytes(cache))
+    } else {
+        "build cache not sized (--sizes)".into()
+    };
     format!(
-        "{}\n{} worktrees: {} source, {} build cache (logical bytes; clones and hard links count in full)\n",
+        "{}\n{} worktrees: {} source, {cache} (logical bytes; clones and hard links count in full)\n",
         table(&cols, &lines),
         rows.len(),
         human_bytes(source),
-        human_bytes(cache),
     )
 }
 
@@ -498,6 +530,22 @@ mod tests {
         // The root's newest file is at most as new as the worktree's newest file.
         assert!(root.modified.is_some() && root.modified <= used.modified);
         assert_eq!(usage(&dir.join("missing")), Usage::default());
+    }
+
+    /// T936: the unsized walk reports the same source bytes and never opens a tagged cache.
+    #[test]
+    fn usage_sources_skips_tagged_caches() {
+        let dir = tmp_dir("wt-t936-sources");
+        create_dir_all(dir.join("src")).unwrap();
+        create_dir_all(dir.join("target/debug")).unwrap();
+        write(dir.join("src/a.rs"), [0; 10]).unwrap();
+        write(dir.join("target/CACHEDIR.TAG"), CACHEDIR_SIGNATURE).unwrap();
+        write(dir.join("target/debug/bin"), [0; 1000]).unwrap();
+
+        let (full, quick) = (usage(&dir), usage_sources(&dir));
+        assert_eq!(quick.source, full.source);
+        assert_eq!((quick.cache, quick.caches.len()), (0, 0));
+        assert!(full.cache > 0);
     }
 
     /// T948: a build that rewrites `target/` is not work, so gc's idle age reads source files
@@ -599,18 +647,18 @@ mod tests {
                 Some("Cursor / grok"),
                 true,
                 Some(seen.clone()),
-                2048,
+                Some(2048),
             ),
-            row("dirty", None, true, None, 0),
-            row("unmerged", None, false, Some(seen), 0),
-            row("orphan", None, false, None, 0),
+            row("dirty", None, true, None, Some(0)),
+            row("unmerged", None, false, Some(seen), Some(0)),
+            row("orphan", None, false, None, Some(0)),
             Row {
                 agent: Some(Bound {
                     id: "0193ab12-0000-7000-8000-000000000000".into(),
                     host: Some("claude".into()),
                     state: "live",
                 }),
-                ..row("unmerged", Some("claude / sonnet"), true, None, 0)
+                ..row("unmerged", Some("claude / sonnet"), true, None, Some(0))
             },
         ];
         let now = UNIX_EPOCH + std::time::Duration::from_secs(1_000 + 3 * 86_400 + 4 * 3_600);
@@ -624,6 +672,15 @@ mod tests {
 
         5 worktrees: 5.0 KB source, 2.0 KB build cache (logical bytes; clones and hard links count in full)
         ");
+    }
+
+    /// T936: a row whose caches were not walked prints `-` and the footer says why.
+    #[test]
+    fn an_unsized_row_has_no_cache_bytes_in_the_table() {
+        let row = Row::new("/w/x".into(), "dirty", false);
+        let table = to_table(&[row], UNIX_EPOCH);
+        assert!(table.contains("build cache not sized (--sizes)"), "{table}");
+        assert!(table.lines().nth(1).unwrap().ends_with(" -"), "{table}");
     }
 
     /// T154: the newest session at or under a linked worktree wins; the main checkout and a
@@ -649,7 +706,7 @@ mod tests {
         ];
         let mut rows: Vec<Row> = [("work", "main"), ("wt-a", "dirty"), ("wt-b", "merged")]
             .into_iter()
-            .map(|(name, state)| Row::new(dir.join(name), state))
+            .map(|(name, state)| Row::new(dir.join(name), state, false))
             .collect();
         attribute(&mut rows, &sessions);
         assert_eq!(rows[0].session, None, "the main checkout belongs to nobody");

@@ -316,6 +316,62 @@ fn archive_in_session_scopes_by_context_within_one_session() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// T929: a compaction forgets what a context was shown. The forgotten body is no dedup target
+/// any more, stays readable for `expand`, and printing it again hands it back to the session.
+#[test]
+fn forget_seen_ends_dedup_for_that_context_and_a_reprint_reclaims_the_row() {
+    let dir = std::env::temp_dir().join(format!("rtok-t929-forget-{}", std::process::id()));
+    let store = Store::open_in_memory().unwrap();
+    let main = store
+        .put_archive_for("s", b"main-body", &dir, None)
+        .unwrap();
+    let sub = store
+        .put_archive_for("s", b"sub-body", &dir, Some("agent-a"))
+        .unwrap();
+    store.put_read_cache("s", "/a", "h", Some(&main)).unwrap();
+    store.put_read_cache("other", "/a", "h", None).unwrap();
+
+    store.forget_seen("s", None).unwrap();
+
+    assert_eq!(store.archive_in_session("s", &main, None).unwrap(), None);
+    assert!(
+        store.get_archive(&main, Some(&dir)).unwrap().is_some(),
+        "still expandable"
+    );
+    assert!(
+        store
+            .archive_in_session("s", &sub, Some("agent-a"))
+            .unwrap()
+            .is_some(),
+        "another context's window was not compacted"
+    );
+    assert!(store.get_read_cache("s", "/a").unwrap().is_none());
+    assert!(store.get_read_cache("other", "/a").unwrap().is_some());
+
+    store
+        .put_archive_for("s", b"main-body", &dir, None)
+        .unwrap();
+    assert!(
+        store
+            .archive_in_session("s", &main, None)
+            .unwrap()
+            .is_some()
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// T929: another session's identical body is not reclaimed by a reprint.
+#[test]
+fn a_forgotten_row_is_not_taken_over_by_another_session() {
+    let dir = std::env::temp_dir().join(format!("rtok-t929-owner-{}", std::process::id()));
+    let store = Store::open_in_memory().unwrap();
+    let sha = store.put_archive_for("a", b"same", &dir, None).unwrap();
+    store.forget_seen("a", None).unwrap();
+    store.put_archive_for("b", b"same", &dir, None).unwrap();
+    assert_eq!(store.archive_in_session("b", &sha, None).unwrap(), None);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// T210: `measurements` is never pruned (`purge_calls_older_than` keeps it forever), and
 /// `archive_in_session`'s correlated subquery scans it by `(session, ts)` on every dedup
 /// hit. `EXPLAIN QUERY PLAN` on the query's real shape (mirroring the Diesel-generated
@@ -653,6 +709,63 @@ fn insert_measurements_once_is_all_or_none() {
         .insert_measurements_once("s", &[row(3), row(i32::MAX as u32 + 1)], None)
         .unwrap_err();
     assert_eq!(store.measurement_count("memory").unwrap(), 2);
+}
+
+/// T977: the ledger split by the project name of the writing session; `expand` stays negative.
+#[rstest]
+fn measurement_saved_by_project_splits_sessions_by_project() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .upsert_session("a1", None, Some("alpha"), None, None)
+        .unwrap();
+    store
+        .upsert_session("a2", None, Some("alpha"), None, None)
+        .unwrap();
+    store
+        .upsert_session("b1", None, Some("beta"), None, None)
+        .unwrap();
+    let row = |plugin, kind, est_before, est_after| Measurement {
+        plugin,
+        kind,
+        before_bytes: 1,
+        after_bytes: 1,
+        est_before,
+        est_after,
+        ref_id: None,
+        call_id: None,
+    };
+    store
+        .insert_measurement("a1", &row("read", "map", 100, 40))
+        .unwrap();
+    store
+        .insert_measurement("a2", &row("read", "map", 50, 10))
+        .unwrap();
+    store
+        .insert_measurement("a2", &row("read", "expand", 0, 30))
+        .unwrap();
+    store
+        .insert_measurement("b1", &row("read", "map", 70, 20))
+        .unwrap();
+    store
+        .insert_measurement("loose", &row("read", "map", 9, 1))
+        .unwrap();
+
+    let got = store.measurement_saved_by_project(0).unwrap();
+    let find = |project: Option<&str>, kind: &str| {
+        got.iter()
+            .find(|(p, t)| p.as_deref() == project && t.kind == kind)
+            .map(|(_, t)| (t.rows, t.est_before - t.est_after))
+    };
+    assert_eq!(find(Some("alpha"), "map"), Some((2, 100)));
+    assert_eq!(find(Some("alpha"), "expand"), Some((1, -30)));
+    assert_eq!(find(Some("beta"), "map"), Some((1, 50)));
+    assert_eq!(find(None, "map"), Some((1, 8)));
+    assert!(
+        store
+            .measurement_saved_by_project(i64::MAX)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[rstest]

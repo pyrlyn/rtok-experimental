@@ -6,14 +6,14 @@ something to the model at those points goes through here, under one budget.
 | | |
 |---|---|
 | Surfaces | SessionStart, UserPromptSubmit hooks |
-| Spec | the `spec (replaces)` column of the catalogue in `plan.md` §1 |
+| Spec | the **Replaces** column of [`docs/plugins.md`](../../../docs/plugins.md) |
 | Default | on |
 
 ## Mechanism
 
 1. Collect `Injection { plugin, text, priority }` from every enabled plugin.
 2. Sort by priority (higher first).
-3. Emit until `core.inject_budget_tokens` (default 800) is reached; drop the rest.
+3. Emit until `plugins.inject.budget_tokens` (default 800) is reached; drop the rest.
 4. Record `Measurement { kind: "inject" }` with what was emitted and what was dropped.
 
 SessionStart output is byte-identical across runs with unchanged state — no timestamps, no
@@ -32,13 +32,15 @@ naive-Minimum baselines (and why we win): `research.md` modes subsection and
 ## Config
 
 ```toml
-[core]
-inject_budget_tokens = 800
-
 [plugins.inject]
 enabled = true
-modes = []          # e.g. ["terse", "yagni"]
+budget_tokens = 800             # per turn, all injections together
+modes_dir = "~/.rtok/modes"
+modes = []                      # e.g. ["terse", "yagni"]
 ```
+
+`core.inject_budget_tokens` is the old spelling (moved in T12.1). It is still read and
+carried over to `plugins.inject.budget_tokens` when that key is left at its default.
 
 ## Tasks
 
@@ -48,4 +50,4 @@ T2.4 plugin + budget · T7.1 modes as data.
 
 ## Status
 
-Manifest only. First task: T2.4 (after T2.1 dispatcher).
+Implemented: budgeted SessionStart / UserPromptSubmit injection (T2.4), modes as data (T7.1).

@@ -307,8 +307,18 @@ pub(super) fn run(config_file: &Option<PathBuf>, action: AgentCmd) -> Result<()>
             }
         }
         AgentCmd::Info { host, json } => {
-            let cfg = Config::load_with(config_file.as_deref(), None)?;
+            let mut cfg = Config::load_with(config_file.as_deref(), None)?;
             let hosts = crate::agents::command::parse_hosts(&host)?;
+            // JSON output is read by a program, so it never stops for a question (T966).
+            if !json {
+                let agents = crate::agents::resolve(&hosts)?;
+                crate::agents::locate::ask_missing(
+                    &mut cfg,
+                    config_file.as_deref(),
+                    &agents,
+                    |_| true,
+                )?;
+            }
             if json {
                 let agents = crate::agents::resolve(&hosts)?;
                 let ids: Vec<&str> = agents.iter().map(|a| a.id()).collect();

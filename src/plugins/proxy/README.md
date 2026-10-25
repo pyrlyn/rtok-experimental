@@ -6,7 +6,7 @@ other plugins rewrite the request.
 | | |
 |---|---|
 | Surfaces | `rtok proxy [--port 8790] [--upstream URL] [--mode passthrough\|compress]`; serves `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL` |
-| Spec | the `spec (replaces)` column of the catalogue in `plan.md` §1 |
+| Spec | the **Replaces** column of [`docs/plugins.md`](../../../docs/plugins.md) |
 | Default | on |
 
 ## Behaviour

@@ -1,0 +1,121 @@
+# cmd: a PreToolUse(Bash) hook rewrites the command to rtok run, which filters the output, archives the raw bytes and appends an expand trailer.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent\nBash tool call" {class: host}
+
+hook: "rtok hook PreToolUse\ntool Bash" {class: surface}
+cli: "rtok run -- <cmd>\nsrc/cli/run_cmd.rs" {class: surface}
+flt: "rtok filter --archive\nstdin payload (OpenCode)" {class: surface}
+
+wrap: "Cmd::pre_tool (src/plugins/cmd/hook.rs)" {
+  class: plugin
+  direction: down
+  pre: "hook::pre_tool\nrewrite = true, tool is Bash" {class: plugin}
+  gate: "skip_wrap?\nnever_wrap, heredoc, trailing &, -i,\nshell-state builtin, sub-agent git" {
+    shape: diamond
+    class: plugin
+  }
+  wrapped: "PreToolDecision::Rewrite\nrun_guard + rtok run [--agent id] -- 'cmd'\nleading cd hops stay outside" {class: plugin}
+  pre -> gate
+  gate -> wrapped: no
+}
+
+run: "rtok run (src/plugins/cmd/run.rs)" {
+  class: plugin
+  direction: down
+  exec: "run(): configured or host shell -c\ncapture_body, capped\nexit code preserved" {class: plugin}
+  emit: "emit_filtered" {class: plugin}
+  same: "identical_result or\ncat re-read hit?" {
+    shape: diamond
+    class: plugin
+  }
+  dedup: "pointer or delta text\nkind dedup / read::cache::hit" {class: plugin}
+  tiny: "body no longer than\nthe trailer line?" {
+    shape: diamond
+    class: plugin
+  }
+  worse: "printed form not shorter\nthan the raw body?" {
+    shape: diamond
+    class: plugin
+  }
+  arch: "needs_pointer? put_archive_for(body)\ntrailer [rtok <id8> · N lines]" {class: plugin}
+  meas: "Measurement plugin cmd\nformatter · rule · skill ·\nunmatched · raw" {class: plugin}
+  exec -> emit
+  emit -> same
+  same -> dedup: yes
+  same -> tiny: no
+  tiny -> worse: no
+  worse -> arch: no
+  arch -> meas
+}
+
+filters: "formatters::compress (formatters.rs)" {
+  class: plugin
+  direction: down
+  pre: "mise::tidy, loops::collapse\nbefore the route is chosen" {class: plugin}
+  bounded: "bounded::is_bounded?\nsed -n, head, tail, grep -A" {
+    shape: diamond
+    class: plugin
+  }
+  route: "resolve: family_of, mixed_chain\nmixed programs go to [script]" {class: plugin}
+  json: "JSON body?" {
+    shape: diamond
+    class: plugin
+  }
+  jrule: "rules::apply_parsed\nfirst json_items items,\nlong strings cut" {class: plugin}
+  fmt: "format(): per-family formatter\ncompact, diffs, catfile, grep,\ngh, python, mise, loops" {class: plugin}
+  rules: "rules::apply, Settings::pick\nrules/default.toml + user rules\nexit != 0: last fail_tail_lines" {class: plugin}
+  pre -> bounded
+  bounded -> route: no
+  route -> json
+  json -> jrule: yes
+  json -> fmt: no
+  fmt -> rules: "None: no formatter"
+}
+
+raw: "raw bytes printed verbatim\nkind raw, no archive row" {class: plugin}
+
+store: "SQLite\narchive · measurements\nread_cache" {
+  shape: cylinder
+  class: data
+}
+blobs: "archive_dir/<id>\nraw stdout + stderr bytes" {
+  shape: stored_data
+  class: data
+}
+
+model: "tool_result text\nfiltered output\n[rtok <id8> · N lines]" {class: host}
+expand: "rtok expand <id8>\nMCP expand" {class: ops}
+
+agent -> hook: PreToolUse
+hook -> wrap.pre
+wrap.gate -> agent: "yes: command runs as typed"
+wrap.wrapped -> cli: "agent runs the rewritten command"
+flt -> run.emit
+cli -> run.exec
+run.same -> store: lookup by sha256
+run.emit -> raw: "rtok expand output,\nstore unavailable"
+run.tiny -> raw: yes
+run.worse -> raw: yes
+run.emit -> filters.pre: compress
+filters.bounded -> raw: yes
+filters.jrule -> run.worse
+filters.fmt -> run.worse: formatter
+filters.rules -> run.worse
+run.arch -> blobs: original bytes
+run.meas -> store
+run.dedup -> model
+run.arch -> model: filtered text + trailer
+raw -> model
+model -> agent
+agent -> expand: "expand <id8>"
+expand -> blobs: read

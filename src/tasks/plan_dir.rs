@@ -17,7 +17,7 @@ use std::time::UNIX_EPOCH;
 use anyhow::{Context, Result, bail};
 
 use super::adapter::{ClaimLock, Filter, Taken, TaskAdapter};
-use super::disk::{lock_claim, now};
+use super::disk::{lock_claim, now, warn_skipped};
 use super::{NewTask, Status, Task, TaskId};
 
 const TASK: &str = "task.md";
@@ -77,27 +77,37 @@ impl PlanDirAdapter {
         Ok(Some(task))
     }
 
-    /// Every task folder in `dir`. Names that are not task ids (`README.md`, a draft folder, an
-    /// id past the supported depth) stay theirs; `tests/plan_dir.rs` is what polices them.
-    fn scan(&self) -> Result<Vec<Task>> {
+    /// Every task folder in `dir` that parses, and the ids of the ones that do not. Names that
+    /// are not task ids (`README.md`, a draft folder, an id past the supported depth) stay
+    /// theirs; `tests/plan_dir.rs` is what polices them.
+    fn scan(&self) -> Result<(Vec<Task>, Vec<TaskId>)> {
         let entries = match std::fs::read_dir(&self.dir) {
             Ok(entries) => entries,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Ok((Vec::new(), Vec::new()));
+            }
             Err(e) => {
                 return Err(e).with_context(|| format!("disk tasks: {}", self.dir.display()));
             }
         };
-        let mut out = Vec::new();
+        let (mut found, mut skipped) = (Vec::new(), Vec::new());
         for entry in entries {
             let path = entry?.path();
             let Some(id) = folder_id(&path) else {
                 continue;
             };
-            if let Some(task) = self.read(&id)? {
-                out.push(task);
+            // One malformed task.md must not take the whole plan down; a command that names
+            // its id still gets the error from `read`.
+            match self.read(&id) {
+                Ok(Some(task)) => found.push(task),
+                Ok(None) => {}
+                Err(e) => {
+                    warn_skipped(&e);
+                    skipped.push(id);
+                }
             }
         }
-        Ok(out)
+        Ok((found, skipped))
     }
 
     /// Rewrite the three keys of `id`'s `task.md` from `task`. The caller holds the claim lock.
@@ -157,7 +167,7 @@ impl TaskAdapter for PlanDirAdapter {
     }
 
     fn list(&self, filter: &Filter) -> Result<Vec<Task>> {
-        Ok(filter.select(self.scan()?))
+        Ok(filter.select(self.scan()?.0))
     }
 
     fn get(&self, id: &TaskId) -> Result<Option<Task>> {
@@ -240,10 +250,12 @@ impl TaskAdapter for PlanDirAdapter {
 
     fn max_id(&self, prefix: &str) -> Result<Option<TaskId>> {
         let prefix = prefix.to_ascii_uppercase();
-        Ok(self
-            .scan()?
+        let (found, skipped) = self.scan()?;
+        // A skipped folder still owns its name, or the next task would be given its id.
+        Ok(found
             .into_iter()
             .map(|t| t.id)
+            .chain(skipped)
             .filter(|id| id.prefix() == prefix)
             .max())
     }
@@ -596,7 +608,7 @@ mod tests {
     }
 
     #[test]
-    fn folders_that_are_not_tasks_are_left_alone_and_broken_ones_are_named() {
+    fn folders_that_are_not_tasks_are_left_alone() {
         let dir = tmp("foreign");
         let disk = PlanDirAdapter::new(dir.clone());
         assert!(
@@ -610,14 +622,49 @@ mod tests {
             std::fs::write(dir.join(name).join(TASK), "no front matter\n").unwrap();
         }
         assert_eq!(disk.list(&Filter::default()).unwrap().len(), 1);
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn a_broken_task_is_skipped_by_reads_and_fails_by_its_id() {
+        let dir = tmp("broken");
+        let disk = PlanDirAdapter::new(dir.clone());
+        disk.create(&new("Real", ""), &id("T1")).unwrap();
         std::fs::create_dir_all(dir.join("T4")).unwrap();
+        // Valid front matter, but no `# T4. Title` heading.
         std::fs::write(dir.join("T4/task.md"), HAND_MADE).unwrap();
-        let err = disk.list(&Filter::default()).unwrap_err();
+        std::fs::create_dir_all(dir.join("T9")).unwrap();
+        std::fs::write(dir.join("T9/task.md"), "no front matter\n").unwrap();
+        disk.create(&new("Also real", ""), &id("T2")).unwrap();
+
+        let listed: Vec<_> = disk
+            .list(&Filter::default())
+            .unwrap()
+            .iter()
+            .map(|t| t.id.to_string())
+            .collect();
+        assert_eq!(listed.len(), 2);
+        assert!(listed.contains(&"T1".into()) && listed.contains(&"T2".into()));
+        assert_eq!(disk.get(&id("T1")).unwrap().unwrap().title, "Real");
+
+        let err = disk.get(&id("T4")).unwrap_err();
+        let msg = format!("{err:#}");
         assert!(
-            format!("{err:#}").contains(&format!("T4{}task.md", std::path::MAIN_SEPARATOR)),
-            "{err:#}"
+            msg.contains(&format!("T4{}task.md", std::path::MAIN_SEPARATOR)),
+            "{msg}"
         );
-        assert!(format!("{err:#}").contains("heading"), "{err:#}");
+        assert!(msg.contains("heading"), "{msg}");
+
+        // The skipped folder keeps its id, and nothing writes into it.
+        assert_eq!(disk.max_id("T").unwrap(), Some(id("T9")));
+        assert!(disk.create(&new("Again", ""), &id("T9")).is_err());
+        let before = std::fs::read(dir.join("T9/task.md")).unwrap();
+        assert!(disk.write_status(&id("T9"), Status::InProgress).is_err());
+        assert!(disk.write_status(&id("T9"), Status::Done).is_err());
+        assert!(disk.write_report(&id("T9"), "x").is_err());
+        assert!(disk.save(&Task::open(id("T9"), "x", "", 0)).is_err());
+        assert_eq!(std::fs::read(dir.join("T9/task.md")).unwrap(), before);
+        assert!(!dir.join("T9/done.md").exists());
         let _ = std::fs::remove_dir_all(dir.parent().unwrap());
     }
 

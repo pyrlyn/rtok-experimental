@@ -4,9 +4,11 @@ stdout = """
 target/tmp/t60-2-config-init.toml
 --- a/target/tmp/t60-2-config-init.toml
 +++ b/target/tmp/t60-2-config-init.toml
-@@ -0,0 +1,608 @@
+@@ -0,0 +1,615 @@
 +# rtok configuration. Every CLI flag has a key here; flags and RTOK_* env vars override.
 +# Precedence: defaults < this file < <git root>/.rtok.toml < env < flags.
++# Project TOML and project .env cannot set sensitive destinations, commands or paths;
++# see docs/config.md for restrictions. Use this user file or explicit --config for those.
 +# Docs: docs/config.md. Check: `rtok config validate`. Where a value came from: `rtok config show --sources`.
 +# Assignments are commented out so a key left untouched follows the current default,
 +# not the default from the day this file was written. Uncomment a line to pin it.
@@ -42,6 +44,7 @@ target/tmp/t60-2-config-init.toml
 +[hook]                                # rtok hook <event>
 +# host      = "claude"                  # claude | cursor | copilot | devin | cline — payload field mapping
 +# max_ms    = 10                        # soft budget; over it, the event is logged as slow
++# slow_warn_s = 300                     # one slow warning per event per this many seconds, with the count and worst time; 0 = every slow call
 +# fail_open = true                      # any error → `{}` and exit 0; false only for debugging
 +
 +[agents]                              # the rtok agent registry
@@ -103,8 +106,8 @@ target/tmp/t60-2-config-init.toml
 +# dry_run         = false               # --dry-run: print effective [proxy] settings and exit, don't serve
 +
 +[proxy.tools_rewrite]                 # off: request bytes stay identical
-+# enabled = false
-+# compact_schema = false                # also first-sentence property descriptions + redundant default/examples inside input_schema; originals archived (Measurement.ref_id)
++# enabled = true
++# compact_schema = true                 # also first-sentence property descriptions + redundant default/examples inside input_schema; originals archived (Measurement.ref_id)
 +# max_description_tokens = 60           # 0 = no truncate; sentence boundary; estimator Class::Prose
 +# allow = []                            # empty = keep all names not in deny
 +# deny = []                             # drop these names from tools[]; later calls still forward
@@ -340,6 +343,8 @@ target/tmp/t60-2-config-init.toml
 +# modes        = []                     # e.g. ["terse", "yagni"]   (--mode)
 +# mcp          = true                   # also register the MCP server   (--mcp)
 +# proxy        = false                  # also set the base URL          (--proxy)
++[setup.paths]                         # host = "path": where a host app is when rtok cannot find it (`agents install|update|info` asks and offers to save)
++# e.g. claude = "~/.local/bin/claude"   # a CLI binary, or a desktop app (`/Applications/Claude.app`, `claude.exe`)
 +[setup.claude]
 +# settings_path = "~/.claude/settings.json"
 +[setup.cursor]
@@ -429,6 +434,7 @@ target/tmp/t60-2-config-init.toml
 +# root = ".rtok/worktrees"              # where `rtok worktree add` creates worktrees, as <root>/<repo>-<task>; relative: under the main checkout
 +# seed = true                          # fill a new worktree's seed_dirs from the sibling that built them last, by copy-on-write clone (--no-seed)
 +# seed_dirs = ["target", "node_modules"] # build caches to seed, relative to the checkout; a bare name also matches one level down
++# min_free_mib = 2048                   # `worktree add` refuses below this much free space on the target volume, in MiB; 0 = no check
 +
 +[tasks]                               # task adapters; usually set per project in .rtok.toml
 +# adapter = "disk"                      # disk | github | gitlab
@@ -500,6 +506,7 @@ target/tmp/t60-2-config-init.toml
 +# min_tokens = 1500                     # only rewrite tool results above this (estimated)
 +# head_lines = 8
 +# tail_lines = 4
++# signal_lines = 8                     # elided error/fail/panic lines inlined as N:line (saves an expand); 0 = off
 +# tiers      = false                    # optional L0/L1/L2 depth (OpenViking spec, AGPL-3.0 — rtok does not vendor/link/subprocess; native implementation)
 +# live_blobs = false                    # shrink nested JSON dumps + data: blobs in user blocks, never results/system/tools/last-2-turns (opt-in)
 +# skills     = false                    # opt-in skill body archiving outside the live zone
@@ -613,7 +620,7 @@ target/tmp/t60-2-config-init.toml
 +[plugins.wasm]
 +# enabled = false
 +# dir = "~/.rtok/plugins"
-1 file changed, 608 insertions(+)
+1 file changed, 615 insertions(+)
 """
 
 # Hermetic by construction: isolated HOME/RTOK_HOME, inherit = false.

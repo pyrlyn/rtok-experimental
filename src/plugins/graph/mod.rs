@@ -59,9 +59,9 @@ thread_local! {
     pub(crate) static SYMBOL_SRC_READS: AtomicUsize = const { AtomicUsize::new(0) };
 }
 
-pub struct Graph;
+pub struct GraphPlugin;
 
-impl Plugin for Graph {
+impl Plugin for GraphPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "graph",
@@ -1291,6 +1291,17 @@ fn is_test_path(path: &str) -> bool {
         })
 }
 
+/// Fixtures, benchmarks and examples by directory: code that ships to no user, so a missing
+/// test there is not a finding.
+fn is_support_path(path: &str) -> bool {
+    const DIRS: &[&str] = &[
+        "fixtures", "fixture", "testdata", "bench", "benches", "examples",
+    ];
+    let mut parts: Vec<&str> = path.split('/').collect();
+    parts.pop();
+    parts.iter().any(|d| DIRS.contains(d))
+}
+
 /// 1-based line ranges of `impl X for Y` blocks and `trait` bodies in Rust source
 /// (methods there are interface surface, not dead code), plus every `impl` target
 /// type name (`impl S`, `impl T for S` — the tags query records no reference for
@@ -1742,15 +1753,24 @@ fn outline_in(cx: &Ctx, root: &Path, path: &str) -> Result<String> {
     } else {
         None
     };
+    if let Some(abs) = abs.as_deref()
+        && !abs.exists()
+    {
+        let hint = crate::plugins::read::roots::moved_hint(root, abs);
+        if !hint.is_empty() {
+            anyhow::bail!("No such file or directory: {path}{hint}");
+        }
+    }
     text_or(
         cx,
         root,
         "outline",
         || text::outline(cx, root, abs.as_deref().unwrap_or(Path::new(path))),
         || {
+            let workspace = abs.as_deref().map(|abs| lsp::outline_workspace(root, abs));
             lsp_or_tags(
                 cx,
-                root,
+                workspace.as_deref().unwrap_or(root),
                 "outline",
                 &[],
                 || {
@@ -2786,7 +2806,7 @@ mod tests {
     #[test]
     fn graph_surface_is_seven_tools_under_budget() {
         let (cx, dir) = cx("surface");
-        let tools = Graph.mcp_tools();
+        let tools = GraphPlugin.mcp_tools();
         assert_eq!(tools.len(), 7);
         let est = |d: &str| crate::tokens::estimate(d, Class::Prose, &cx.config.estimator);
         let n: u32 = tools.iter().map(|t| est(t.description)).sum();
@@ -2813,6 +2833,36 @@ mod tests {
     fn outline_reuses_read_map() {
         let (cx, dir) = cx("outline");
         let out = outline(&Ctx::new(&cx), "src/main.rs").unwrap();
+        assert!(out.contains("main"), "{out}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn outline_uses_the_file_workspace_capability() {
+        let (mut c, dir) = crate::testutil::config("outline-workspace");
+        c.plugins.graph.backend = "lsp".into();
+        c.plugins.read.allow_paths = vec![dir.clone()];
+        let cx = crate::plugin::Runtime::open(c, "outline-workspace").unwrap();
+        let ctx = Ctx::new(&cx);
+        let cargo = dir.join("cargo");
+        let dart = dir.join("dart");
+        fs::create_dir_all(&cargo).unwrap();
+        fs::create_dir_all(&dart).unwrap();
+        fs::write(cargo.join("Cargo.toml"), "[workspace]\n").unwrap();
+        fs::write(dart.join("pubspec.yaml"), "name: outline_fixture\n").unwrap();
+        let file = dart.join("main.dart");
+        fs::write(&file, "void main() {}\n").unwrap();
+        // Both answers are cached, so this test never probes or starts a real server.
+        for (root, reason) in [(&cargo, "cargo unavailable"), (&dart, "dart unavailable")] {
+            capability::reprobe(&ctx, root, "lsp", |_| {
+                Err(capability::Absent {
+                    server: true,
+                    reason: reason.into(),
+                })
+            });
+        }
+        let out = outline_in(&ctx, &cargo, &file.to_string_lossy()).unwrap();
+        assert!(out.starts_with("(tags; lsp: dart unavailable)"), "{out}");
         assert!(out.contains("main"), "{out}");
         let _ = fs::remove_dir_all(dir);
     }
@@ -3776,7 +3826,7 @@ fn c() {}
     }
 
     fn start(rt: &crate::plugin::Runtime) -> Option<Injection> {
-        Graph.session_start(&SessionStart { source: "startup" }, &Ctx::new(rt))
+        GraphPlugin.session_start(&SessionStart { source: "startup" }, &Ctx::new(rt))
     }
 
     #[test]

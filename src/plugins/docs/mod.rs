@@ -13,9 +13,9 @@ use serde_json::{Value, json};
 
 use rtok_plugin_sdk::{Class, DashboardPage, Manifest, Measurement, Plugin, Surface, ToolDef};
 
-pub struct Docs;
+pub struct DocsPlugin;
 
-impl Plugin for Docs {
+impl Plugin for DocsPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "docs",
@@ -664,7 +664,7 @@ checksum = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     #[test]
     fn mcp_surface_stays_within_sixty_description_tokens() {
         let cx = Runtime::in_memory("docs-surface").unwrap();
-        let total: i64 = Docs
+        let total: i64 = DocsPlugin
             .mcp_tools()
             .iter()
             .map(|t| i64::from(cx.estimate(t.description, Class::Prose)))

@@ -137,6 +137,29 @@ pub(crate) fn enter_caller(server_cwd: &Path, dir: &Path) -> Option<CallerGuard>
     Some(CallerGuard(CALLER.with(|c| c.borrow_mut().replace(dir))))
 }
 
+/// T972: ` (moved? it exists at <path>)` for a missing absolute `path` when one of its
+/// directories is named like a worktree or client root this server knows and the same file
+/// is there, else empty. Agents keep reading old paths after a worktree root moves (the
+/// `_worktrees/` → `.rtok/worktrees/` move cost ten failed reads in one day).
+pub(crate) fn moved_hint(cwd: &Path, path: &Path) -> String {
+    if !path.is_absolute() {
+        return String::new();
+    }
+    let trees = dynamic(cwd);
+    let parts: Vec<_> = path.components().collect();
+    let found = parts.iter().enumerate().find_map(|(i, part)| {
+        let rest: PathBuf = parts[i + 1..].iter().collect();
+        trees
+            .iter()
+            .filter(|t| t.file_name() == Some(part.as_os_str()))
+            .map(|t| t.join(&rest))
+            .find(|p| p != path && p.is_file())
+    });
+    found.map_or_else(String::new, |p| {
+        format!(" (moved? it exists at {})", p.display())
+    })
+}
+
 fn worktrees(cwd: &Path) -> Vec<PathBuf> {
     if let Some((at, list)) = lock(&WORKTREES).get(cwd)
         && at.elapsed() < WORKTREE_TTL
@@ -233,6 +256,37 @@ mod tests {
         );
         assert!(super::super::resolve(&other, &files[2], &[]).is_err());
         set_client_roots(Vec::new());
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn a_missing_path_under_an_old_worktree_root_names_where_the_file_is_now() {
+        let (base, main, wt, _) = repo("moved");
+        // The old root sat under the server's cwd, so the guard let the read through.
+        let old = main.join("_worktrees").join("wt").join("a.txt");
+        assert_eq!(moved_hint(&main, &old), "", "only `rtok mcp` looks");
+        enable();
+        let hint = format!(" (moved? it exists at {})", wt.join("a.txt").display());
+        assert_eq!(moved_hint(&main, &old), hint);
+        let gone = main.join("_worktrees").join("wt").join("gone.txt");
+        assert_eq!(
+            moved_hint(&main, &gone),
+            "",
+            "no such file in the worktree either"
+        );
+        assert_eq!(moved_hint(&main, &wt.join("gone.txt")), "");
+        let (rt, dir) = crate::testutil::runtime("moved-read");
+        let err = crate::plugins::read::read_with(
+            &rtok_plugin_sdk::Ctx::new(&rt),
+            &crate::fs::HostFs,
+            &main,
+            old.to_str().unwrap(),
+            "full",
+            None,
+        )
+        .unwrap_err();
+        assert!(format!("{err:#}").ends_with(&hint), "{err:#}");
+        let _ = std::fs::remove_dir_all(dir);
         let _ = std::fs::remove_dir_all(base);
     }
 

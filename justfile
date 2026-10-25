@@ -196,7 +196,11 @@ docs-check:
     {{cargo}} test -p rtok --test plan_dir --test ideas_md --test docs_structure \
         --test host_docs --test public_numbers --test toolchain_rows \
         --test plugin_plans --test report --test agents_doc --test agents_worktrees \
-        --test stats_model
+        --test stats_model --test diagrams
+
+# T959: re-render the stale docs/architecture/*.d2 to SVG (d2-render native backend, no d2 binary)
+diagrams:
+    RTOK_DIAGRAMS=overwrite {{cargo}} test -p rtok --test diagrams
 
 # T9.5: execute every README bash fence marked `# check`.
 readme-check:

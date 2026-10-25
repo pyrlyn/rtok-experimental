@@ -58,31 +58,31 @@ pub mod docs;
 pub fn all() -> Vec<Box<dyn Plugin>> {
     let mut v: Vec<Box<dyn Plugin>> = Vec::new();
     #[cfg(feature = "measure")]
-    v.push(Box::new(measure::Measure));
+    v.push(Box::new(measure::MeasurePlugin));
     #[cfg(feature = "cmd")]
-    v.push(Box::new(cmd::Cmd));
+    v.push(Box::new(cmd::CmdPlugin));
     #[cfg(feature = "read")]
-    v.push(Box::new(read::Read));
+    v.push(Box::new(read::ReadPlugin));
     #[cfg(feature = "json_tree")]
-    v.push(Box::new(json_tree::JsonTree));
+    v.push(Box::new(json_tree::JsonTreePlugin));
     #[cfg(feature = "archive")]
-    v.push(Box::new(archive::Archive));
+    v.push(Box::new(archive::ArchivePlugin));
     #[cfg(feature = "proxy")]
-    v.push(Box::new(proxy::Proxy));
+    v.push(Box::new(proxy::ProxyPlugin));
     #[cfg(feature = "inject")]
-    v.push(Box::new(inject::Inject));
+    v.push(Box::new(inject::InjectPlugin));
     #[cfg(feature = "guard")]
-    v.push(Box::new(guard::Guard));
+    v.push(Box::new(guard::GuardPlugin));
     #[cfg(feature = "memory")]
-    v.push(Box::new(memory::Memory));
+    v.push(Box::new(memory::MemoryPlugin));
     #[cfg(feature = "graph")]
-    v.push(Box::new(graph::Graph));
+    v.push(Box::new(graph::GraphPlugin));
     #[cfg(feature = "toon")]
-    v.push(Box::new(toon::Toon));
+    v.push(Box::new(toon::ToonPlugin));
     #[cfg(feature = "compress")]
-    v.push(Box::new(compress::Compress));
+    v.push(Box::new(compress::CompressPlugin));
     #[cfg(feature = "docs")]
-    v.push(Box::new(docs::Docs));
+    v.push(Box::new(docs::DocsPlugin));
     v
 }
 
@@ -204,8 +204,8 @@ mod tests {
     /// The external-plugin path: a plugin that is not in the catalogue, registered by hand.
     #[test]
     fn from_plugins_takes_external_plugins() {
-        struct Ext;
-        impl Plugin for Ext {
+        struct ExtPlugin;
+        impl Plugin for ExtPlugin {
             fn manifest(&self) -> Manifest {
                 Manifest {
                     id: "ext",
@@ -217,7 +217,7 @@ mod tests {
                 DashboardPage::new("Ext", "An out-of-tree plugin.", false)
             }
         }
-        let reg = Registry::from_plugins(vec![Box::new(Ext)], &Config::default());
+        let reg = Registry::from_plugins(vec![Box::new(ExtPlugin)], &Config::default());
         let on: Vec<&str> = reg.enabled().map(|p| p.manifest().id).collect();
         assert_eq!(on, ["ext"]);
     }

@@ -1,0 +1,72 @@
+# json_tree: a nested JSON tool result is folded into VARS and EL- templates by the proxy filter or an MCP wrapper, with the original archived.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent" {class: host}
+llm: "LLM provider API" {
+  shape: cloud
+  class: host
+}
+
+surfaces: Surfaces {
+  class: surface
+  proxy: "rtok proxy\ncompress mode\nproxy_filter on /v1/messages" {class: surface}
+  mcp: "MCP result wrapper\nmcp::wrap::shorten_result\nresult over the mcp max_lines" {class: surface}
+}
+
+outside: "archive::outside_live_zone\nkeeps only results older than\n[plugins.archive] keep_turns" {class: core}
+
+jt: json_tree plugin (off by default) {
+  class: plugin
+  enabled: "plugins.json_tree.enabled?" {shape: diamond; class: plugin}
+  decision: "archive_decision\nfor tool_use_id" {shape: diamond; class: plugin}
+  parse: "serde_json::from_str\nfold_json" {class: plugin}
+  guards: "fold_json guards\nbelow MIN_BYTES, no nested object,\nor toon::tabular_keys accepts" {shape: diamond; class: plugin}
+  fold: "tally → VARS V-<hash>\ncollect_bodies → ELEMENTS EL-<hash>\nrender" {class: plugin}
+  fits: "estimate(folded) <\nestimate(original)?" {shape: diamond; class: plugin}
+  rewrite: "put_archive + put_archive_decision\nblock = [json-tree <id>] + folded text" {class: plugin}
+  replay: "replay the stored pointer\n(expanded or toon pointer:\nleave alone)" {class: plugin}
+  enabled -> decision: yes
+  decision -> replay: "pointer exists"
+  decision -> parse: none
+  parse -> guards
+  guards -> fold: foldable
+  fold -> fits
+  fits -> rewrite: yes
+}
+
+keep: "block left as it was\n(fail open)" {class: host}
+
+store: "SQLite\narchive_decisions · measurements" {
+  shape: cylinder
+  class: data
+}
+blobs: "archive_dir/<id>\noriginal JSON" {
+  shape: stored_data
+  class: data
+}
+ops: "rtok expand <id>\nreturns the original bytes" {class: ops}
+
+agent -> surfaces.proxy: API request
+surfaces.proxy -> outside
+outside -> jt.enabled: each tool_result
+surfaces.mcp -> jt.parse: "fold_json (not read / search)"
+jt.enabled -> keep: no
+jt.guards -> keep: not foldable
+jt.fits -> keep: no
+jt.rewrite -> blobs: original
+jt.rewrite -> store: "decision + Measurement kind fold"
+jt.replay -> store: reads
+jt.rewrite -> surfaces.proxy: folded block
+jt.replay -> surfaces.proxy: same pointer
+surfaces.proxy -> llm: forwarded
+agent <- surfaces.mcp: folded result
+blobs -> ops

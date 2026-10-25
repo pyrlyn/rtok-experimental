@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rtok::plugin::{Ctx, Plugin, Runtime};
 use rtok::plugins::graph::lsp::on_path;
-use rtok::plugins::graph::{Graph, callers, outline, symbol};
+use rtok::plugins::graph::{GraphPlugin, callers, outline, symbol};
 
 const CHAIN: &str = "fn a() {\n    b();\n}\nfn b() {\n    c();\n}\nfn c() {}\n";
 const OTHER: &str = "fn d() {\n    c();\n    c();\n}\n";
@@ -76,7 +76,11 @@ fn assert_lsp_state_stays_in(dir: &Path, root: &Path) {
 
 #[test]
 fn mcp_tool_names_are_unchanged() {
-    let names: Vec<_> = Graph.mcp_tools().into_iter().map(|t| t.name).collect();
+    let names: Vec<_> = GraphPlugin
+        .mcp_tools()
+        .into_iter()
+        .map(|t| t.name)
+        .collect();
     // T68.1 added `explore` as the fifth tool, T329.18 `graph_diff` as the sixth and T329.16
     // `graph_export` as the seventh; the surface-token gate lives in
     // `graph::tests::graph_surface_is_seven_tools_under_budget`.

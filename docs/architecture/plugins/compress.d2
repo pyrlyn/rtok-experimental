@@ -1,0 +1,117 @@
+# compress: after archive, the proxy swaps an archive pointer for a summary view; a background queue can ask a model for a better one.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent\nrequest with old tool_result blocks" {class: host}
+llm: "LLM provider API" {
+  shape: cloud
+  class: host
+}
+
+proxy: "rtok proxy\nproxy.mode = compress" {class: surface}
+registry: "Registry\nproxy_filter of each enabled plugin" {class: core}
+archive: "archive::proxy_filter\nruns first: block holds\n[archived <id8> ...] pointer" {class: core}
+
+compress: "compress plugin (src/plugins/compress/mod.rs)" {
+  class: plugin
+  direction: down
+  pf: "Compress::proxy_filter" {class: plugin}
+  gate: "plugins.compress.enabled and\nproxy.mode == compress?" {
+    shape: diamond
+    class: plugin
+  }
+  live: "archive::outside_live_zone\nturn >= keep_turns" {class: plugin}
+  dec: "summarize_block\nblock still the stored,\nunexpanded archive pointer?" {
+    shape: diamond
+    class: plugin
+  }
+  llm_on: "llm.enabled and a summary\nstored for (archive_id, version)?" {
+    shape: diamond
+    class: plugin
+  }
+  view: "stored_view\n[compress <id8>] + model summary" {class: plugin}
+  ext: "extractive_summary\ntitle, narrative, facts (errors first), files" {class: plugin}
+  offer: "OFFERED\nids with no stored summary" {class: plugin}
+  short: "summary shorter\nthan the pointer?" {
+    shape: diamond
+    class: plugin
+  }
+  meas: "Measurement compress/summary" {class: plugin}
+  pf -> gate
+  gate -> live: yes
+  live -> dec
+  dec -> llm_on: yes
+  llm_on -> view: yes
+  llm_on -> ext: no
+  llm_on -> offer: "enabled, none stored"
+  view -> short
+  ext -> short
+  short -> meas: yes
+}
+
+untouched: "block unchanged\npointer stays" {class: core}
+
+queue: "background summaries (queue.rs, llm.rs)" {
+  class: plugin
+  direction: down
+  submit: "Queue::submit\nonce per id, max_in_flight cap" {class: plugin}
+  ok: "text, within max_input_bytes,\nnot diff or source (code = false),\nat most max_spans spans?" {
+    shape: diamond
+    class: plugin
+  }
+  ask: "Compressor::ask\nmust-keep spans in the prompt" {class: plugin}
+  guard: "must_keep::dropped\nno span lost?" {
+    shape: diamond
+    class: plugin
+  }
+  put: "put_archive_summary" {class: plugin}
+  submit -> ok
+  ok -> ask: yes
+  ask -> guard
+  guard -> put: yes
+}
+
+stays: "extractive view stays\n(skipped, rejected or failed)" {class: core}
+
+store: "SQLite\narchive_decisions · archive_summaries\nmeasurements" {
+  shape: cylinder
+  class: data
+}
+blobs: "archive_dir/<id>\noriginal bytes" {
+  shape: stored_data
+  class: data
+}
+
+model: "tool_result text\n[compress <id8>]\ntype, title, narrative,\nfacts, files, expand(<id8>)" {class: host}
+expand: "expand tool\noriginal bytes" {class: ops}
+
+agent -> proxy: API request
+proxy -> registry
+registry -> archive
+archive -> compress.pf: filter order
+archive -> store: archive_decisions row
+compress.gate -> untouched: no
+compress.dec -> untouched: no
+compress.short -> untouched: no
+store -> compress.dec: archive_decision
+store -> compress.llm_on: archive_summary
+compress.ext -> blobs: get_archive
+compress.meas -> store
+compress.meas -> model: pointer replaced
+compress.offer -> queue.submit: "proxy: take_offered,\nAuth::from_headers (anthropic wire)"
+queue.ok -> stays: no
+queue.guard -> stays: no
+queue.ask -> proxy: "POST /v1/messages,\nlane internal"
+proxy -> llm: forwarded
+queue.put -> store: next request reads it
+queue.submit -> blobs: "Compressor::try_run\nreads the original"
+model -> expand: "expand(<id8>)"
+expand -> blobs: read

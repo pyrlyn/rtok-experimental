@@ -8,6 +8,8 @@
 //! step comes back as [`StoreWarning`].
 
 #![forbid(unsafe_code)]
+// Clippy 1.99 flags the field inits that `#[derive(QueryableByName)]` expands to; the source has none.
+#![allow(clippy::redundant_field_names)]
 
 /// `bail!` that returns [`StoreError`], not `anyhow::Error`. `anyhow::bail!` returns
 /// `Err(anyhow::Error)` and will not coerce into this crate's `Result`.
@@ -397,6 +399,8 @@ pub fn rank_blend(rank: usize, retention: f64) -> f64 {
 
 mod archive_rows;
 mod cache;
+mod mcp_memo;
+pub use mcp_memo::{MemoRow, memo_key_hash};
 mod call_log;
 mod handle;
 mod measure_rows;
@@ -522,8 +526,8 @@ fn archive_files_are_owner_only() {
     assert_eq!((d, f), (0o700, 0o600));
 }
 
-/// The `archive` row behind a file [`write_archive_file`] already wrote. `on_conflict …
-/// do_nothing`: the same body archived twice (T5.3 repeat requests) is one row.
+/// The `archive` row behind a file [`write_archive_file`] already wrote. On a conflict the same
+/// body archived twice (T5.3 repeat requests) stays one row, the first writer's.
 fn insert_archive_row_conn(
     conn: &mut SqliteConnection,
     sha: &str,
@@ -532,6 +536,7 @@ fn insert_archive_row_conn(
     path: &Path,
     agent_id: Option<&str>,
 ) -> Result<()> {
+    use diesel::query_dsl::methods::FilterDsl;
     diesel::insert_into(archive::table)
         .values((
             archive::id.eq(sha),
@@ -542,10 +547,22 @@ fn insert_archive_row_conn(
             archive::agent_id.eq(agent_id),
         ))
         .on_conflict(archive::id)
-        .do_nothing()
+        // A body its own writer forgot at a compaction (T929) is shown again, so this session
+        // owns it again; any other conflict keeps the first writer.
+        .do_update()
+        .set((
+            archive::agent_id.eq(diesel::upsert::excluded(archive::agent_id)),
+            archive::ts.eq(i64::try_from(unix_now()).unwrap_or(i64::MAX)),
+        ))
+        .filter(archive::session.eq(session))
+        .filter(archive::agent_id.eq(FORGOTTEN_CONTEXT))
         .execute(conn)?;
     Ok(())
 }
+
+/// The `archive.agent_id` of a row whose context forgot it ([`Store::forget_seen`]). No lookup
+/// names it, so `archive_in_session` never answers with a pointer to it.
+pub(crate) const FORGOTTEN_CONTEXT: &str = "\u{1}forgotten";
 
 /// The `archive_decisions.expanded_ts` update behind [`Store::mark_expanded`] and
 /// [`Store::mark_expanded_recorded`].
@@ -673,6 +690,15 @@ fn host_by_session(conn: &mut SqliteConnection) -> Result<HashMap<String, Option
     Ok(sessions::table
         .left_join(hosts::table)
         .select((sessions::id, hosts::slug.nullable()))
+        .load::<(String, Option<String>)>(conn)?
+        .into_iter()
+        .collect())
+}
+
+/// Each session's project name, `None` when it has none (a session outside any checkout).
+fn project_by_session(conn: &mut SqliteConnection) -> Result<HashMap<String, Option<String>>> {
+    Ok(sessions::table
+        .select((sessions::id, sessions::project))
         .load::<(String, Option<String>)>(conn)?
         .into_iter()
         .collect())

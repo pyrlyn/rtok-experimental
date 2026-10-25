@@ -103,6 +103,9 @@ impl ServerHandler for Http {
 /// the allow-list left out.
 fn http_server(cfg: &Config) -> Result<Server> {
     let mut server = Server::new(cfg)?;
+    // A reused PID must not revive read-cache pointers from a previous HTTP process.
+    server.cx.session = format!("mcp-http-{}", uuid::Uuid::new_v4());
+    server.cx.restrict_archives();
     server.listed.retain(|t| !AGENT_BOUND.contains(&t.def.name));
     Ok(server)
 }
@@ -255,6 +258,100 @@ fn bearer_matches(value: Option<&HeaderValue>, token: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn http_expand_refuses_foreign_archives_but_keeps_its_own_lossless() {
+        use crate::plugin::Archive;
+        use serde_json::json;
+
+        let (cfg, dir) = crate::testutil::config("http-archive-scope");
+        let server = http_server(&cfg).unwrap();
+        let body = b"private output from another session";
+        let id = server
+            .cx
+            .store
+            .put_archive("other-session", body, &cfg.core.archive_dir)
+            .unwrap();
+        for supplied in [&id[..8], id.as_str()] {
+            let result = server.call_tool("expand", &json!({"id": supplied}));
+            assert_eq!(result.is_error, Some(true), "{result:?}");
+            let rendered = serde_json::to_string(&result).unwrap();
+            assert!(!rendered.contains("private output"), "{rendered}");
+        }
+        // The store retains the first writer of identical bytes. A session-column filter
+        // would reject a legitimate pointer even after this server archived those bytes.
+        assert_eq!(server.cx.put_archive(body).unwrap(), id);
+        for supplied in [&id[..8], id.as_str()] {
+            let result = server.call_tool("expand", &json!({"id": supplied}));
+            assert_ne!(result.is_error, Some(true), "{result:?}");
+            assert!(
+                serde_json::to_string(&result)
+                    .unwrap()
+                    .contains("private output")
+            );
+        }
+        let restarted = http_server(&cfg).unwrap();
+        assert_eq!(
+            restarted.call_tool("expand", &json!({"id": id})).is_error,
+            Some(true)
+        );
+        let stdio = Server::new(&cfg).unwrap();
+        assert_ne!(
+            stdio.call_tool("expand", &json!({"id": id})).is_error,
+            Some(true)
+        );
+        drop((server, restarted, stdio));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn http_expand_resolves_collisions_only_among_granted_ids() {
+        use crate::plugin::Archive;
+        use serde_json::json;
+
+        let (cfg, dir) = crate::testutil::config("http-archive-collision");
+        let server = http_server(&cfg).unwrap();
+        // Fixed SHA-256 fixtures collide in the eight hex characters printed in trailers.
+        let first = b"rtok-t960-collision-22965";
+        let second = b"rtok-t960-collision-44844";
+        let own = server.cx.put_archive_for(first, Some("context")).unwrap();
+        let foreign = server
+            .cx
+            .store
+            .put_archive("other", second, &cfg.core.archive_dir)
+            .unwrap();
+        assert_eq!(&own[..8], &foreign[..8]);
+        let prefix = &own[..8];
+        let expanded = server.call_tool("expand", &json!({"id": prefix}));
+        assert_ne!(expanded.is_error, Some(true), "{expanded:?}");
+        assert!(
+            serde_json::to_string(&expanded)
+                .unwrap()
+                .contains("collision-22965")
+        );
+        assert_eq!(server.cx.put_archive(second).unwrap(), foreign);
+        let ambiguous = server.call_tool("expand", &json!({"id": prefix}));
+        assert_eq!(ambiguous.is_error, Some(true));
+        let message = serde_json::to_string(&ambiguous).unwrap();
+        assert!(message.contains("ambiguous"), "{message}");
+        for id in [&own, &foreign] {
+            assert!(!message.contains(&id[..12]), "{message}");
+            assert_ne!(
+                server
+                    .call_tool("expand", &json!({"id": &id[..12]}))
+                    .is_error,
+                Some(true)
+            );
+        }
+        for invalid in ["", &own[..7], "../../archive", &format!("{own}0")] {
+            assert_eq!(
+                server.call_tool("expand", &json!({"id": invalid})).is_error,
+                Some(true)
+            );
+        }
+        drop(server);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn bearer_needs_the_exact_token() {

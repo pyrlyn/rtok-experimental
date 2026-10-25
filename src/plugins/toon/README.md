@@ -5,16 +5,17 @@ rewritten only when the encoding is smaller than the JSON it replaces.
 
 | | |
 |---|---|
-| Surfaces | proxy `compress` mode; MCP tool results |
-| Spec | the `spec (replaces)` column of the catalogue in `plan.md` §1 |
-| Default | **off** |
+| Surfaces | proxy `compress` mode (`proxy_filter`); MCP `expand` returns the original |
+| Spec | the **Replaces** column of [`docs/plugins.md`](../../../docs/plugins.md) |
+| Default | on |
 
 ## Mechanism
 
-Arrays of uniform objects (same keys, scalar values) are re-encoded as a header row plus one
-line per record. Vendor benchmark: −42.6 % tokens on tabular data; unmeasured here, hence off.
-Non-tabular JSON is left untouched. The original is archived; the encoded block carries an
-`expand` id.
+Arrays of at least `min_rows` uniform objects (same keys, scalar values) in a tool result are
+re-encoded as a header row plus one line per record. Vendor benchmark: −42.6 % tokens on
+tabular data. Non-tabular JSON, a table that would not shrink, and the last
+`plugins.archive.keep_turns` turns are left untouched. The original is archived; the encoded
+block carries an `expand` id.
 
 ## Config
 
@@ -32,4 +33,4 @@ T11.7 `proxy_filter` TOON on tabular JSON (default on). A table that would not s
 
 ## Status
 
-Manifest only.
+Implemented: `proxy_filter` (T11.7), on by default (T127).

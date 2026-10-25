@@ -308,6 +308,8 @@ fn package<'a>(meta: &'a serde_json::Value, name: &str) -> &'a serde_json::Value
 /// `--filter-platform` the host: offline, an unfiltered resolve needs every platform's crates
 /// in the cache, and a host only downloads its own (resvg's fontconfig-parser is Linux-only).
 /// The checks read declared dependencies of workspace members, which the filter keeps.
+/// A failed offline resolve is retried online: the index cache is shared, and on the
+/// self-hosted runner another job's rust-cache trims entries this workspace still needs.
 fn metadata() -> serde_json::Value {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let rustc = std::process::Command::new("rustc")
@@ -318,12 +320,19 @@ fn metadata() -> serde_json::Value {
         .lines()
         .find_map(|l| l.strip_prefix("host: ").map(str::to_string))
         .expect("rustc -vV names the host");
-    let out = std::process::Command::new("cargo")
-        .args(["metadata", "--format-version", "1", "--offline", "--locked"])
-        .args(["--filter-platform", &host])
-        .current_dir(&root)
-        .output()
-        .expect("cargo metadata");
+    let run = |offline: bool| {
+        std::process::Command::new("cargo")
+            .args(["metadata", "--format-version", "1", "--locked"])
+            .args(offline.then_some("--offline"))
+            .args(["--filter-platform", &host])
+            .current_dir(&root)
+            .output()
+            .expect("cargo metadata")
+    };
+    let mut out = run(true);
+    if !out.status.success() {
+        out = run(false);
+    }
     assert!(
         out.status.success(),
         "cargo metadata failed: {}",

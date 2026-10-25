@@ -168,6 +168,88 @@ pub(crate) fn language_of(root: &Path) -> Option<&'static str> {
         .map(|(_, lang, _)| *lang)
 }
 
+/// File extension to the language name used in [`LANGS`]. Counts a project's files per language
+/// where no marker file exists (C without `compile_commands.json`, Kotlin, C#), so it lists
+/// more languages than [`LANGS`] has markers for.
+const EXTENSIONS: &[(&str, &str)] = &[
+    ("rs", "rust"),
+    ("c", "c"),
+    ("h", "c"),
+    ("cc", "c"),
+    ("cpp", "c"),
+    ("cxx", "c"),
+    ("hpp", "c"),
+    ("ts", "typescript"),
+    ("tsx", "typescript"),
+    ("js", "javascript"),
+    ("mjs", "javascript"),
+    ("cjs", "javascript"),
+    ("jsx", "javascript"),
+    ("dart", "dart"),
+    ("go", "go"),
+    ("py", "python"),
+    ("java", "java"),
+    ("kt", "kotlin"),
+    ("rb", "ruby"),
+    ("php", "php"),
+    ("ex", "elixir"),
+    ("exs", "elixir"),
+    ("swift", "swift"),
+    ("cs", "csharp"),
+];
+
+pub(crate) fn language_of_ext(ext: &str) -> Option<&'static str> {
+    EXTENSIONS
+        .iter()
+        .find(|(e, _)| e.eq_ignore_ascii_case(ext))
+        .map(|(_, lang)| *lang)
+}
+
+/// The server rtok spawns for `lang`, if it has one.
+pub(crate) fn server_of(lang: &str) -> Option<Server> {
+    LANGS
+        .iter()
+        .find(|(_, l, server)| *l == lang && server.is_some())
+        .and_then(|(.., server)| *server)
+}
+
+/// Languages rtok has a server for.
+pub(crate) fn served_languages() -> impl Iterator<Item = &'static str> {
+    LANGS
+        .iter()
+        .filter(|(.., server)| server.is_some())
+        .map(|(_, lang, _)| *lang)
+}
+
+/// Every marker file that names `lang`, with or without a server behind it.
+pub(crate) fn markers(lang: &str) -> impl Iterator<Item = &'static str> {
+    LANGS
+        .iter()
+        .filter(move |(_, l, _)| *l == lang)
+        .map(|(marker, ..)| *marker)
+}
+
+/// The marker file that selects `lang`'s server, whether or not `root` has it.
+pub(crate) fn marker_of(lang: &str) -> Option<&'static str> {
+    LANGS
+        .iter()
+        .find(|(_, l, server)| *l == lang && server.is_some())
+        .map(|(marker, ..)| *marker)
+}
+
+/// How to install a server binary named in [`LANGS`]; the doctor prints it as the next step.
+pub(crate) fn install_hint(bin: &str) -> Option<&'static str> {
+    match bin {
+        "rust-analyzer" => Some("rustup component add rust-analyzer"),
+        "clangd" => Some("brew install llvm (macOS) or apt install clangd (Debian/Ubuntu)"),
+        "typescript-language-server" => {
+            Some("npm install -g typescript-language-server typescript")
+        }
+        "dart" => Some("install the Dart SDK: https://dart.dev/get-dart"),
+        _ => None,
+    }
+}
+
 /// The capability check (T329.11): the project's language has a server and its binary is
 /// installed. File presence only, no spawn; starting the server is the first real request.
 pub(crate) fn probe(root: &Path) -> super::capability::Probe {
@@ -1194,6 +1276,20 @@ fn workspace_of(file: &Path) -> PathBuf {
     file.parent().unwrap_or(file).to_path_buf()
 }
 
+/// Select the same workspace for capability probing and the outline session.
+pub(crate) fn outline_workspace(root: &Path, abs: &Path) -> PathBuf {
+    // Same session key as `symbol` / `callers` / `impact` (cwd) when the file sits under cwd and
+    // its nearest manifest speaks cwd's server; otherwise the nearest manifest. Keyed by the
+    // nearest manifest alone, alternating `outline` and `symbol` calls in a Cargo workspace
+    // killed and respawned the server each time; keyed by cwd alone, a Dart file outside a
+    // Cargo cwd was sent to rust-analyzer and outlined as empty.
+    let near = workspace_of(abs);
+    match (pick(root), pick(&near)) {
+        (Ok((a, _)), Ok((b, _))) if a == b && abs.starts_with(root) => root.to_path_buf(),
+        _ => near,
+    }
+}
+
 pub(crate) fn outline(cx: &Ctx, root: &Path, path: &str) -> Result<String> {
     let t0 = Instant::now();
     let abs = if Path::new(path).is_absolute() {
@@ -1201,16 +1297,7 @@ pub(crate) fn outline(cx: &Ctx, root: &Path, path: &str) -> Result<String> {
     } else {
         root.join(path)
     };
-    // Same session key as `symbol` / `callers` / `impact` (cwd) when the file sits under cwd and
-    // its nearest manifest speaks cwd's server; otherwise the nearest manifest. Keyed by the
-    // nearest manifest alone, alternating `outline` and `symbol` calls in a Cargo workspace
-    // killed and respawned the server each time; keyed by cwd alone, a Dart file outside a
-    // Cargo cwd was sent to rust-analyzer and outlined as empty.
-    let near = workspace_of(&abs);
-    let ws = match (pick(root), pick(&near)) {
-        (Ok((a, _)), Ok((b, _))) if a == b && abs.starts_with(root) => root.to_path_buf(),
-        _ => near,
-    };
+    let ws = outline_workspace(root, &abs);
     with_session(&ws, |s| {
         let uri = file_uri(&abs);
         s.did_open(&uri)?;
@@ -1272,6 +1359,29 @@ mod tests {
         assert_eq!(args, &["language-server"]);
         assert_eq!(workspace_of(&main), dir);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn outline_workspace_preserves_shared_cargo_sessions() {
+        let dir = crate::testutil::tmp_dir("outline-session-root");
+        let cargo = dir.join("cargo");
+        let nested = cargo.join("member");
+        let external = dir.join("external");
+        let dart = cargo.join("dart");
+        for root in [&cargo, &nested, &external, &dart] {
+            std::fs::create_dir_all(root).unwrap();
+        }
+        for root in [&cargo, &nested, &external] {
+            std::fs::write(root.join("Cargo.toml"), "[workspace]\n").unwrap();
+        }
+        std::fs::write(dart.join("pubspec.yaml"), "name: outline_fixture\n").unwrap();
+        assert_eq!(outline_workspace(&cargo, &nested.join("lib.rs")), cargo);
+        assert_eq!(
+            outline_workspace(&cargo, &external.join("lib.rs")),
+            external
+        );
+        assert_eq!(outline_workspace(&cargo, &dart.join("main.dart")), dart);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     /// The cached server outlived `rtok mcp`: it sat in a `static`, and statics never drop.

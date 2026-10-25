@@ -114,7 +114,7 @@ fn qwen_cli(cfg: &Config, args: &[&str]) -> std::result::Result<(), String> {
     let dir = cfg.setup.qwen.dir.as_path();
     let default = super::home_dir().join(".qwen");
     let env = (dir != default).then_some(("QWEN_HOME", dir));
-    super::run_cli("qwen", args, env)
+    super::run_cli(cfg, "qwen", args, env)
 }
 
 /// Offer, install, or uninstall `plugins/qwen` through `qwen extensions`. Behind

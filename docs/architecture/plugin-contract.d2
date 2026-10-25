@@ -1,0 +1,60 @@
+# The plugin contract (rtok-plugin-sdk) and how the host runtime satisfies it.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+select: Selection {
+  class: core
+  features: "Cargo feature per id\ndefault = all\nplugins::all()" {class: core}
+  config: "[plugins.<id>] enabled\nelse Manifest::default_on" {class: core}
+  registry: "Registry::new / from_plugins\nenabled() in dispatch order" {class: core}
+  catalogue: "config::CATALOGUE\n(id, default_on)\ntest keeps it in step" {shape: page; class: core}
+  features -> registry
+  config -> registry
+  catalogue -- registry: same list
+}
+
+sdk: rtok-plugin-sdk {
+  class: plugin
+  trait: "trait Plugin\nmanifest() · dashboard_page()\npre_tool → Deny | Rewrite\npost_tool → context only\nsession_start · prompt_submit\nsubagent_start → Injection\npre_compact · mcp_tools\nproxy_filter → Measurement" {class: plugin}
+  manifest: "Manifest\nid · surfaces · default_on" {class: plugin}
+  events: "event views\nPreToolUse · PostToolUse\nSessionStart · PromptSubmit\nPreCompact · SubagentStart\n(borrowed, no copy)" {class: plugin}
+  ctx: "Ctx<'a>\nagent_id · plugin_config\n→ &dyn Capabilities" {class: plugin}
+  caps: "Capabilities =\nHost + Archive + Notes\n+ ReadCache + Ledger + Symbols" {class: plugin}
+  measurement: "Measurement\nplugin · kind\nbefore/after bytes + est\nref_id (expand) · call_id" {class: plugin}
+  testing: "testing::MemoryHost\nfor plugin unit tests" {class: plugin}
+  trait -> manifest
+  trait -> events: receives
+  trait -> ctx: receives
+  ctx -> caps
+  caps -> measurement: Host::record
+  testing -> caps: implements
+}
+
+runtime: "src/plugin.rs Runtime\nimpl Host, Archive, Notes,\nReadCache, Ledger, Symbols" {class: core}
+
+surfaces: "surfaces\nhooks · mcp · proxy · cli" {class: surface}
+
+store: "rtok-store\nmeasurements · archive\nnotes · read_cache · symbols" {
+  shape: cylinder
+  class: data
+}
+
+plugins: "in-tree plugins\nsrc/plugins/<id>" {class: plugin}
+outside: "out-of-tree\nRegistry::from_plugins\nor a .wasm guest" {class: host}
+
+surfaces -> select.registry: builds per call
+select.registry -> plugins
+select.registry -> outside
+plugins -> sdk.trait: implement
+outside -> sdk.trait: implement
+surfaces -> sdk.ctx: "Ctx::new(&runtime)"
+runtime -> sdk.caps: implements
+runtime -> store

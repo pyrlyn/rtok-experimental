@@ -16,7 +16,7 @@ use rtok_plugin_sdk::{
     Class, Ctx, DashboardPage, Manifest, Measurement, Plugin, Surface, ToolResultRef, WireRequest,
 };
 
-pub struct JsonTree;
+pub struct JsonTreePlugin;
 
 /// How a json_tree pointer starts. `archive` and `toon` share `archive_decisions` and
 /// use it to leave this plugin's blocks alone.
@@ -33,7 +33,7 @@ pub struct Folded {
     pub templates: usize,
 }
 
-impl Plugin for JsonTree {
+impl Plugin for JsonTreePlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "json_tree",
@@ -1004,7 +1004,7 @@ mod tests {
     }
 
     fn filter(body: &mut Value, cx: &Ctx) -> Vec<Measurement> {
-        JsonTree.proxy_filter(&mut WireRequest::new(&ANTHROPIC, body), cx)
+        JsonTreePlugin.proxy_filter(&mut WireRequest::new(&ANTHROPIC, body), cx)
     }
 
     #[test]
@@ -1109,7 +1109,7 @@ mod tests {
         let original = body.clone();
         assert!(filter(&mut body, &Ctx::new(&cx)).is_empty());
         assert_eq!(body, original);
-        let ms = crate::plugins::toon::Toon
+        let ms = crate::plugins::toon::ToonPlugin
             .proxy_filter(&mut WireRequest::new(&ANTHROPIC, &mut body), &Ctx::new(&cx));
         assert!(!ms.is_empty(), "toon still encodes the table");
         let text = body["messages"][0]["content"][0]["content"]

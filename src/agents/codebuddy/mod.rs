@@ -188,7 +188,7 @@ fn plugin(cfg: &Config, kind: Kind, remove: bool) -> Result<String> {
         });
     }
     let failed = |e: String| format!("offer {PLUGIN_SRC} → {shown} (codebuddy failed: {e})");
-    if super::find_on_path("codebuddy").is_none() {
+    if super::locate::cli(cfg, "codebuddy").is_none() {
         return Ok(failed(format!(
             "not on PATH; hooks and MCP go into {} instead",
             d.display()
@@ -196,7 +196,7 @@ fn plugin(cfg: &Config, kind: Kind, remove: bool) -> Result<String> {
     }
     let results: Vec<_> = steps
         .iter()
-        .map(|s| super::run_cli("codebuddy", s, env))
+        .map(|s| super::run_cli(cfg, "codebuddy", s, env))
         .collect();
     // An earlier step may only say "already added"; the last one decides, but the first error
     // is the one worth showing.

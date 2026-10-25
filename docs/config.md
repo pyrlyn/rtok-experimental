@@ -19,16 +19,31 @@ Lowest to highest. Later layers override earlier ones key by key.
    embedded in the binary).
 2. **User file** — `~/.rtok/config.toml` (directory overridable with `RTOK_HOME`; file
    overridable with `RTOK_CONFIG=<path>` or `--config <path>`).
-3. **Project file** — `<git root>/.rtok.toml`, if present. Same schema; typically only
-   `[plugins.read] allow_paths`, `[plugins.cmd] rules`, `[plugins.inject] modes`.
+3. **Project file** — `<git root>/.rtok.toml`, if present. Uses the config schema with
+   the trust restrictions below; for example, `[plugins.read] default_mode` and
+   `[plugins.inject] budget_tokens` remain project settings.
 4. **`.env` files** — `RTOK_*` lines (same names as the environment layer) from the nearest
-   `.env` at or above the working directory, then `~/.rtok/.env`; the project file wins.
+   `.env` at or above the working directory, then `~/.rtok/.env`; allowed project keys win.
+   The project file has the same trust restrictions as project TOML. The home file is trusted;
+   a rejected project key does not hide a value in the home file.
    Parsed only, never exported: commands run through `rtok run` do not inherit them, and other
    keys in a project's `.env` are ignored. A malformed file is reported on stderr and skipped.
 5. **Environment** — `RTOK_<SECTION>_<KEY>` in upper snake case, e.g. `RTOK_PROXY_PORT=8791`,
    `RTOK_PLUGINS_CMD_REWRITE=false`, `RTOK_STATS_SINCE=7d`. Lists are comma-separated.
    Existing short names stay as aliases: `RTOK_UPSTREAM`, `RTOK_OPENAI_UPSTREAM`.
 6. **Command-line flags** — `rtok proxy --port 8791`.
+
+Project files cannot configure `core`, `otel`, `proxy`, `mcp`, `web` (or legacy `dashboard`),
+`log`, `demon`, `agents`, `setup`, `doctor`, `stats`, `report`, `bench`, `filter`,
+`worktree`, or the `memory`, `compress`, `graph`, `docs`, `guard` and `wasm` plugin sections.
+They also cannot set `plugins.cmd.shell`, `plugins.cmd.rules`, `plugins.cmd.rules_dir`,
+`plugins.read.allow_paths`, `plugins.inject.modes_dir` or `tasks.gitlab.url`.
+These settings control network destinations, credentials, execution or host filesystem
+access. Legacy aliases receive the same restrictions. Each rejected setting produces a
+warning naming its file and key, without its value; `config show --sources` marks the retained
+safe value as `ignored (project)` when no higher layer overrides it. Set these options in
+the user config, `~/.rtok/.env`, process environment or an explicitly chosen `--config` file.
+Selecting `--config` is an explicit trust decision, including when its file is in a checkout.
 
 Rules:
 
@@ -102,6 +117,7 @@ cjk   = 1.0
 [hook]                                # rtok hook <event>
 host      = "claude"                  # claude | cursor | copilot | devin | cline — payload field mapping (T10.1, T46.3, T87, T94)
 max_ms    = 10                        # soft budget; over it, the event is logged as slow
+slow_warn_s = 300                     # one slow warning per event per this many seconds, with the count and worst time; 0 = every slow call
 fail_open = true                      # any error → `{}` and exit 0; false only for debugging
 
 [agents]                              # the rtok agent registry (T282, D34); see agents-and-worktrees.md
@@ -143,7 +159,11 @@ extra                   = []          # paths you vouch for as junk (D36), e.g. 
 tools                   = []          # [] = all tools from enabled plugins; else an allow-list; `expand` always stays listed (D4)
 max_description_tokens  = 60          # enforced by a test (T4.1)
 max_result_chars        = 20000       # above this, head/tail + archive id
+cache_enabled           = true        # MCP tool-result memo (docs/mcp-cache.md); RTOK_MCP_CACHE=0 also turns it off
+cache_ttl_secs          = 300         # how long a memoized result is served; 0 = off
+cache_max_entries       = 256         # LRU bound, in memory and in the store; 0 = off
 http                    = "127.0.0.1:8791"  # `rtok mcp --http` with no address; keep it on loopback
+# HTTP expand can retrieve only payloads archived by this running server; restarting resets access.
 http_tools              = ["read", "search", "tree"]  # HTTP allow-list, used instead of `tools`; `expand` always stays listed; tools that act as the calling agent (`whoami`, `agent_send`, `worktree_add`, …) never are
 token                   = ""          # bearer token for --http; prefer RTOK_MCP_TOKEN; empty = --http refuses to start (T401)
 public_url              = ""          # tunnel URL (https://…); its host and origin are the only foreign ones accepted
@@ -164,9 +184,9 @@ context_management = false            # Anthropic /v1/messages only: add clear_t
 dry_run         = false               # --dry-run: print effective [proxy] settings and exit, don't serve
 # TLS: Mozilla webpki roots (`use_preconfigured_tls`). Corporate CAs: SSL_CERT_FILE (PEM, curl). See "TLS and corporate CAs".
 
-[proxy.tools_rewrite]                 # T59.5; off: request bytes stay identical
-enabled = false
-compact_schema = false                # T686: also first-sentence property descriptions + redundant default/examples inside input_schema; originals archived (Measurement.ref_id)
+[proxy.tools_rewrite]                 # T59.5; on by default (see token-savings.md); off: request bytes stay identical
+enabled = true
+compact_schema = true                 # T686: also first-sentence property descriptions + redundant default/examples inside input_schema; originals archived (Measurement.ref_id)
 max_description_tokens = 60           # 0 = no truncate; sentence boundary; estimator Class::Prose
 allow = []                            # empty = keep all names not in deny
 deny = []                             # drop these names from tools[]; later calls still forward
@@ -394,6 +414,8 @@ hook_timeout_s = 5                    # timeout written into each hook entry
 modes        = []                     # e.g. ["terse", "yagni"]   (--mode)
 mcp          = true                   # also register the MCP server   (--mcp)
 proxy        = false                  # also set the base URL          (--proxy)
+[setup.paths]                         # host = "path": where a host app is when rtok cannot find it (T966; `agents install|update|info` asks and offers to save)
+# e.g. claude = "~/.local/bin/claude"   # a CLI binary, or a desktop app (`/Applications/Claude.app`, `claude.exe`)
 [setup.claude]
 settings_path = "~/.claude/settings.json"
 [setup.cursor]
@@ -480,6 +502,7 @@ enabled = true                        # false: every `rtok worktree` command (li
 root = ".rtok/worktrees"              # where `rtok worktree add` creates worktrees, as <root>/<repo>-<task>; relative: under the main checkout; `~` expands
 seed = true                           # fill a new worktree's seed_dirs from the sibling checkout that built them last: copy-on-write clones (APFS, btrfs, XFS, bcachefs, ReFS, Dev Drive), a plain copy elsewhere; `rtok worktree add --no-seed` skips it once
 seed_dirs = ["target", "node_modules"] # build caches to seed, relative to the checkout; a bare name also matches one level down (web/node_modules)
+min_free_mib = 2048                    # `rtok worktree add` refuses when the target volume has less free space than this, in MiB (a full disk leaves a half-made worktree); 0 turns the check off
 
 [tasks]                               # task adapters (T441); usually set per project in .rtok.toml
 adapter = "disk"                      # disk | github | gitlab
@@ -550,6 +573,7 @@ keep_turns = 4                        # never touch the last N turns
 min_tokens = 1500                     # only rewrite tool results above this (estimated)
 head_lines = 8
 tail_lines = 4
+signal_lines = 8                      # elided error/fail/panic lines inlined as N:line (saves an expand); 0 = off
 tiers      = false                    # opt-in tiered loading (default off); OpenViking L0/L1/L2 behaviour spec is AGPL-3.0 — rtok does not vendor, link, or subprocess it (D6); gates native impl in T33.2
 live_blobs = false                    # shrink nested JSON dumps + data: blobs in user blocks, never results/system/tools/last-2-turns (T51.1, opt-in)
 skills     = false                    # archive skill bodies outside keep_turns (T61.2, opt-in)

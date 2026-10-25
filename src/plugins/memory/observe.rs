@@ -8,7 +8,7 @@
 //! a short title, a type inferred from the tool name, and a narrative capped at 400
 //! characters. No model call. The full tool output stays in the archive.
 
-use rtok_plugin_sdk::{Class, Ctx, Measurement, NewObservation, ObsHit, PostToolUse};
+use rtok_plugin_sdk::{Ctx, NewObservation, ObsHit, PostToolUse};
 use serde_json::Value;
 
 use super::scrub::strip_private;
@@ -258,7 +258,6 @@ pub fn capture(cx: &Ctx, ev: &PostToolUse) -> Option<i32> {
     if made.narrative.is_empty() {
         return None;
     }
-    let before = stringify(ev.tool_input).len() + stringify(ev.tool_response).len();
     let project = super::resolved_project(cx);
     let files = super::files::existing_rels(cx, &made.files);
     let dedup = crate::store::hex_sha256(
@@ -276,16 +275,9 @@ pub fn capture(cx: &Ctx, ev: &PostToolUse) -> Option<i32> {
         })
         .ok()
         .flatten()?;
-    let _ = cx.record(&Measurement {
-        plugin: "memory",
-        kind: "observe",
-        before_bytes: before as u64,
-        after_bytes: made.narrative.len() as u64,
-        est_before: cx.estimate(&stringify(ev.tool_response), Class::Prose),
-        est_after: cx.estimate(&made.narrative, Class::Prose),
-        ref_id: Some(id.to_string()),
-        call_id: None,
-    });
+    // No Measurement row on purpose (T927): the agent still receives the whole tool output, so
+    // "output minus narrative" is not a saving, and the stored narrative costs it nothing until
+    // `obs_get` or recall reads it, which meter themselves.
     Some(id)
 }
 

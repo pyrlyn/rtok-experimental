@@ -1,7 +1,9 @@
 # Plugins
 
 Every token-reduction method in rtok is a plugin behind one trait. Plugins are in-tree
-modules behind Cargo features — no daemon, no subprocesses, no WASM in v0.1.
+modules behind Cargo features — no daemon, no subprocesses. Out-of-tree `.wasm` plugins load
+only in a build with the `wasm-host` feature (not in the default set) and with
+`[plugins.wasm] enabled = true`.
 
 The **replaces** column is a specification target, never a dependency: rtok reimplements the
 behaviour from scratch and never runs, links, or reads the tool named.
@@ -12,13 +14,13 @@ behaviour from scratch and never runs, links, or reads the tool named.
 | [`cmd`](../src/plugins/cmd/README.md) | rtk hook, ctx_shell, bash_compress | PreToolUse(Bash) → `rtok run` |
 | [`read`](../src/plugins/read/README.md) | lean-ctx read/search/tree, read_cache | MCP `read` |
 | [`json_tree`](../src/plugins/json_tree/README.md) | — | proxy, MCP |
-| [`archive`](../src/plugins/archive/README.md) | CCR | `expand`, store |
+| [`archive`](../src/plugins/archive/README.md) | CCR | proxy, MCP `expand`, `rtok archive rewrite` |
 | [`proxy`](../src/plugins/proxy/README.md) | caveman-proxy | `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` |
 | [`inject`](../src/plugins/inject/README.md) | caveman/ponytail, lean-ctx | SessionStart, UserPromptSubmit |
-| [`guard`](../src/plugins/guard/README.md) | — | PreToolUse |
+| [`guard`](../src/plugins/guard/README.md) | — | PreToolUse, `rtok guard check` |
 | [`memory`](../src/plugins/memory/README.md) | claude-mem | MCP, PreCompact |
 | [`graph`](../src/plugins/graph/README.md) | codebase-memory-mcp | MCP |
-| [`toon`](../src/plugins/toon/README.md) | — | MCP |
+| [`toon`](../src/plugins/toon/README.md) | — | proxy, MCP `expand` |
 
 ## Turning plugins off
 

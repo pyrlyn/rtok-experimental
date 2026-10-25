@@ -94,8 +94,8 @@ fn a_cursor_mcp_call_records_one_row_across_both_events() {
     );
     assert_eq!(
         rows(&home),
-        2,
-        "the long result is shortened once, and one observation is stored"
+        1,
+        "the long result is shortened once; the stored observation writes no row (T927)"
     );
 }
 

@@ -26,9 +26,9 @@ pub mod python;
 pub mod rules;
 pub mod run;
 
-pub struct Cmd;
+pub struct CmdPlugin;
 
-impl Plugin for Cmd {
+impl Plugin for CmdPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "cmd",

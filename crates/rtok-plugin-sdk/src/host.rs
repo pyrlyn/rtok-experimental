@@ -458,6 +458,21 @@ pub trait ReadCache {
     fn read_cache_keys(&self) -> Result<Vec<String>> {
         Ok(Vec::new())
     }
+
+    /// A compaction dropped what the context window `context` (a sub-agent's `agent_id`, or
+    /// `None` for the main one) had been shown (T929): forget the session's re-read cache and
+    /// stop answering with pointers to bodies that window held. The bodies stay retrievable.
+    /// Default: nothing to forget.
+    fn forget_seen(&self, _context: Option<&str>) -> Result<()> {
+        Ok(())
+    }
+
+    /// True when more than one context window may share this session, i.e. a sub-agent has
+    /// started (T929). A surface that cannot tell which window is asking (MCP) then answers
+    /// with the content, never a pointer to what another window was shown. Default: no.
+    fn shared_session(&self) -> bool {
+        false
+    }
 }
 
 /// A read-only look back at this session's own traffic, for plugins that need a window
@@ -650,6 +665,13 @@ pub trait Symbols {
 
     /// References to `name` grouped by location: `(path, kind, count, line)`.
     fn symbol_ref_groups(&self, root: &str, name: &str) -> Result<Vec<(String, String, i64, i32)>>;
+
+    /// Reference kinds of `name` per calling definition: `(path, scope, kind)`. The default
+    /// is empty, which callers read as "kind unknown".
+    fn symbol_ref_kinds(&self, root: &str, name: &str) -> Result<Vec<(String, String, String)>> {
+        let _ = (root, name);
+        Ok(Vec::new())
+    }
 
     /// Callees per definition of `name`: `(def_path, def_line, callee, first_line)` (T68.2).
     fn symbol_callees(&self, root: &str, name: &str) -> Result<Vec<(String, i32, String, i32)>> {

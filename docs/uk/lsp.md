@@ -20,12 +20,24 @@ lang: uk
 Сервер обирається за коренем робочого простору — rtok ніколи не лінкує й не викликає через оболонку
 нічого іншого (D6); він запускає один із цих серверів із `PATH`:
 
-| Маркер кореня | Команда сервера |
-|-------------|----------------|
-| `Cargo.toml` | `rust-analyzer` |
-| `compile_commands.json` | `clangd` |
-| `tsconfig.json` | `typescript-language-server --stdio` |
-| `pubspec.yaml` | `dart language-server` |
+| Маркер кореня | Команда сервера | Встановлення |
+|-------------|----------------|--------------|
+| `Cargo.toml` | `rust-analyzer` | `rustup component add rust-analyzer` |
+| `compile_commands.json` | `clangd` | `brew install llvm` (macOS) або `apt install clangd` (Debian/Ubuntu) |
+| `tsconfig.json` | `typescript-language-server --stdio` | `npm install -g typescript-language-server typescript` |
+| `pubspec.yaml` | `dart language-server` | Dart SDK: https://dart.dev/get-dart |
+
+Інші мови (JavaScript, Go, Python, Java, Kotlin, Ruby, PHP, ...) лишаються на індексі tags.
+
+Які з цих серверів потрібні checkout, покаже `rtok doctor --project [PATH]` (за замовчуванням —
+робочий каталог). Команда рахує вихідні файли за мовами так само, як їх обходить індекс (з
+урахуванням `.gitignore` і `[plugins.graph] exclude`), повідомляє, який сервер встановлено, друкує
+команду встановлення для відсутнього й позначає відсутній маркер кореня (для C — як згенерувати
+`compile_commands.json`). У тому ж розділі — граф-індекс і бекенд, файли `AGENTS.md` / `CLAUDE.md`
+цього checkout і вимкнені там плагіни. Цифри економії беруться лише з ваших рядків `Measurement`
+за останні 30 днів; без рядків виводиться `no measurements yet`. З `--json` розділ лежить у полі
+`project`, а сторінка doctor у дашборді показує його панеллю `project` для checkout, у якому
+запущено rtok.
 
 Покрокові інструкції нижче охоплюють Rust і Dart.
 

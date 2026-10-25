@@ -22,16 +22,30 @@ lang: uk
    вбудованого в бінарник).
 2. **Файл користувача** — `~/.rtok/config.toml` (каталог можна перевизначити через `RTOK_HOME`; файл —
    через `RTOK_CONFIG=<path>` або `--config <path>`).
-3. **Файл проєкту** — `<git root>/.rtok.toml`, якщо він є. Та сама схема; зазвичай лише
-   `[plugins.read] allow_paths`, `[plugins.cmd] rules`, `[plugins.inject] modes`.
+3. **Файл проєкту** — `<git root>/.rtok.toml`, якщо він є. Схема конфігурації з обмеженнями
+   довіри нижче; наприклад, дозволені `[plugins.read] default_mode` і `[plugins.inject] budget_tokens`.
 4. **Файли `.env`** — рядки `RTOK_*` (ті самі назви, що й на рівні змінних середовища) з найближчого
-   `.env` у робочому каталозі або вище, потім із `~/.rtok/.env`; файл проєкту перемагає.
+   `.env` у робочому каталозі або вище, потім із `~/.rtok/.env`; дозволені ключі проєкту перемагають.
+   Обмеження довіри такі самі, як для TOML проєкту. Домашній файл є довіреним;
+   відхилений ключ проєкту не приховує значення з домашнього файлу.
    Вони лише розбираються, але ніколи не експортуються: команди, запущені через `rtok run`, їх не успадковують, а інші
    ключі в `.env` проєкту ігноруються. Про некоректний файл повідомляється в stderr, і він пропускається.
 5. **Змінні середовища** — `RTOK_<SECTION>_<KEY>` у верхньому snake case, наприклад `RTOK_PROXY_PORT=8791`,
    `RTOK_PLUGINS_CMD_REWRITE=false`, `RTOK_STATS_SINCE=7d`. Списки розділяються комами.
    Наявні короткі назви лишаються псевдонімами: `RTOK_UPSTREAM`, `RTOK_OPENAI_UPSTREAM`.
 6. **Прапорці командного рядка** — `rtok proxy --port 8791`.
+
+Файли проєкту не можуть налаштовувати розділи `core`, `otel`, `proxy`, `mcp`, `web`
+(і застарілий `dashboard`), `log`, `demon`, `agents`, `setup`, `doctor`, `stats`, `report`,
+`bench`, `filter`, `worktree`, а також плагіни `memory`, `compress`, `graph`, `docs`, `guard`,
+`wasm`. Заборонені й ключі `plugins.cmd.shell`, `plugins.cmd.rules`, `plugins.cmd.rules_dir`,
+`plugins.read.allow_paths`, `plugins.inject.modes_dir`, `tasks.gitlab.url`.
+Вони керують мережевими адресами, обліковими даними, виконанням команд і доступом до файлів.
+Обмеження діють і для застарілих псевдонімів. Попередження містить файл і ключ без значення;
+`config show --sources` позначає збережене безпечне значення як `ignored (project)`,
+якщо його не перевизначив вищий рівень. Задавайте ці параметри в конфігурації користувача,
+`~/.rtok/.env`, середовищі процесу або явно обраному файлі `--config`.
+Вибір `--config` означає явну довіру файлу, зокрема всередині проєкту.
 
 Правила:
 
@@ -103,6 +117,7 @@ cjk   = 1.0
 [hook]                                # rtok hook <event>
 host      = "claude"                  # claude | cursor | copilot | devin | cline — зіставлення полів даних (T10.1, T46.3, T87, T94)
 max_ms    = 10                        # м'який бюджет; понад нього подія логується як повільна
+slow_warn_s = 300                     # одне попередження про повільну подію на кожні стільки секунд, з кількістю й найгіршим часом; 0 = кожен повільний виклик
 fail_open = true                      # будь-яка помилка → `{}` і код виходу 0; false лише для налагодження
 
 [agents]                              # реєстр агентів rtok (T282, D34); див. agents-and-worktrees.md
@@ -145,6 +160,7 @@ tools                   = []          # [] = усі інструменти вв�
 max_description_tokens  = 60          # перевіряється тестом (T4.1)
 max_result_chars        = 20000       # понад це — head/tail + id архіву
 http                    = "127.0.0.1:8791"  # `rtok mcp --http` без адреси; тримайте на loopback
+# Через HTTP expand доступні лише дані, архівовані цим запущеним сервером; перезапуск скидає доступ.
 http_tools              = ["read", "search", "tree"]  # список дозволених для HTTP, замість `tools`; `expand` завжди лишається в переліку; інструменти, що діють від імені агента (`whoami`, `agent_send`, `worktree_add`, …), — ніколи
 token                   = ""          # bearer-токен для --http; краще RTOK_MCP_TOKEN; порожній — --http не запускається (T401)
 public_url              = ""          # URL тунелю (https://…); лише його хост і origin приймаються ззовні
@@ -395,6 +411,8 @@ hook_timeout_s = 5                    # тайм-аут, що записуєть
 modes        = []                     # наприклад ["terse", "yagni"]   (--mode)
 mcp          = true                   # також зареєструвати MCP-сервер   (--mcp)
 proxy        = false                  # також задати base URL           (--proxy)
+[setup.paths]                         # хост = "шлях": де застосунок хоста, коли rtok не знаходить його сам (T966; `agents install|update|info` питає і пропонує зберегти)
+# напр. claude = "~/.local/bin/claude" # CLI-бінарник або десктопний застосунок (`/Applications/Claude.app`, `claude.exe`)
 [setup.claude]
 settings_path = "~/.claude/settings.json"
 [setup.cursor]
@@ -481,6 +499,7 @@ enabled = true                        # false: кожна команда `rtok w
 root = ".rtok/worktrees"              # де `rtok worktree add` створює worktree, як <root>/<repo>-<task>; відносний: у основному checkout; `~` розкривається
 seed = true                           # заповнити seed_dirs нового worktree із сусіднього checkout, що збирав їх останнім: copy-on-write клони (APFS, btrfs, XFS, bcachefs, ReFS, Dev Drive), інакше звичайна копія; `rtok worktree add --no-seed` пропускає це один раз
 seed_dirs = ["target", "node_modules"] # кеші збірки для засіву, відносно checkout; голе ім'я збігається й на рівень нижче (web/node_modules)
+min_free_mib = 2048                    # `rtok worktree add` refuses when the target volume has less free space than this, in MiB (a full disk leaves a half-made worktree); 0 turns the check off
 
 [tasks]                               # адаптери задач (T441); зазвичай задаються для проєкту в .rtok.toml
 adapter = "disk"                      # disk | github | gitlab

@@ -24,11 +24,11 @@ use crate::store::{LinkKind, Origin, Project, Store};
 /// readable to count.
 #[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct ProjectIndex {
-    pub(super) rows: i64,
-    pub(super) files: i64,
+    pub(crate) rows: i64,
+    pub(crate) files: i64,
     pending: usize,
     watch: String,
-    pub(super) indexed_at: Option<i64>,
+    pub(crate) indexed_at: Option<i64>,
 }
 
 /// One outgoing link of a project.
@@ -55,11 +55,11 @@ pub struct ProjectRow {
     pub error: Option<String>,
     created_at: i64,
     last_used_at: i64,
-    pub(super) index: Option<ProjectIndex>,
+    pub(crate) index: Option<ProjectIndex>,
     /// Which graph mode works here, as the last process to answer for it recorded (T329.11);
     /// absent until a request under `lsp` or `auto` has checked.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) backend: Option<Capability>,
+    pub(crate) backend: Option<Capability>,
     /// What the health check raised for this project (T329.17); absent while nothing is wrong.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     alerts: Vec<health::Alert>,
@@ -117,7 +117,7 @@ fn link_rows(store: &Store, from: i32) -> Result<Vec<ProjectLink>> {
     Ok(out)
 }
 
-pub(super) fn row(rt: &Runtime, p: Project) -> Result<ProjectRow> {
+pub(crate) fn row(rt: &Runtime, p: Project) -> Result<ProjectRow> {
     let cx = &Ctx::new(rt);
     let missing = p.missing();
     let status = if missing {

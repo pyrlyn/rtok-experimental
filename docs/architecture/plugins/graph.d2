@@ -1,0 +1,103 @@
+# graph: a tree-sitter symbol index (built incrementally, never on the hook path) answers the MCP tools symbol, callers, impact, outline, explore, graph_diff and graph_export, and the rtok graph CLI.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent" {class: host}
+
+surfaces: Entry points {
+  class: surface
+  mcp: "rtok mcp\nsymbol · callers · impact\noutline · explore\ngraph_diff · graph_export" {class: surface}
+  cli: "rtok graph\nindex · status · dead · impact\nreview · affected · diff\nexport · projects" {class: surface}
+  start: "hook SessionStart\nrepo map (map_tokens > 0)" {class: surface}
+  edit: "hook PostToolUse\nEdit | Write" {class: surface}
+}
+
+invoke: "mcp.rs invoke\nauto_add_project · events::Call\nscope::resolve (project + links)\nhealth::notice" {class: core}
+
+graph: graph plugin {
+  class: plugin
+
+  indexing: Indexing {
+    class: plugin
+    ensure: "index_for\nauto_index ? index::run : index::ensure" {shape: diamond; class: plugin}
+    walk: "walk::Matcher\n.gitignore · include / exclude\nextension map" {class: plugin}
+    gate: "stat gate\nmtime + size unchanged?\nthen sha256 unchanged?" {shape: diamond; class: plugin}
+    parse: "tree-sitter tags\nread::outline grammars\nscoped() = call edge" {class: plugin}
+    write: "replace_symbol_files\ndelete_symbols_missing\nrebuild_symbol_idf" {class: plugin}
+    rank: "rank::refresh\nfile PageRank graph\n+ cochange pairs" {class: plugin}
+    watch: "watch::run_scope\nthread in rtok mcp\n[plugins.graph] watch" {class: plugin}
+    mark: "mark_symbols_stale\ndrops that file's rows,\nnotes symbol_stale\n(no parsing in a hook)" {class: plugin}
+    ensure -> walk
+    walk -> gate
+    gate -> parse: changed
+    parse -> write
+    write -> rank
+    watch -> parse: "index::run_changed"
+  }
+
+  query: Queries {
+    class: plugin
+    scope: "scope::symbols / callers /\nimpact / explore / outline\none loop per project" {class: plugin}
+    mode: "backend?\ntags | lsp | auto | text" {shape: diamond; class: plugin}
+    tags: "tags backends\nsymbol_tags · callers_tags\nimpact_tags + blast · explore_tags" {class: plugin}
+    lsp: "lsp::Session\ncapability::ask\nfalls back to tags" {class: plugin}
+    plain: "text::applies\nin-process regex search" {class: plugin}
+    cap: "cap_kind\nmax_tokens: head +\nN more, expand <id>" {class: plugin}
+    scope -> mode
+    mode -> tags: tags
+    mode -> lsp: "lsp / auto"
+    mode -> plain: "no grammar or server"
+    tags -> cap
+    lsp -> cap
+    plain -> cap
+  }
+
+  extra: "diff::call · export::call + draw\nreview · affected · drill (web page)" {class: plugin}
+  map: "repo_map\nrank::map ranked files\npriority 1 Injection" {class: plugin}
+}
+
+data: Stores {
+  class: data
+  symbols: "SQLite symbols\ndefs + refs + scope\nsymbol_stale · extractor" {shape: cylinder; class: data}
+  docs: "file_rank · graph_events\nkv: cochange pairs, indexed head,\nplugin state (capability, alerts)" {shape: cylinder; class: data}
+  repo: "git object database\nold side of graph_diff" {shape: stored_data; class: data}
+  arch: "archive_dir/<id>\nuncut answer" {shape: stored_data; class: data}
+}
+
+model: "Model sees\ncapped answer or\nexplore bundle,\nexpand <id> for the rest" {class: host}
+ops: "rtok web / tui graph page\nrtok stats (graph rows)" {class: ops}
+
+agent -> surfaces.mcp
+agent -> surfaces.start
+agent -> surfaces.edit
+surfaces.mcp -> invoke
+invoke -> graph.query.scope
+invoke -> graph.extra: graph_diff, graph_export
+surfaces.cli -> graph.indexing.ensure: index
+surfaces.cli -> graph.query.scope: status, dead, impact
+surfaces.cli -> graph.extra: review, diff, export
+surfaces.start -> graph.map
+surfaces.edit -> graph.indexing.mark
+
+graph.query.tags -> graph.indexing.ensure: fresh first
+graph.indexing.write -> data.symbols
+graph.indexing.rank -> data.docs
+graph.indexing.mark -> data.symbols: symbol_stale
+data.symbols -> graph.query.tags
+data.docs -> graph.map: file_rank
+data.symbols -> graph.extra
+data.repo -> graph.extra
+graph.query.cap -> data.arch: when cut
+graph.query.cap -> model
+graph.extra -> model
+graph.map -> model: via inject budget
+graph.query.cap -> ops: Measurement rows
+data.docs -> ops: graph_events

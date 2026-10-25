@@ -53,6 +53,11 @@ pub fn pre_tool(ev: &PreToolUse<'_>, cx: &Ctx) -> Option<PreToolDecision> {
     if len <= cfg.native_max_bytes {
         return None;
     }
+    // T930: a deny that names a tool which cannot serve the file only costs a turn, and the
+    // agent then falls back to `cat`/`sed`, which shorten the output again.
+    if rtok_cannot_serve(path, &cfg.allow_paths) {
+        return None;
+    }
     // T127/T383: a ranged native Read passes whatever the file size. The host's `Edit` wants
     // a native `Read` first (an MCP `read` does not count), and 70% of the denied Reads in
     // `research.md` §29 were already ranged, so denying them cost a turn for nothing. A zero
@@ -62,7 +67,9 @@ pub fn pre_tool(ev: &PreToolUse<'_>, cx: &Ctx) -> Option<PreToolDecision> {
         return None;
     }
     if recently_edited(cx, path) {
+        // T929: with a sub-agent in the session the id may name a body this window never saw.
         if cfg.delta
+            && !cx.shared_session()
             && let Some(id) = last_read_id(cx, path)
         {
             let t = tool(cx);
@@ -75,6 +82,31 @@ pub fn pre_tool(ev: &PreToolUse<'_>, cx: &Ctx) -> Option<PreToolDecision> {
     }
     let t = tool(cx);
     Some(deny(cx, format!("use {}{}; {REASON}", t.name, t.hint)))
+}
+
+/// Extensions the host's native Read renders (vision, PDF pages) and MCP `read` cannot:
+/// it returns text only.
+const NATIVE_MEDIA: &[&str] = &[
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "heic", "avif", "pdf",
+];
+
+/// True when MCP `read` would not serve `path`: a media file, or a path its root guard
+/// refuses (scratchpads, task outputs, `~/.cargo/registry`). The guard is
+/// [`super::resolve`] itself, so the two cannot drift. The hook never enables the extra
+/// worktree roots (that spawns git, and the hook has a 10 ms budget), so a sibling-worktree
+/// file is treated as outside: fail open towards the native Read.
+fn rtok_cannot_serve(path: &str, allow_paths: &[std::path::PathBuf]) -> bool {
+    let media = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| NATIVE_MEDIA.iter().any(|m| e.eq_ignore_ascii_case(m)));
+    if media {
+        return true;
+    }
+    let Ok(cwd) = super::roots::cwd() else {
+        return false;
+    };
+    super::resolve(&cwd, std::path::Path::new(path), allow_paths).is_err()
 }
 
 /// Read only on a deny, the rare branch: `config` serializes the whole configuration.
@@ -156,8 +188,12 @@ mod tests {
     use serde_json::json;
     use std::fs;
 
+    /// The test directory is outside the process cwd, so it is an `allow_paths` root:
+    /// otherwise MCP `read` would refuse its files and the gate would let them through (T930).
     fn cx(name: &str) -> crate::plugin::Runtime {
-        crate::testutil::runtime(name).0
+        let (mut c, dir) = crate::testutil::config(name);
+        c.plugins.read.allow_paths = vec![dir];
+        crate::plugin::Runtime::open(c, name).unwrap()
     }
 
     fn ev<'a>(input: &'a serde_json::Value) -> PreToolUse<'a> {
@@ -288,11 +324,43 @@ mod tests {
         }
     }
 
+    /// T930: a large file MCP `read` cannot serve is not denied: an image or PDF anywhere, and
+    /// a text file outside the roots (scratchpad log, task output). An in-root one still is.
+    #[test]
+    fn a_file_rtok_read_cannot_serve_passes_native() {
+        let tag = "native-passthrough";
+        let (c, dir) = crate::testutil::config(tag);
+        let cx = crate::plugin::Runtime::open(c, tag).unwrap();
+        let big = "x".repeat(100 * 1024);
+        let denied = |p: &std::path::Path| {
+            let input = json!({"file_path": p.to_str().unwrap()});
+            pre_tool(&ev(&input), &Ctx::new(&cx)).is_some()
+        };
+        let inside = std::env::current_dir()
+            .unwrap()
+            .join("target")
+            .join(format!("t930-{}.log", std::process::id()));
+        fs::create_dir_all(inside.parent().unwrap()).unwrap();
+        fs::write(&inside, &big).unwrap();
+        let inside_denied = denied(&inside);
+        fs::remove_file(&inside).unwrap();
+        assert!(inside_denied, "a large in-project file stays denied");
+        let outside = dir.join("scratch.log");
+        fs::write(&outside, &big).unwrap();
+        assert!(!denied(&outside), "outside the roots rtok read refuses it");
+        for name in ["shot.png", "SHOT.PNG", "doc.pdf"] {
+            let p = dir.join(name);
+            fs::write(&p, &big).unwrap();
+            assert!(!denied(&p), "{name}");
+        }
+    }
+
     /// The deny text of a 100 KB native Read on `host`, and what a post-edit re-read says.
     fn denies_on(host: &str) -> (String, String) {
         let tag = format!("deny-text-{host}");
         let (mut c, dir) = crate::testutil::config(&tag);
         c.hook.host = host.into();
+        c.plugins.read.allow_paths = vec![dir.clone()];
         let cx = crate::plugin::Runtime::open(c, &tag).unwrap();
         let p = dir.join("big.txt");
         fs::write(&p, "x".repeat(100 * 1024)).unwrap();

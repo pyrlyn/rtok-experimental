@@ -478,7 +478,7 @@ fn host_rows(
     let mut keys: Vec<Vec<PathBuf>> = Vec::new();
     for &id in HOSTS {
         let Some(a) = host(id) else { continue };
-        let installed = a.variants().iter().any(present);
+        let installed = a.variants().iter().any(|v| present(cfg, id, v));
         if !installed && !opts.all {
             continue;
         }
@@ -905,6 +905,7 @@ mod tests {
         std::fs::write(logs.join("rtok.log.1"), b"a").unwrap();
         std::fs::write(logs.join("rtok.log.2"), b"bb").unwrap();
         std::fs::write(logs.join("rtok.log.6"), b"stale").unwrap();
+        std::fs::write(logs.join("rtok.log.rotate.lock"), b"").unwrap();
         assert_eq!(stale_log_siblings(&cfg), vec![logs.join("rtok.log.6")]);
     }
 

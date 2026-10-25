@@ -1,9 +1,9 @@
 ---
-status: todo
+status: in progress
 priority: P2
 complexity: 2
-readiness: 0%
-agent:
+readiness: 90%
+agent: Claude Code / claude-sonnet-5-5
 ---
 
 # T933. Git guard still refuses `rtok run`-wrapped git (seen again 2026-10-16)
@@ -18,3 +18,8 @@ accepts them and a test pins it; if allowed, this card records the binary versio
 and closes.
 
 Check: guard tests with the exact 2026-10-16 command lines; `just check`.
+
+Execution plan:
+1. Recover the refused lines from the Claude transcripts of the weft session (`~/.claude/projects/-Users-listepo-GitHub-listepo-apps-weft/21a7f99d-.../subagents/*.jsonl`): the host refuses, rtok's store never sees the refusal. The `PreToolUse:Bash` hook attachment beside each refusal shows what the installed binary rewrote.
+2. Replay them through `cmd::hook::pre_tool` with a sub-agent id; if any is wrapped, widen `runs_git`.
+3. Pin the exact lines in a `src/plugins/cmd/hook.rs` test (sub-agent unwrapped, main session still wrapped).

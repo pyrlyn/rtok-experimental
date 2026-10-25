@@ -584,8 +584,10 @@ pub fn rules_issues(rules: &Path, rules_dir: &Path) -> Vec<String> {
 fn is_open(dotted: &str) -> bool {
     // `bench.configs` is a free-form name → path map; `stats.prices` is keyed by
     // provider model id, which no schema can enumerate — both skip value checks.
+    // `setup.paths` is keyed by host id (T966); the loader still checks each value is a path.
     dotted == "bench.configs"
         || dotted == "stats.prices"
+        || dotted == "setup.paths"
         || dotted == "plugins.graph.extensions"
         || dotted == "plugins.graph.backend_by_language"
         || dotted.starts_with("plugins.graph.backend_by_language.")

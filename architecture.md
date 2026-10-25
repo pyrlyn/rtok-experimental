@@ -8,6 +8,10 @@ exist.
 This document describes the shape; `plan.md` holds the decisions (D1–D14) and the tasks;
 `research.md` holds the evidence. `roadmap.md` is the per-plugin build plan. `ideas.md` holds propositions not yet in `plan.md`.
 
+Diagrams of every part, with a walkthrough each — the overview, the hook, MCP and proxy
+flows, the plugin contract, the store and one per plugin — are in
+[`docs/architecture/`](docs/architecture/README.md).
+
 ## 1. Principles the code enforces
 
 | Principle | Where it lives |

@@ -1,0 +1,78 @@
+# measure: transcripts and proxy usage rows flow into rtok stats, baselines, cache health and rtok bench.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+inputs: Inputs {
+  class: host
+  transcripts: "Claude Code transcripts\n~/.claude/projects/**/*.jsonl" {class: host}
+  codex: "Codex sessions\n~/.codex/sessions/**/*.jsonl" {class: host}
+  proxy: "rtok proxy\nrecord_usage per request" {class: surface}
+  plugins: "other plugins\nCtx::record(Measurement)" {class: core}
+}
+
+store: "SQLite (rtok-store)\nusage · measurements · tokens\ncall_io" {
+  shape: cylinder
+  class: data
+}
+
+cli: Commands {
+  class: surface
+  stats: "rtok stats\n--since --json --plugin" {class: surface}
+  bench: "rtok bench\n--tasks --suite --dry-run" {class: surface}
+}
+
+measure: measure plugin {
+  class: plugin
+  parse: "jsonl::parse_path\nskip + count malformed lines" {class: plugin}
+  collect: "stats::collect\nsizes · families · CTT" {class: plugin}
+  attach: "attach_api · attach_lanes\nattach_bash_cmd · attach_codex\nattach_costs (--price)" {class: plugin}
+  cache: "cache::report\nbust + cause (--cache)" {class: plugin}
+  mode: "which flag?" {shape: diamond; class: plugin}
+  baseline: "baseline::save / compare" {class: plugin}
+  harness: "bench::run\nsuite: tasks | graph | p28" {class: plugin}
+  parse -> collect
+  collect -> attach
+}
+
+model: "model::stats_report\nplugin_stats · cache_health" {class: core}
+baselines: "<home>/measurements/<name>.json" {
+  shape: stored_data
+  class: data
+}
+results: "bench/results/<config>.json" {
+  shape: stored_data
+  class: data
+}
+out: "table or JSON report\nCTT · sizes · cache · cost" {class: ops}
+agent: "claude -p\n(RTOK_BENCH_LIVE only)" {class: host}
+
+inputs.transcripts -> measure.parse: read on the fly
+inputs.codex -> measure.attach: codex::collect
+inputs.proxy -> store: usage rows
+inputs.plugins -> store: measurements rows
+
+cli.stats -> measure.mode
+measure.mode -> model: "default, --save-baseline, --compare"
+measure.mode -> measure.cache: "--cache"
+measure.mode -> store: "--plugin: list_measurements"
+model -> measure.collect
+store -> measure.attach: per-API usage
+store -> measure.cache: usage + call_io
+measure.attach -> out: report
+measure.attach -> measure.baseline: "--save-baseline / --compare"
+measure.baseline <-> baselines
+measure.baseline -> out: deltas
+measure.cache -> out
+
+cli.bench -> measure.harness
+measure.harness -> agent: one per task x config
+measure.harness -> results
+measure.harness -> out: table

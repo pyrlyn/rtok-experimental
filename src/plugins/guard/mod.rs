@@ -24,9 +24,9 @@ mod skill;
 /// omission, never by truncation).
 const ARCHIVE_CAP_BYTES: usize = 256 * 1024;
 
-pub struct Guard;
+pub struct GuardPlugin;
 
-impl Plugin for Guard {
+impl Plugin for GuardPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "guard",
@@ -172,7 +172,7 @@ pub fn check(tool: &str, raw_input: &str, cx: &crate::plugin::Runtime) -> String
         tool_name: &tool,
         tool_input: &input,
     };
-    match Guard.pre_tool(&ev, &Ctx::new(cx)) {
+    match GuardPlugin.pre_tool(&ev, &Ctx::new(cx)) {
         Some(PreToolDecision::Deny { reason }) if !reason.is_empty() => {
             serde_json::json!({ "allow": false, "reason": reason }).to_string()
         }
@@ -756,7 +756,7 @@ mod tests {
                 tool_input: &input,
                 tool_response: &resp,
             };
-            assert!(Guard.post_tool(&ev, &Ctx::new(&self.cx)).is_none());
+            assert!(GuardPlugin.post_tool(&ev, &Ctx::new(&self.cx)).is_none());
         }
 
         fn denied(&self, command: &str) -> bool {
@@ -766,7 +766,7 @@ mod tests {
                 tool_input: &input,
             };
             matches!(
-                Guard.pre_tool(&ev, &Ctx::new(&self.cx)),
+                GuardPlugin.pre_tool(&ev, &Ctx::new(&self.cx)),
                 Some(PreToolDecision::Deny { .. })
             )
         }
@@ -843,7 +843,7 @@ mod tests {
     #[test]
     fn mutation_between_commands_allows_the_repeat() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let resp = json!({"stdout": "out"});
         let post = |name: &'static str, input: &Value| {
             let ev = PostToolUse {
@@ -883,7 +883,7 @@ mod tests {
     #[test]
     fn two_identical_reads_second_denies_naming_archive() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let path = json!({"file_path": native_abs("/Users/dev/proj/src/main.rs")});
         let other = json!({"file_path": native_abs("/Users/dev/proj/src/lib.rs")});
         let read = PreToolUse {
@@ -922,7 +922,7 @@ mod tests {
     #[test]
     fn deny_measurement_before_bytes_and_est_before_match_the_avoided_payload() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let path = json!({"file_path": native_abs("/Users/dev/proj/src/inventory.rs")});
         let read = PreToolUse {
             tool_name: "Read",
@@ -966,7 +966,7 @@ mod tests {
     #[test]
     fn post_tool_over_cap_skips_archive_and_the_repeat_is_allowed() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let path = json!({"file_path": native_abs("/Users/dev/proj/src/big.rs")});
         let read = PreToolUse {
             tool_name: "Read",
@@ -1002,7 +1002,7 @@ mod tests {
     #[test]
     fn edit_clears_guard_read_so_the_next_read_is_allowed() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let path = json!({"file_path": native_abs("/proj/src/main.rs")});
         let resp = json!({"content": "fn main() {}"});
         assert!(
@@ -1043,7 +1043,7 @@ mod tests {
             tool_input: input,
         };
         matches!(
-            Guard.pre_tool(&ev, &Ctx::new(cx)),
+            GuardPlugin.pre_tool(&ev, &Ctx::new(cx)),
             Some(PreToolDecision::Deny { .. })
         )
     }
@@ -1055,7 +1055,7 @@ mod tests {
             tool_input: input,
             tool_response: &resp,
         };
-        assert!(Guard.post_tool(&ev, &Ctx::new(cx)).is_none());
+        assert!(GuardPlugin.post_tool(&ev, &Ctx::new(cx)).is_none());
     }
 
     /// T556: a relative path names another file once the hook cwd differs.
@@ -1118,7 +1118,7 @@ mod tests {
     #[test]
     fn missing_archive_fails_open() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let path = json!({"file_path": native_abs("/proj/gone.rs")});
         let resp = json!({"content": "old"});
         assert!(
@@ -1150,7 +1150,7 @@ mod tests {
     #[test]
     fn a_sub_agent_window_scopes_the_read_cache() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let path = json!({"file_path": native_abs("/proj/p.rs")});
         let resp = json!({"content": "body"});
         let read = PreToolUse {
@@ -1195,7 +1195,7 @@ mod tests {
     /// and a disabled `read` plugin fails open (no MCP tools to point at).
     #[test]
     fn native_grep_glob_deny_is_opt_in_and_points_at_mcp() {
-        let g = Guard;
+        let g = GuardPlugin;
         let empty = json!({});
         let pre = |tool: &'static str| PreToolUse {
             tool_name: tool,
@@ -1241,7 +1241,7 @@ mod tests {
     #[test]
     fn copilot_path_key_dedups_like_file_path() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let resp = json!({"content": "fn main() {}"});
         for key in ["path", "file_path"] {
             let input = json!({ key: native_abs("/Users/dev/proj/src/main.rs") });
@@ -1276,7 +1276,7 @@ mod tests {
     #[test]
     fn bash_mutation_allows_the_next_read() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let path = json!({"file_path": native_abs("/proj/src/main.rs")});
         let resp = json!({"content": "fn main() {}"});
         let post = |name: &'static str, input: &Value| {
@@ -1314,7 +1314,7 @@ mod tests {
         let (mut c, _dir) = crate::testutil::config("guard-edit-noread");
         c.plugins.read.enabled = false;
         let cx = crate::plugin::Runtime::open(c, "guard-edit-noread").unwrap();
-        let g = Guard;
+        let g = GuardPlugin;
         let path = json!({"file_path": native_abs("/proj/src/main.rs")});
         let resp = json!({"content": "fn main() {}"});
         for name in ["Read", "Edit"] {
@@ -1348,7 +1348,7 @@ mod tests {
     fn deny_does_not_read_the_archive_body() {
         use std::os::unix::fs::PermissionsExt;
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let path = json!({"file_path": "/proj/src/hot.rs"});
         let resp = json!({"content": "fn main() {}"});
         assert!(
@@ -1552,7 +1552,7 @@ mod tests {
     #[test]
     fn find_delete_allows_the_next_ls() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let resp = json!({"stdout": "out"});
         let post = |cmd: &str| {
             let input = json!({"command": cmd});
@@ -1593,7 +1593,7 @@ mod tests {
     #[test]
     fn mutating_bash_clears_then_allows_repeat_ls() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let ctx = || Ctx::new(&cx);
         let ls = json!({"command": "ls"});
         let ls_resp = json!({"stdout": "a"});
@@ -1637,7 +1637,7 @@ mod tests {
     #[test]
     fn agent_wrap_matches_the_inner_command_and_keeps_other_keys() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let path = json!({"file_path": native_abs("/proj/src/main.rs")});
         let read = PreToolUse {
             tool_name: "Read",
@@ -1733,7 +1733,7 @@ mod tests {
     #[test]
     fn wrapped_bash_post_matches_unwrapped_pre() {
         let cx = setup();
-        let g = Guard;
+        let g = GuardPlugin;
         let quoted = format!(
             "rtok run -- {}",
             crate::plugins::cmd::run::sh_quote("git status")
@@ -1805,14 +1805,14 @@ mod tests {
                 ("Skill", json!({ "skill": format!("{w}:{w}") })),
             ];
             for (tool, input) in &inputs {
-                let _ = Guard.pre_tool(
+                let _ = GuardPlugin.pre_tool(
                     &PreToolUse {
                         tool_name: tool,
                         tool_input: input,
                     },
                     &Ctx::new(&cx),
                 );
-                let _ = Guard.post_tool(
+                let _ = GuardPlugin.post_tool(
                     &PostToolUse {
                         tool_name: tool,
                         tool_input: input,

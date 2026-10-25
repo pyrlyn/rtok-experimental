@@ -3,11 +3,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-# Launcher for Claude Code's WorktreeCreate / WorktreeRemove hooks (T159, D31). Unlike hook.sh it
-# cannot fail open by printing nothing: the host replaces its own create and remove with these
-# hooks, so a create that prints no path fails the session. Each failure path therefore ends in
-# what the host itself would have done, never in a lost worktree.
+# Launcher for the WorktreeCreate / WorktreeRemove hooks of Claude Code (T159, D31) and CodeBuddy
+# (T995.1), which share one contract; the second argument names the host (default claude). The
+# same bytes ship in plugins/claude and plugins/codebuddy, each plugin being installed on its own.
+# Unlike hook.sh it cannot fail open by printing nothing: the host replaces its own create and
+# remove with these hooks, so a create that prints no path fails the session. Each failure path
+# therefore ends in what the host itself would have done, never in a lost worktree.
 event=$1
+host=${2:-claude}
+case "$host" in claude | codebuddy) ;; *)
+  echo "rtok: unknown host $host" >&2
+  exit 1
+  ;;
+esac
 input=$(cat)
 # The fetch behind `rtok worktree add` must never wait for a prompt the host cannot show.
 GIT_TERMINAL_PROMPT=0
@@ -48,7 +56,7 @@ WorktreeCreate)
   if [ -n "$bin" ]; then
     # Anything but a path falls through: an rtok too old to know the event prints `{}`, and
     # `[worktree] enabled = false` prints nothing so the host gets its own worktree.
-    if out=$(printf '%s' "$input" | "$bin" hook WorktreeCreate); then
+    if out=$(printf '%s' "$input" | "$bin" hook WorktreeCreate --host "$host"); then
       case "$out" in
       /* | [A-Za-z]:*)
         printf '%s\n' "$out"
@@ -65,8 +73,9 @@ WorktreeCreate)
   name=$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '-')
   case "$name" in '' | .* | -*) name="w-$name" ;; esac
   root=$(git -C "$cwd" rev-parse --show-toplevel) || exit 1
-  # The host's own default: .claude/worktrees/<name> on worktree-<name>, from the current HEAD.
-  dir=$root/.claude/worktrees/$name
+  # The host's own default: .<host>/worktrees/<name> on worktree-<name>, from the current HEAD.
+  # CodeBuddy documents the folder; its branch name is not documented and taken from Claude Code.
+  dir=$root/.$host/worktrees/$name
   if [ ! -e "$dir/.git" ]; then
     git -C "$root" worktree add --quiet -b "worktree-$name" "$dir" >&2 ||
       git -C "$root" worktree add --quiet "$dir" "worktree-$name" >&2 || exit 1
@@ -75,7 +84,7 @@ WorktreeCreate)
   ;;
 WorktreeRemove)
   if [ -n "$bin" ]; then
-    printf '%s' "$input" | "$bin" hook WorktreeRemove
+    printf '%s' "$input" | "$bin" hook WorktreeRemove --host "$host"
     exit $?
   fi
   path=$(field worktree_path) || exit 1

@@ -1,0 +1,64 @@
+# One SQLite file (WAL), grouped by what writes each table; raw payloads live on disk.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+writers: Writers {
+  class: surface
+  surfaces: "hooks · mcp · proxy\nrecord_call · insert_call_io" {class: surface}
+  ctx: "plugins via Ctx\nrecord · archive · notes\nread_cache · symbols" {class: plugin}
+  coord: "coordination\nagents · worktrees · tasks\nmessages" {class: core}
+}
+
+store: "rtok-store: Store\nDiesel, WAL, embedded migrations\nschema_migrations" {
+  shape: package
+  class: core
+}
+
+db: rtok.db {
+  grid-columns: 4
+  class: data
+  identity: "identity\nhosts · providers · models\nsessions · hook_sessions" {shape: cylinder; class: data}
+  ledger: "ledger\ncalls · call_io · tokens\nmeasurements · usage · logs" {shape: cylinder; class: data}
+  archive: "archive\narchive · archive_decisions\narchive_summaries · read_cache" {shape: cylinder; class: data}
+  memory: "memory\nnotes (+ notes_fts) · note_files\nnote_versions · note_embeddings\nobservations · observation_files" {shape: cylinder; class: data}
+  graph: "graph\nsymbols · symbol_stale · file_rank\nextractor · graph_events\nprojects · project_links" {shape: cylinder; class: data}
+  docs: "docs\ndoc_crates · doc_items" {shape: cylinder; class: data}
+  coordtbl: "coordination\nagents · messages\nworktree_claims · worktree_pending\ntask_claims · task_counters" {shape: cylinder; class: data}
+  misc: "kv (plugin state)\notel_export watermarks" {shape: cylinder; class: data}
+}
+
+blobs: "archive_dir/<id>\nraw payloads, sha256" {
+  shape: stored_data
+  class: data
+}
+
+retention: "retention and vacuum\nspawn_retention (mcp, proxy)" {class: core}
+
+readers: Readers {
+  grid-columns: 2
+  class: ops
+  expand: "rtok expand <id>" {class: ops}
+  stats: "rtok stats · report\ndoctor" {class: ops}
+  model: "src/model (D23)\nrtok tui · rtok web" {class: ops}
+  otel: "OTLP export" {class: ops}
+}
+
+writers.surfaces -> store
+writers.ctx -> store
+writers.coord -> store
+store -> db
+store -> blobs: spill over call_io_inline_bytes
+retention -> db
+db.archive -> readers.expand
+blobs -> readers.expand
+db.ledger -> readers.stats
+db.ledger -> readers.model
+db.ledger -> readers.otel

@@ -1,10 +1,17 @@
 import type { ReactNode } from "react";
-import type { AgentModules, ModuleState, Report, Snapshot } from "../api/snapshot.gen";
+import type {
+    AgentModules,
+    InstructionRow,
+    ModuleState,
+    ProjectReport,
+    Report,
+    Snapshot,
+} from "../api/snapshot.gen";
 import { Kpi } from "../ui/Kpi";
 import { Panel } from "../ui/Panel";
 import { Pill } from "../ui/Pill";
 import { compact, fmt, pct } from "./format";
-import { doctorChecks, MODULES, type CheckState } from "./model";
+import { doctorChecks, MODULES, savingText, type CheckState } from "./model";
 import { DoctorFix } from "./DoctorFix";
 import { CheckPill, Kv, WithSnapshot } from "./parts";
 
@@ -166,25 +173,136 @@ function Details({ d }: { d: Report }) {
             {d.instructions && (
                 <Panel title="instructions" className="xl:col-span-7">
                     <ul className={list}>
-                        {d.instructions.rows.map((r) => (
-                            <li key={r.path} className="px-4 py-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-semibold">{r.name}</span>
-                                    {r.warn && <Pill tone="warn">warn</Pill>}
-                                    <span className="ml-auto text-2xs text-fg-muted">
-                                        {fmt(r.tokens)} tok
-                                    </span>
-                                </div>
-                                <div className="text-2xs break-all text-fg-muted">{r.path}</div>
-                            </li>
-                        ))}
+                        <InstructionItems rows={d.instructions.rows} />
                     </ul>
                 </Panel>
             )}
             <Panel title="agents × modules" className="xl:col-span-5">
                 <Agents agents={d.agents} />
             </Panel>
+            {d.project && <Project p={d.project} />}
         </>
+    );
+}
+
+function InstructionItems({ rows }: { rows: InstructionRow[] }) {
+    return rows.map((r) => (
+        <li key={r.path} className="px-4 py-2">
+            <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold">{r.name}</span>
+                {r.warn && <Pill tone="warn">warn</Pill>}
+                <span className="ml-auto text-2xs text-fg-muted">{fmt(r.tokens)} tok</span>
+            </div>
+            <div className="text-2xs break-all text-fg-muted">{r.path}</div>
+        </li>
+    ));
+}
+
+const inner = "divide-y divide-border/60";
+const sub = "mb-1.5 text-2xs font-semibold tracking-wide text-fg-muted uppercase";
+
+function Project({ p }: { p: ProjectReport }) {
+    const days = p.window_days;
+    const g = p.graph;
+    return (
+        <Panel title="project" hint={p.root} className="xl:col-span-12">
+            <section aria-label="languages">
+                <h3 className={sub}>languages</h3>
+                {p.languages.length ? (
+                    <ul className={inner}>
+                        {p.languages.map((l) => (
+                            <li key={l.language} className="flex flex-col gap-0.5 py-2">
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                    <span className="font-semibold">{l.language}</span>
+                                    <span className="text-fg-muted">
+                                        {fmt(l.files)} files{l.marker && ` · ${l.marker}`}
+                                    </span>
+                                    {l.server && (
+                                        <Pill tone={l.installed ? "ok" : "warn"}>
+                                            {l.server} {l.installed ? "installed" : "missing"}
+                                        </Pill>
+                                    )}
+                                </div>
+                                {l.install && (
+                                    <code className="text-2xs break-all">install: {l.install}</code>
+                                )}
+                                {l.note && <div className="text-2xs text-fg-muted">{l.note}</div>}
+                                {l.server && (
+                                    <div className="text-2xs text-fg-muted">
+                                        language server saving: {savingText(l.saving, days)}
+                                    </div>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p className="text-xs text-fg-muted">None found.</p>
+                )}
+                {p.walk_cut && (
+                    <p className="text-2xs text-warn-fg">
+                        File counts are a lower bound: the walk stopped at its cap.
+                    </p>
+                )}
+            </section>
+            {g && (
+                <section aria-label="graph">
+                    <h3 className={sub}>graph</h3>
+                    <Kv
+                        rows={[
+                            [
+                                "index",
+                                `${g.registered ? "registered" : "not registered"}, ${
+                                    g.state ?? (g.indexed ? "indexed" : "not indexed")
+                                }${g.files != null ? `, ${fmt(g.files)} files` : ""}`,
+                            ],
+                            ["health", g.score != null ? `${g.score}/100` : "-"],
+                            [
+                                "backend",
+                                g.served_by ? `${g.backend} (served by ${g.served_by})` : g.backend,
+                            ],
+                        ]}
+                    />
+                    {g.reasons.map((r) => (
+                        <div key={r.text} className="text-2xs break-all text-warn-fg">
+                            {r.text} <span className="text-fg-muted">(fix: {r.fix})</span>
+                        </div>
+                    ))}
+                    {g.next.map((n) => (
+                        <div key={n} className="text-2xs break-all text-fg-muted">
+                            next: {n}
+                        </div>
+                    ))}
+                </section>
+            )}
+            <section aria-label="project instructions">
+                <h3 className={sub}>instructions</h3>
+                {p.instructions.rows.length ? (
+                    <ul className={inner}>
+                        <InstructionItems rows={p.instructions.rows} />
+                    </ul>
+                ) : (
+                    <p className="text-xs text-fg-muted">No AGENTS.md or CLAUDE.md.</p>
+                )}
+            </section>
+            <section aria-label="plugins off here">
+                <h3 className={sub}>plugins off here</h3>
+                {p.plugins.length ? (
+                    <ul className="flex flex-col gap-1.5">
+                        {p.plugins.map((x) => (
+                            <li key={x.plugin} className="text-xs">
+                                <span className="font-semibold">{x.plugin}</span>{" "}
+                                <span className="text-2xs text-fg-muted">
+                                    set <code>[plugins.{x.plugin}] enabled = true</code> in{" "}
+                                    {x.where} · saving: {savingText(x.saving, days)}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p className="text-xs text-fg-muted">None.</p>
+                )}
+            </section>
+        </Panel>
     );
 }
 

@@ -179,6 +179,17 @@ pub fn delete_branch(repo: &Path, branch: &str) -> Result<()> {
     git_ok(repo, &["branch", "-D", "--", branch]).map(drop)
 }
 
+/// Whether the local branch `branch` exists.
+pub fn has_branch(repo: &Path, branch: &str) -> bool {
+    let name = format!("refs/heads/{branch}");
+    git(repo, &["show-ref", "--verify", "-q", &name]).is_ok_and(|out| out.status.success())
+}
+
+/// Drops the records of worktrees whose directory is gone; a locked one stays.
+pub fn prune(repo: &Path) -> Result<()> {
+    git_ok(repo, &["worktree", "prune"]).map(drop)
+}
+
 /// From the local remote-tracking ref: no network on this path.
 pub fn has_remote_branch(repo: &Path, branch: &str) -> bool {
     let name = format!("refs/remotes/origin/{branch}");
@@ -243,6 +254,18 @@ pub fn add_locked(repo: &Path, path: &Path, branch: &str, reason: &str, base: &s
     let args = ["worktree", "add", "--quiet", "--lock", "--reason", reason];
     let tail = ["--no-track", "-b", branch, path_arg(path)?, base];
     git_slow(repo, "creating worktree…", &[&args[..], &tail[..]].concat()).map(drop)
+}
+
+/// A plain worktree on `branch`, no lock: what a host makes without rtok. An existing branch
+/// is checked out rather than recreated.
+pub fn add_plain(repo: &Path, path: &Path, branch: &str) -> Result<()> {
+    let path = path_arg(path)?;
+    let args = if has_branch(repo, branch) {
+        ["worktree", "add", "--quiet", path, branch].to_vec()
+    } else {
+        ["worktree", "add", "--quiet", "-b", branch, path].to_vec()
+    };
+    git_slow(repo, "creating worktree…", &args).map(drop)
 }
 
 #[cfg(test)]

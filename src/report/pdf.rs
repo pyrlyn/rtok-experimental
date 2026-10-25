@@ -900,11 +900,13 @@ mod tests {
                 problems: vec![],
                 permissions: vec![],
                 config_notes: vec![],
+                stale_skills: vec![],
                 #[cfg(feature = "graph")]
                 graph_alerts: vec![],
                 #[cfg(feature = "graph")]
                 graph_health: vec![],
                 junk_bytes: None,
+                project: None,
             },
             recommendations: vec![],
         }

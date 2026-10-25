@@ -6,7 +6,7 @@ four servers with 130+ tool descriptions in every request.
 | | |
 |---|---|
 | Surfaces | MCP `symbol(name, path?, kind?)`, `callers(name?, path?, kind?)`, `impact(name?, depth?, path?)`, `outline(path, kind?)`, `explore(query, path?)` (T68.1); CLI `rtok graph affected [--since|--staged] [--json]` (T68.5); CLI `rtok graph review [--since|--staged] [--json]` (T454) |
-| Spec | the `spec (replaces)` column of the catalogue in `plan.md` §1 |
+| Spec | the **Replaces** column of [`docs/plugins.md`](../../../docs/plugins.md) |
 | Default | on |
 
 ## Mechanism

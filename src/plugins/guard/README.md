@@ -5,7 +5,7 @@ Stops the model from paying twice for the same result.
 | | |
 |---|---|
 | Surfaces | PreToolUse hook; `rtok guard check` (pi / OpenCode plugin) |
-| Spec | the `spec (replaces)` column of the catalogue in `plan.md` §1 |
+| Spec | the **Replaces** column of [`docs/plugins.md`](../../../docs/plugins.md) |
 | Default | on |
 
 ## Mechanism
@@ -36,12 +36,19 @@ prints, plus the reference count, within `plugins.inject.budget_tokens`. One to 
 definitions only; none, more, a missing index or an index that no longer matches the file
 lets the Grep run. Replay: `research.md` §29.5.
 
+Opt-in (T50.4): with `deny_grep_glob = true` a native `Grep` or `Glob` is denied with a
+reason naming rtok's MCP `search` or `tree` instead; a `Grep` that `grep_symbol` answers gets
+that answer first. The deny is recorded as a `native_deny` measurement with zero bytes, so it
+claims no saving. While the `read` plugin is disabled there is no `search`/`tree` to point at,
+and both run.
+
 ## Config
 
 ```toml
 [plugins.guard]
 enabled = true
 window_turns = 8
+deny_grep_glob = false  # T50.4: deny native Grep/Glob, point at MCP search/tree
 grep_symbol = false     # T369: answer a one-identifier Grep from the symbol index
 skills = false          # T62.1: digest oversized SKILL.md on PreToolUse(Skill)
 skill_max_bytes = 8192
@@ -54,7 +61,9 @@ See `roadmap.md` § `guard`. Checks in `plan/`.
 T2.6 deny duplicate Read/Bash within `window_turns` when an archive id exists.
 T62.1 digest a skill body over `skill_max_bytes` (opt-in).
 T369 answer a symbol-shaped `Grep` with the indexed definition (opt-in).
+T50.4 deny native `Grep`/`Glob` in favour of MCP `search`/`tree` (opt-in).
 
 ## Status
 
-Manifest only.
+Implemented: duplicate deny (T2.6), skill digest (T62.1), `grep_symbol` (T369),
+`deny_grep_glob` (T50.4).

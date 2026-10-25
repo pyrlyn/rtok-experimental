@@ -131,7 +131,7 @@ fn guard(kind: &str, body: &[u8]) -> usize {
     let path = dir.join(format!("{kind}.txt"));
     let input = json!({ "file_path": path.to_string_lossy() });
     let response = Value::String(text.to_string());
-    let _ = rtok::plugins::guard::Guard.post_tool(
+    let _ = rtok::plugins::guard::GuardPlugin.post_tool(
         &PostToolUse {
             tool_name: "Read",
             tool_input: &input,
@@ -196,7 +196,7 @@ fn json_tree(kind: &str, body: &[u8]) -> usize {
             "content": original,
         }],
     }]});
-    let ms = rtok::plugins::json_tree::JsonTree.proxy_filter(
+    let ms = rtok::plugins::json_tree::JsonTreePlugin.proxy_filter(
         &mut WireRequest::new(&rtok::proxy::anthropic::ANTHROPIC, &mut wire),
         &Ctx::new(&cx),
     );
@@ -237,7 +237,7 @@ fn toon(kind: &str, body: &[u8]) -> usize {
             "content": original,
         }],
     }]});
-    let ms = rtok::plugins::toon::Toon.proxy_filter(
+    let ms = rtok::plugins::toon::ToonPlugin.proxy_filter(
         &mut WireRequest::new(&rtok::proxy::anthropic::ANTHROPIC, &mut wire),
         &Ctx::new(&cx),
     );
@@ -266,7 +266,7 @@ fn archive(kind: &str, body: &[u8]) -> usize {
             "content": text,
         }]},
     ]});
-    let ms = rtok::plugins::archive::Archive.proxy_filter(
+    let ms = rtok::plugins::archive::ArchivePlugin.proxy_filter(
         &mut WireRequest::new(&rtok::proxy::anthropic::ANTHROPIC, &mut wire),
         &Ctx::new(&cx),
     );

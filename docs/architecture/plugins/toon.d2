@@ -1,0 +1,85 @@
+# toon: the proxy re-encodes old uniform JSON tables from tool results as TOON, archiving the original.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent\nsends a request whose tool_result\nholds a JSON array" {class: host}
+
+llm: "LLM provider API" {
+  shape: cloud
+  class: host
+}
+
+proxy: "rtok proxy\nWireRequest::tool_results()" {class: surface}
+
+registry: "Registry\n[plugins.toon] enabled\n(default_on = true)" {class: core}
+
+toon: "toon plugin (src/plugins/toon/mod.rs)" {
+  class: plugin
+  direction: down
+  filter: "Toon::proxy_filter" {class: plugin}
+  on: "enabled?" {
+    shape: diamond
+    class: plugin
+  }
+  live: "archive::outside_live_zone\nskips the last keep_turns turns" {class: plugin}
+  prior: "cx.archive_decision(tool_use_id)" {
+    shape: diamond
+    class: plugin
+  }
+  shape_ok: "tabular_keys:\n>= min_rows rows,\n>= 3 scalar keys, same keys" {
+    shape: diamond
+    class: plugin
+  }
+  enc: "encode(rows, keys)\nheader + one line per row" {class: plugin}
+  size: "estimate: pointer + TOON\nsmaller than the JSON?" {
+    shape: diamond
+    class: plugin
+  }
+  write: "put_archive\nput_archive_decision\nMeasurement toon/encode" {class: plugin}
+  filter -> on
+  on -> live: yes
+  live -> prior
+  prior -> shape_ok: none yet
+  shape_ok -> enc: yes
+  enc -> size
+  size -> write: yes
+}
+
+untouched: "block passes unchanged\n(no archive decision written)" {class: core}
+
+replay: "stored pointer\nreplayed byte for byte" {class: plugin}
+
+store: "SQLite\narchive_decisions\nmeasurements" {
+  shape: cylinder
+  class: data
+}
+blobs: "archive_dir/<id>\noriginal JSON text" {
+  shape: stored_data
+  class: data
+}
+
+model: "tool_result text\n[toon <8-char id>]\n[N]{keys}:" {class: host}
+expand: "rtok expand <id>\nrecords a toon/expand row" {class: ops}
+
+agent -> proxy: API request
+proxy -> registry
+registry -> toon.filter: proxy_filter
+toon.on -> untouched: no
+toon.prior -> untouched: "expanded, or an archive /\njson_tree pointer"
+toon.prior -> replay: "own pointer stored"
+toon.shape_ok -> untouched: no
+toon.size -> untouched: no
+replay -> model
+toon.write -> store
+toon.write -> blobs
+toon.write -> model: content replaced
+model -> llm: forwarded upstream
+blobs -> expand

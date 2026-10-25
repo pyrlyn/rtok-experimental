@@ -5,7 +5,7 @@ Every Bash output archived raw, filtered for the model, measured.
 | | |
 |---|---|
 | Surfaces | PreToolUse(Bash) hook → `rtok run -- <cmd>`; `rtok expand <id>` |
-| Spec | the `spec (replaces)` column of the catalogue in `plan.md` §1 |
+| Spec | the **Replaces** column of [`docs/plugins.md`](../../../docs/plugins.md) |
 | Default | on |
 
 ## How it works

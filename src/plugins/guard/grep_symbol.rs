@@ -191,7 +191,7 @@ fn fit(cx: &Ctx, text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugins::guard::Guard;
+    use crate::plugins::guard::GuardPlugin;
     use rstest::rstest;
     use rtok_plugin_sdk::Plugin;
     use serde_json::json;
@@ -255,7 +255,7 @@ mod tests {
             tool_name: "Grep",
             tool_input: &input,
         };
-        match Guard.pre_tool(&ev, &Ctx::new(rt)) {
+        match GuardPlugin.pre_tool(&ev, &Ctx::new(rt)) {
             Some(PreToolDecision::Deny { reason }) => Some(reason),
             _ => None,
         }

@@ -118,39 +118,46 @@ fn worktree_launcher_fallback_names_the_worktree_exactly_as_the_host_does() {
     .unwrap();
     fs::set_permissions(&sed, fs::Permissions::from_mode(0o755)).unwrap();
 
-    let script = plugins().join("claude/scripts/worktree.sh");
-    let payload = serde_json::json!({"session_id": "s", "cwd": tmp.join("repo"), "name": "foo"});
-    let mut child = Command::new("/bin/sh")
-        .arg(&script)
-        .arg("WorktreeCreate")
-        .env("HOME", &tmp)
-        .env("PATH", format!("{}:/usr/bin:/bin", shim.display()))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let stdin = child.stdin.take().unwrap();
-    { stdin }.write_all(payload.to_string().as_bytes()).unwrap();
-    let out = child.wait_with_output().unwrap();
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    // T995.1: CodeBuddy's copy names its host and gets its own folder; with no host it is Claude.
+    for (plugin, host, name) in [
+        ("claude", None, "foo"),
+        ("codebuddy", Some("codebuddy"), "bar"),
+    ] {
+        let script = plugins().join(plugin).join("scripts/worktree.sh");
+        let payload = serde_json::json!({"session_id": "s", "cwd": tmp.join("repo"), "name": name});
+        let mut child = Command::new("/bin/sh")
+            .arg(&script)
+            .arg("WorktreeCreate")
+            .args(host)
+            .env("HOME", &tmp)
+            .env("PATH", format!("{}:/usr/bin:/bin", shim.display()))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdin = child.stdin.take().unwrap();
+        { stdin }.write_all(payload.to_string().as_bytes()).unwrap();
+        let out = child.wait_with_output().unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
 
-    let want = tmp.join("repo/.claude/worktrees/foo");
-    let printed = String::from_utf8(out.stdout).unwrap();
-    let printed = fs::canonicalize(printed.trim_end()).expect("the printed path exists");
-    assert_eq!(printed, fs::canonicalize(&want).unwrap());
-    let branch = git(&[
-        "-C",
-        want.to_str().unwrap(),
-        "rev-parse",
-        "--abbrev-ref",
-        "HEAD",
-    ]);
-    assert_eq!(branch, "worktree-foo");
+        let want = tmp.join(format!("repo/.{plugin}/worktrees/{name}"));
+        let printed = String::from_utf8(out.stdout).unwrap();
+        let printed = fs::canonicalize(printed.trim_end()).expect("the printed path exists");
+        assert_eq!(printed, fs::canonicalize(&want).unwrap());
+        let branch = git(&[
+            "-C",
+            want.to_str().unwrap(),
+            "rev-parse",
+            "--abbrev-ref",
+            "HEAD",
+        ]);
+        assert_eq!(branch, format!("worktree-{name}"));
+    }
     let _ = fs::remove_dir_all(&tmp);
 }
 

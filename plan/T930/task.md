@@ -1,9 +1,9 @@
 ---
-status: todo
+status: in progress
 priority: P2
 complexity: 2
-readiness: 0%
-agent:
+readiness: 100%
+agent: Claude Code / claude-sonnet-5-5
 ---
 
 # T930. Read gate denies native Read for files `rtok read` cannot serve (images, paths outside roots)
@@ -20,3 +20,10 @@ refuse, and its text names `mcp__rtok__read`.
 
 Check: read-hook tests for an image, a scratchpad path and an in-project large file (still
 denied); `just check`.
+
+Plan: in `src/plugins/read/hook.rs`, after the size check, pass the native Read when the path
+has an image or PDF extension, or when the MCP `read` root guard (`plugins::read::resolve`
+with cwd and `allow_paths`) refuses it. Tests: image, outside-root scratchpad path, in-project
+large file still denied; existing deny tests keep their files reachable via `allow_paths`.
+The deny text already names `mcp__rtok__read` on Claude (T384); `rtok read` remains only for
+hosts with unknown tool naming.

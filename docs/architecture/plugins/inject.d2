@@ -1,0 +1,70 @@
+# inject: SessionStart, PostCompact, UserPromptSubmit and SubagentStart offerings share one token budget; PreCompact saves the checkpoint.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent" {class: host}
+
+surfaces: Hook events {
+  class: surface
+  start: "SessionStart\nsource: startup | compact" {class: surface}
+  prompt: "UserPromptSubmit\nSubagentStart\nPostCompact" {class: surface}
+  precompact: "PreCompact" {class: surface}
+}
+
+dispatch: "hooks::inject_event\nasks every enabled plugin:\nsession_start / prompt_submit\n/ subagent_start" {class: core}
+
+others: "other offerings\nagent id, claimed task,\npending messages, plugins" {class: core}
+
+inject: inject plugin {
+  class: plugin
+  src: "Inject::session_start\nsource?" {shape: diamond; class: plugin}
+  cp: "checkpoint::offer\n(compact, priority 9)" {class: plugin}
+  sess: "checkpoint::offer_session\n(startup, memory.startup_recall,\npriority 9)" {class: plugin}
+  modes: "modes_text\nplugins.inject.modes else setup.modes\nread_mode + fit_budget" {class: plugin}
+  offer: "Injection\nplugin, text, priority" {class: plugin}
+  apply: "inject::apply\nsort by priority\nemit while used < budget_tokens" {class: plugin}
+  over: "candidate over budget?" {shape: diamond; class: plugin}
+  save: "Inject::pre_compact\ncheckpoint::save" {class: plugin}
+  src -> cp: compact
+  src -> sess: startup
+  cp -> offer
+  sess -> offer
+  modes -> offer: appended
+  offer -> apply
+  apply -> over
+}
+
+files: "modes/*.md builtins\n~/.rtok/modes/<name>.md" {
+  shape: stored_data
+  class: data
+}
+db: "SQLite\nnotes: checkpoint:<session>\nsession:<session>\nmeasurements: kind inject" {
+  shape: cylinder
+  class: data
+}
+model: "additionalContext\nbyte-stable text +\ndropped:<plugin>:<est> markers" {class: host}
+
+agent -> surfaces.start
+agent -> surfaces.prompt
+agent -> surfaces.precompact
+surfaces.start -> dispatch
+surfaces.prompt -> dispatch
+dispatch -> inject.src: session_start
+dispatch -> others
+others -> inject.apply: Injection list
+files -> inject.modes
+surfaces.precompact -> inject.save
+inject.save -> db: upsert_note
+db -> inject.cp: latest_note
+db -> inject.sess: latest_session_note
+inject.over -> inject.apply: "yes: fit_budget prefix + dropped marker"
+inject.apply -> model: hook output
+inject.apply -> db: Measurement

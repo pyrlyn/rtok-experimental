@@ -12,12 +12,13 @@ use std::path::PathBuf;
 pub(super) enum WorktreeCmd {
     /// Create the worktree for a task: one location, one name, one locked owner; prints its path
     Add {
-        /// Task id, e.g. `t158`; directory `<repo>-<task>`, branch `<task>[-<slug>]`
+        /// Task id, e.g. `t158`, or `t158 read-hook-same-path` as one argument; directory
+        /// `<repo>-<task>`, branch `<task>[-<slug>]`
         task: String,
-        /// Optional branch suffix
+        /// Optional branch suffix (spaces become dashes, as in the one-argument form)
         slug: Option<String>,
         /// Who holds it, as `<provider> / <model>`; written into the lock reason. Defaults to
-        /// `<host> / <model>` of the agent
+        /// `<host> / <model>` of the agent, else `RTOK_OWNER`, else the login user
         #[arg(long)]
         owner: Option<String>,
         /// The rtok agent id (any unique prefix) to bind it to; defaults to `RTOK_AGENT_ID`
@@ -109,11 +110,14 @@ pub(super) enum WorktreeCmd {
         #[arg(long)]
         json: bool,
     },
-    /// Every worktree and orphan with its owner, state, source and build-cache bytes
+    /// Every worktree and orphan with its owner, state and source bytes
     List {
         /// JSON instead of the table
         #[arg(long)]
         json: bool,
+        /// Also walk every build cache for its bytes (slow with large target/ folders)
+        #[arg(long)]
+        sizes: bool,
     },
     /// Your agent, where new worktrees go, the worktree you are in and the ones you hold
     Whoami {
@@ -313,10 +317,10 @@ pub(super) fn run(config_file: &Option<PathBuf>, action: WorktreeCmd) -> Result<
 
             Ok(())
         }
-        WorktreeCmd::List { json } => {
+        WorktreeCmd::List { json, sizes } => {
             let cwd = std::env::current_dir()?;
             let cfg = Config::load_with(config_file.as_deref(), None)?;
-            let rows = crate::worktree::ops::list(&cfg, &cwd)?;
+            let rows = crate::worktree::ops::list(&cfg, &cwd, sizes)?;
             if json {
                 print_json(&rows)?;
             } else {

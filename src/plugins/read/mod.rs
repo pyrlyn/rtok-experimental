@@ -33,9 +33,9 @@ pub mod search;
 #[cfg(test)]
 pub(crate) mod walk;
 
-pub struct Read;
+pub struct ReadPlugin;
 
-impl Plugin for Read {
+impl Plugin for ReadPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "read",
@@ -112,7 +112,12 @@ pub(crate) fn read_with(
     let raw = fs.read_to_string(&abs).map_err(|e| {
         let msg = e.to_string();
         let msg = msg.split(" (os error").next().unwrap_or(&msg);
-        anyhow::anyhow!("{msg}: {path}")
+        let hint = if e.kind() == std::io::ErrorKind::NotFound {
+            roots::moved_hint(cwd, &abs)
+        } else {
+            String::new()
+        };
+        anyhow::anyhow!("{msg}: {path}{hint}")
     })?;
     let mode = if mode.is_empty() {
         cfg.default_mode.as_str()
@@ -160,24 +165,29 @@ pub(crate) fn read_with(
     } else {
         raw.as_bytes()
     };
-    if let Some(hit) = cache::hit(
-        cx,
-        &key,
-        abs.to_string_lossy().as_ref(),
-        payload,
-        force_delta,
-    ) {
-        return Ok(hit);
-    }
-    // A same-session content-hash hit on those bytes is a pointer. T127: this call runs
-    // only inside the MCP `read` tool (`src/mcp.rs`), which has no per-request signal for
-    // which context — parent or sub-agent — is asking; `context` stays `None` here until
-    // the creator picks between "no pointer on MCP" and today's session-only behaviour.
-    if let Some(msg) = crate::plugin::identical_result(&**cx, "read", payload, None) {
+    // T929: this call runs only inside the MCP `read` tool (`src/mcp.rs`), which cannot tell
+    // which context window — the parent or a sub-agent — is asking, so once a sub-agent shares
+    // the session no read is answered with a pointer, a delta or a remembered body: another
+    // window may never have seen the bytes it names (the creator allowed revisiting T127's
+    // session-only scoping, 2026-10-21). A session without a sub-agent keeps both.
+    let shared = cx.shared_session();
+    if !shared {
+        if let Some(hit) = cache::hit(
+            cx,
+            &key,
+            abs.to_string_lossy().as_ref(),
+            payload,
+            force_delta,
+        ) {
+            return Ok(hit);
+        }
+        // A same-session content-hash hit on those bytes is a pointer.
+        if let Some(msg) = crate::plugin::identical_result(&**cx, "read", payload, None) {
+            let _ = cache::remember(cx, &key, payload);
+            return Ok(msg);
+        }
         let _ = cache::remember(cx, &key, payload);
-        return Ok(msg);
     }
-    let _ = cache::remember(cx, &key, payload);
     // T300: `map`/`signatures` measure the same way `stripped` already does — raw file vs
     // the text actually returned — but only on this fresh-render path; `cache::hit` and
     // `identical_result` above already recorded their own row (kind `dedup`/`delta`) and
@@ -256,7 +266,7 @@ pub(crate) fn resolve_with(
         return Ok(abs);
     }
     bail!(
-        "path outside cwd: {} (outside this project and its worktrees; read it with the host's own file tool)",
+        "path outside cwd: {} (outside this project and its worktrees; read it with the host's own file tool, or add its directory to [plugins.read] allow_paths)",
         path.display()
     )
 }

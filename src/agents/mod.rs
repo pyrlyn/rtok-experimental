@@ -50,6 +50,7 @@ pub mod kilo;
 pub mod kimi;
 pub mod kiro;
 pub mod link;
+pub mod locate;
 pub(crate) mod mcp;
 pub mod mimo;
 pub mod omp;
@@ -166,6 +167,7 @@ impl Kind {
 /// One app of a host. `bins` are looked up on PATH and asked `--version`; `apps` are where a
 /// desktop build installs (`~/…`, `$VAR/…` or absolute), probed with `exists()`. Entries for
 /// other platforms simply never exist.
+#[derive(Debug)]
 pub struct Variant {
     pub kind: Kind,
     pub name: &'static str,
@@ -468,20 +470,22 @@ fn cli_label(bin: &str, args: &[&str]) -> String {
     format!("running {bin} {}…", verb.join(" "))
 }
 
-/// Run one `<bin> <args>` call with stdin closed, optionally overriding one environment
-/// variable (a config-dir redirect for a non-default settings path). Returns the first
+/// Run one `<host CLI> <args>` call with stdin closed, optionally overriding one environment
+/// variable (a config-dir redirect for a non-default settings path). The CLI is the one
+/// [`locate::cli_program`] names, so a path the user gave is the one run. Returns the first
 /// stderr line — or the spawn error itself when the binary is not found — as the failure
 /// text a host's plugin offer folds into "`<bin>` failed: …". Windows npm shims go through
 /// `cmd.exe` (T139).
 pub(crate) fn run_cli(
-    bin: &str,
+    cfg: &Config,
+    host: &str,
     args: &[&str],
     env: Option<(&str, &Path)>,
 ) -> std::result::Result<(), String> {
-    let Some(program) = host_program(bin) else {
-        return Err(format!("{bin}: not found"));
+    let Some(program) = locate::cli_program(cfg, host) else {
+        return Err(format!("{host}: not found"));
     };
-    let mut run = ProgressRunner::new(&cli_label(bin, args), program, args).windows_shim();
+    let mut run = ProgressRunner::new(&cli_label(host, args), program, args).windows_shim();
     if let Some((key, val)) = env {
         run = run.env(key, val);
     }
@@ -492,16 +496,8 @@ pub(crate) fn run_cli(
             .next()
             .unwrap_or("non-zero exit")
             .to_string()),
-        Err(e) => Err(format!("{bin}: {e}")),
+        Err(e) => Err(format!("{host}: {e}")),
     }
-}
-
-/// Where the app is: a desktop bundle first, else the binary on PATH.
-pub fn app_path(v: &Variant) -> Option<PathBuf> {
-    v.apps
-        .iter()
-        .find_map(|a| probe_installed(expand_app(a)))
-        .or_else(|| v.bins.iter().find_map(|b| find_on_path(b)))
 }
 
 /// How long one `<bin> --version` probe may run. `cursor --version` under an empty `$HOME`
@@ -514,11 +510,8 @@ const VERSION_PROBE_LIMIT: std::time::Duration = std::time::Duration::from_secs(
 /// wrappers, e.g. npm-installed CLIs, print noise like `Package extraction took 1234ms`
 /// ahead of the real version line); falls back to the first non-empty line when no line
 /// looks like a version. 32 chars max. Each probe gets [`VERSION_PROBE_LIMIT`] (T280).
-pub fn app_version(v: &Variant) -> String {
-    for bin in v.bins {
-        let Some(program) = host_program(bin) else {
-            continue;
-        };
+pub fn app_version(cfg: &Config, host: &str, v: &Variant) -> String {
+    for program in locate::programs(cfg, host, v) {
         // Quiet: `agents list` already draws one loader over every probe.
         let out = ProgressRunner::quiet(program, ["--version"])
             .windows_shim()
@@ -586,23 +579,7 @@ pub(crate) fn load_toml(path: &Path) -> Result<DocumentMut> {
         .with_context(|| path.display().to_string())
 }
 
-/// True when the app itself is found: its bundle or binary exists. A config folder alone
-/// does not count — one left behind by an uninstalled app made setup write into it (T426).
-/// Setup refuses a missing app instead of creating its files; removal runs regardless so a
-/// half-installed host is cleaned up.
-pub fn present(v: &Variant) -> bool {
-    app_path(v).is_some()
-}
-
-/// The named hosts none of whose wanted variants is [`present`]: `agents install|update`
-/// refuses the whole run on them before any backup or write (T426).
-fn absent_hosts(agents: &[&'static dyn Agent], want: impl Fn(Kind) -> bool) -> Vec<&'static str> {
-    agents
-        .iter()
-        .filter(|a| !a.variants().iter().any(|v| want(v.kind) && present(v)))
-        .map(|a| a.id())
-        .collect()
-}
+pub use locate::{locate, present};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -925,8 +902,12 @@ pub fn block(agent: &dyn Agent, v: &Variant, cfg: &Config, outcome: Outcome) -> 
         ));
         return out;
     }
-    match app_path(v) {
-        Some(p) => out.push_str(&format!("  app     {} ({})\n", p.display(), app_version(v))),
+    match locate(cfg, agent.id(), v) {
+        Some(p) => out.push_str(&format!(
+            "  app     {} ({})\n",
+            p.display(),
+            app_version(cfg, agent.id(), v)
+        )),
         None => out.push_str("  app     -\n"),
     }
     let files = agent.files(cfg, v.kind);
@@ -1017,9 +998,9 @@ pub fn run(cfg: &mut Config, req: &Request) -> Result<String> {
     let agents = resolve(&req.hosts)?;
     let want = |kind: Kind| req.mode == Mode::Remove || wants(kind, req.cli, req.desktop, req.all);
     if req.mode != Mode::Remove {
-        let absent = absent_hosts(&agents, want);
+        let absent = locate::absent(cfg, &agents, want);
         if !absent.is_empty() {
-            bail!("{} is not installed", absent.join(", "));
+            return Err(locate::not_found(&absent));
         }
     }
     let mut out = String::new();
@@ -1107,7 +1088,7 @@ pub(crate) fn apply_all(
         let mut any = false;
         for v in a.variants().iter().filter(|v| want(v.kind)) {
             any = true;
-            if req.mode != Mode::Remove && !present(v) {
+            if req.mode != Mode::Remove && !present(cfg, a.id(), v) {
                 out.push_str(&block(a, v, cfg, Outcome::NotFound));
                 continue;
             }
@@ -1176,7 +1157,7 @@ pub fn installed_hosts(cfg: &Config) -> Vec<String> {
             host(id).is_some_and(|a| {
                 a.variants()
                     .iter()
-                    .any(|v| present(v) && !installed_modules(a, v.kind, cfg).is_empty())
+                    .any(|v| present(cfg, id, v) && !installed_modules(a, v.kind, cfg).is_empty())
             })
         })
         .map(ToString::to_string)
@@ -1209,7 +1190,7 @@ pub fn list(cfg: &Config) -> String {
 /// Same blocks as [`list`], only for `ids` (already-resolved host ids).
 pub fn list_ids(cfg: &Config, ids: &[&str]) -> String {
     visit_hosts(ids, |a, v| {
-        let outcome = if present(v) {
+        let outcome = if present(cfg, a.id(), v) {
             Outcome::Listed
         } else {
             Outcome::NotFound
@@ -2901,7 +2882,11 @@ mod tests {
     fn tests_run_inside_the_host_sandbox() {
         assert_eq!(host_sandbox(), Some(home_dir()));
         for v in cursor::Cursor.variants() {
-            assert!(app_path(v).is_none(), "{} seen outside the sandbox", v.name);
+            assert!(
+                locate(&Config::default(), "cursor", v).is_none(),
+                "{} seen outside the sandbox",
+                v.name
+            );
         }
     }
 
@@ -2963,8 +2948,8 @@ mod tests {
             bins: &["rtok-no-such-binary"],
             apps: &["~/rtok-no-such-app", "$RTOK_NO_SUCH_VAR/app"],
         };
-        assert_eq!(app_version(&ghost), "-");
-        assert!(app_path(&ghost).is_none());
+        assert_eq!(app_version(&cfg, "ghost", &ghost), "-");
+        assert!(locate(&cfg, "ghost", &ghost).is_none());
     }
 
     #[test]
@@ -3021,7 +3006,10 @@ mod tests {
             bins,
             apps: &[],
         };
-        assert_eq!(app_version(&noisy), "0.1.0 (fake copilot)");
+        assert_eq!(
+            app_version(&Config::default(), "copilot", &noisy),
+            "0.1.0 (fake copilot)"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3055,7 +3043,7 @@ mod tests {
             apps: &[],
         };
         let start = std::time::Instant::now();
-        assert_eq!(app_version(&hang), "-");
+        assert_eq!(app_version(&Config::default(), "cursor", &hang), "-");
         assert!(
             start.elapsed() < VERSION_PROBE_LIMIT + std::time::Duration::from_secs(2),
             "{:?}",

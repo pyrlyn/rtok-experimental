@@ -602,8 +602,13 @@ mod tests {
             .unwrap()
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .collect();
-        assert_eq!(names.len(), 3, "{names:?}");
-        for want in ["rtok.log", "rtok.log.1", "rtok.log.2"] {
+        assert_eq!(names.len(), 4, "{names:?}");
+        for want in [
+            "rtok.log",
+            "rtok.log.1",
+            "rtok.log.2",
+            "rtok.log.rotate.lock",
+        ] {
             assert!(names.iter().any(|n| n == want), "{names:?}");
         }
         let live = fs::read_to_string(dir.join("rtok.log")).unwrap();

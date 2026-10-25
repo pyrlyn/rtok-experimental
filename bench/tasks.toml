@@ -1,31 +1,35 @@
-# T9.1 — six small fixture-repo edits. `check` is a shell command.
+# T9.1 — six edits of the fixture crate `bench/repos/t9`. `check` is a shell command run from
+# the repo root after each task × config; it exits 0 only when the edit is really there, then
+# restores the fixture (`git checkout` + `git clean`) so the next config starts from the same
+# state. `bench/check_tasks.py` proves every check fails on the untouched fixture and passes on
+# a reference solution. See `bench/README.md`.
 
 [[tasks]]
 id = "add-fn"
-prompt = "Add a function foo that returns 1."
-check = "true"
+prompt = "In bench/repos/t9/src/lib.rs add a public function `foo() -> i32` that returns 1. Do not change anything else."
+check = "export CARGO_TARGET_DIR=${TMPDIR:-/tmp}/rtok-bench-t9; grep -Eq 'pub fn foo\\(\\) *-> *i32' bench/repos/t9/src/lib.rs && cargo build -q --manifest-path bench/repos/t9/Cargo.toml; s=$?; git checkout -q -- bench/repos/t9; git clean -qfd bench/repos/t9; exit $s"
 
 [[tasks]]
 id = "fix-bug"
-prompt = "Fix the off-by-one bug in the counter."
-check = "true"
+prompt = "Fix the off-by-one bug in `Counter::count_to` in bench/repos/t9/src/lib.rs. Do not change the tests."
+check = "export CARGO_TARGET_DIR=${TMPDIR:-/tmp}/rtok-bench-t9; grep -q 'vec!\\[1, 2, 3\\]' bench/repos/t9/src/lib.rs && cargo test -q --manifest-path bench/repos/t9/Cargo.toml counts_to_three; s=$?; git checkout -q -- bench/repos/t9; git clean -qfd bench/repos/t9; exit $s"
 
 [[tasks]]
 id = "write-test"
-prompt = "Write a unit test for foo."
-check = "true"
+prompt = "Write a unit test named `parse_port_rejects_zero` for `parse_port` in bench/repos/t9/src/lib.rs that checks `parse_port(\"0\")` is None."
+check = "export CARGO_TARGET_DIR=${TMPDIR:-/tmp}/rtok-bench-t9; cargo test -q --manifest-path bench/repos/t9/Cargo.toml parse_port_rejects_zero -- --list 2>/dev/null | grep -q 'parse_port_rejects_zero: test' && cargo test -q --manifest-path bench/repos/t9/Cargo.toml parse_port_rejects_zero; s=$?; git checkout -q -- bench/repos/t9; git clean -qfd bench/repos/t9; exit $s"
 
 [[tasks]]
 id = "rename"
-prompt = "Rename foo to bar across the crate."
-check = "true"
+prompt = "Rename `parse_port` to `parse_tcp_port` across the crate bench/repos/t9."
+check = "export CARGO_TARGET_DIR=${TMPDIR:-/tmp}/rtok-bench-t9; ! grep -rqw parse_port bench/repos/t9/src && grep -q 'pub fn parse_tcp_port' bench/repos/t9/src/lib.rs && cargo build -q --manifest-path bench/repos/t9/Cargo.toml; s=$?; git checkout -q -- bench/repos/t9; git clean -qfd bench/repos/t9; exit $s"
 
 [[tasks]]
 id = "explain"
-prompt = "Explain the module in one paragraph."
-check = "true"
+prompt = "Explain the module bench/repos/t9/src/lib.rs in one paragraph and write it to bench/repos/t9/EXPLAIN.md."
+check = "f=bench/repos/t9/EXPLAIN.md; test -s $f && grep -qi counter $f && grep -qi port $f && test $(wc -l < $f) -le 12; s=$?; git checkout -q -- bench/repos/t9; git clean -qfd bench/repos/t9; exit $s"
 
 [[tasks]]
 id = "run-tests"
-prompt = "Run the test suite and fix failures."
-check = "true"
+prompt = "Run the test suite of bench/repos/t9 (cargo test) and fix the failures without deleting or ignoring tests."
+check = "export CARGO_TARGET_DIR=${TMPDIR:-/tmp}/rtok-bench-t9; grep -q 'fn counts_to_three' bench/repos/t9/src/lib.rs && ! grep -q '#\\[ignore' bench/repos/t9/src/lib.rs && cargo test -q --manifest-path bench/repos/t9/Cargo.toml; s=$?; git checkout -q -- bench/repos/t9; git clean -qfd bench/repos/t9; exit $s"

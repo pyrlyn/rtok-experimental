@@ -1,0 +1,84 @@
+# One hook call: stdin JSON in, merged plugin output out, exit 0 on every path.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+  fail: {style: {fill: "#FEE2E2"; stroke: "#DC2626"; border-radius: 8}}
+}
+
+host: "Host runs a hook command\nClaude Code, Cursor, Codex, Gemini, …" {class: host}
+
+entry: Entry {
+  class: surface
+  client: "rtok-hook client (optional)\nframes stdin to the resident" {class: surface}
+  resident: "rtok hook --serve\nresident, no process start (D32)" {class: surface}
+  cli: "rtok hook <event> --host <h>\nhooks::run" {class: surface}
+  client -> resident: answers
+  client -> cli: refused or silent
+}
+
+guard: "stdin ≤ core.hook_max_input_bytes\nand catch_unwind around dispatch" {
+  shape: diamond
+  class: core
+}
+open: "print {} and exit 0\nerror goes to the log" {class: fail}
+
+adapt: "dispatch_owned_strict\nparse HookInput · adapt_<host>()\nresolve session · Runtime::open_with" {class: core}
+
+dispatch: "hooks::dispatch\nRegistry::new · register_agent\nrecord_call(hook, event)" {class: core}
+
+event: "hook_event_name" {
+  shape: diamond
+  class: core
+}
+
+pre: "PreToolUse → pre_tool\nfirst Deny wins, else last Rewrite" {class: plugin}
+post: "PostToolUse → post_tool\nconcat additionalContext\ncap_budget (inject budget)" {class: plugin}
+inj: "SessionStart · UserPromptSubmit\nSubagentStart · PostCompact\n→ inject_event → inject::apply" {class: plugin}
+compact: "PreCompact → pre_compact\n+ memory::compact_context" {class: plugin}
+end: "SessionEnd → checkpoint::save_session\nend_agent · end_session" {class: plugin}
+
+plugins: "each enabled plugin\nin dispatch order,\neach in catch_unwind" {
+  shape: step
+  class: plugin
+}
+
+out: "HookOutput JSON\n(<host>_output reshapes it)" {class: surface}
+
+store: "SQLite\ncalls · call_io · agents\nmeasurements · logs" {
+  shape: cylinder
+  class: data
+}
+
+host -> entry.client
+host -> entry.cli: no client installed
+entry.resident -> guard
+entry.cli -> guard
+guard -> open: over limit, bad JSON, panic
+guard -> adapt: ok
+adapt -> open: store open failed
+adapt -> dispatch
+dispatch -> event
+event -> pre
+event -> post
+event -> inj
+event -> compact
+event -> end
+pre -> plugins
+post -> plugins
+inj -> plugins
+compact -> plugins
+pre -> out
+post -> out
+inj -> out
+compact -> out
+end -> out
+dispatch -> store: call row, call_ms, call_io
+plugins -> store: Ctx::record, Ctx::log
+out -> host: stdout, exit 0
+open -> host: "{}"

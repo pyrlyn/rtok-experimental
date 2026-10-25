@@ -100,7 +100,7 @@ fn codex_cli(cfg: &Config, args: &[&str]) -> std::result::Result<(), String> {
     let dir = config_dir(cfg);
     let default = super::home_dir().join(".codex");
     let env = (dir != default).then_some(("CODEX_HOME", dir.as_path()));
-    super::run_cli("codex", args, env)
+    super::run_cli(cfg, "codex", args, env)
 }
 
 /// True when Codex's own config already enables `rtok@rtok`. Unlike Claude Code's separate
@@ -211,7 +211,7 @@ fn plugin(cfg: &Config, remove: bool) -> Result<String> {
             format!("offer {PLUGIN_SRC} → {shown} {KETCH_INSTALL}")
         });
     }
-    if !remove && super::find_on_path("codex").is_none() {
+    if !remove && super::locate::cli(cfg, "codex").is_none() {
         return Ok(format!(
             "offer {PLUGIN_SRC} → {shown} (codex failed: codex not found on PATH) {KETCH_INSTALL}"
         ));
@@ -265,7 +265,7 @@ fn plugin_update(cfg: &Config) -> Result<String> {
     if apply(cfg).dry_run {
         return Ok(format!("~ plugin {PLUGIN_ID} ({})", shown(&UPDATE)));
     }
-    if super::find_on_path("codex").is_none() {
+    if super::locate::cli(cfg, "codex").is_none() {
         return Ok(NO_CHANGES.into());
     }
     let before = cache_bytes(cfg);

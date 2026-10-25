@@ -81,7 +81,7 @@ impl Queue {
     fn admit(self: &Arc<Self>, id: &str) -> Admit {
         let reserved = self
             .in_flight
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |n| {
                 (n < self.max_in_flight).then_some(n + 1)
             });
         if reserved.is_err() {

@@ -22,6 +22,25 @@ export const SessionsEmpty = story(() => <Sessions />, serve({ ...sampleSnapshot
 
 export const DoctorDefault = story(() => <Doctor />);
 export const DoctorLight = story(() => <Doctor />, sample, "light");
+// T977: a checkout with nothing to advise: every server installed, nothing measured.
+export const DoctorProjectQuiet = story(
+    () => <Doctor />,
+    serve({
+        ...sampleSnapshot,
+        doctor: {
+            ...sampleSnapshot.doctor!,
+            project: {
+                ...sampleSnapshot.doctor!.project!,
+                languages: sampleSnapshot.doctor!.project!.languages.slice(0, 1).map((l) => ({
+                    ...l,
+                    saving: null,
+                })),
+                graph: null,
+                plugins: [],
+            },
+        },
+    }),
+);
 export const DoctorProbeFailed = story(
     () => <Doctor />,
     serve({ ...sampleSnapshot, doctor: null }),

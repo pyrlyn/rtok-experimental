@@ -24,6 +24,7 @@ lang: ru
 | `rtok stats` | измерения из логов сессий и прокси |
 | `rtok discover` | shell-команды ваших агентов без правила и форматтера, сначала с самым большим выводом |
 | `rtok doctor` | проверить хуки, MCP-серверы, цепочку прокси — включая то, сколько каждый стоит за ход, и сколько места освободит `rtok agents junk clear` |
+| `rtok doctor --project [PATH]` | добавить советы по настройке одного checkout: языковые серверы с командами установки, граф-индекс, файлы инструкций, выключенные плагины; экономия — только из измерений ([lsp.md](lsp.md)) |
 | `rtok agents install claude\|cursor\|codex\|opencode\|kilo\|pi\|zcode\|kimi\|copilot\|aider\|windsurf\|zed` | установить в хост с резервными копиями; `--dry-run` |
 | `rtok agents uninstall claude\|cursor\|codex\|opencode\|kilo\|pi\|zcode\|kimi\|copilot\|aider\|windsurf\|zed` | убрать rtok из хоста с резервными копиями; `--dry-run` |
 | `rtok agents list` | каждое известное приложение: тип и имя, путь и версия, файлы конфигурации, модули rtok, версия установленного плагина |

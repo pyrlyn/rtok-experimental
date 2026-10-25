@@ -102,6 +102,37 @@ describe("doctor", () => {
         );
     });
 
+    test("the project panel gives install commands and claims savings only from measurements", async () => {
+        mount(serving(sampleSnapshot), "/doctor");
+        const project = await screen.findByRole("region", { name: "project" });
+        const langs = within(project).getByRole("region", { name: "languages" });
+        expect(within(langs).getByText("rust-analyzer installed")).toBeTruthy();
+        expect(within(langs).getByText("typescript-language-server missing")).toBeTruthy();
+        expect(langs.textContent).toContain(
+            "install: npm install -g typescript-language-server typescript",
+        );
+        expect(langs.textContent).toContain("here ≈ 43,700 tok (38 calls in 30 days)");
+        expect(langs.textContent).toContain("tags only");
+        const graph = within(project).getByRole("region", { name: "graph" });
+        expect(graph.textContent).toContain("72/100");
+        expect(graph.textContent).toContain("fix: rtok graph index /work/app");
+        const plugins = within(project).getByRole("region", { name: "plugins off here" });
+        const [compress, proxy] = within(plugins).getAllByRole("listitem");
+        expect(compress?.textContent).toContain("≈ 610 tok per call over 52 calls");
+        expect(compress?.textContent).not.toContain("here");
+        expect(proxy?.textContent).toContain("in user config · saving: no measurements yet");
+        expect(proxy?.textContent).not.toMatch(/\d/);
+    });
+
+    test("without a checkout there is no project panel", async () => {
+        mount(
+            serving({ ...sampleSnapshot, doctor: { ...sampleSnapshot.doctor!, project: null } }),
+            "/doctor",
+        );
+        await screen.findByRole("region", { name: "checks" });
+        expect(screen.queryByRole("region", { name: "project" })).toBeNull();
+    });
+
     test("a failed probe shows the failure and no sections", async () => {
         mount(serving({ ...sampleSnapshot, doctor: null }), "/doctor");
         const checks = await screen.findByRole("region", { name: "checks" });

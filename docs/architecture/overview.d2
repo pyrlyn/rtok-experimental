@@ -1,0 +1,89 @@
+# rtok at a glance: three surfaces reach one plugin registry; every saving lands in SQLite.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: Coding agent {
+  class: host
+  claude: Claude Code {class: host}
+  others: "Cursor, Codex, pi, Zed, …\n(src/agents/<host>)" {class: host}
+}
+
+llm: "LLM provider API\n(Anthropic, OpenAI, Gemini)" {
+  near: top-right
+  shape: cloud
+  class: host
+}
+
+surfaces: Surfaces {
+  class: surface
+  hook: "rtok hook <event>\nstdin JSON → stdout JSON\nexit 0, fail open" {class: surface}
+  mcp: "rtok mcp\nstdio MCP server\nread, search, expand, …" {class: surface}
+  proxy: "rtok proxy\nANTHROPIC_BASE_URL /\nOPENAI_BASE_URL" {class: surface}
+}
+
+runtime: Host runtime (src/plugin.rs) {
+  class: core
+  registry: "Registry\ncompiled features ∩ [plugins.<id>]" {class: core}
+  ctx: "Ctx\nconfig · store · session\nestimate · record" {class: core}
+  config: "rtok-config\nfigment layers" {class: core}
+  registry -> ctx: builds per call
+  config -> registry: enabled flags
+}
+
+plugins: Plugins (src/plugins/<id>) {
+  class: plugin
+  grid-columns: 3
+  measure: measure {class: plugin}
+  cmd: cmd {class: plugin}
+  read: read {class: plugin}
+  json_tree: json_tree {class: plugin}
+  archive: archive {class: plugin}
+  proxy: proxy {class: plugin}
+  inject: inject {class: plugin}
+  guard: guard {class: plugin}
+  memory: memory {class: plugin}
+  graph: graph {class: plugin}
+  toon: toon {class: plugin}
+  compress: compress {class: plugin}
+  docs: docs {class: plugin}
+  checkpoint: "checkpoint\n(used by inject)" {class: plugin}
+  wasm: "wasm host\n(out-of-tree plugins)" {class: plugin}
+}
+
+store: "SQLite (rtok-store, Diesel)\ncalls · measurements · tokens\narchive · notes · usage" {
+  shape: cylinder
+  class: data
+}
+blobs: "archive_dir/<id>\nraw payloads" {
+  shape: stored_data
+  class: data
+}
+
+ops: Operator surfaces {
+  class: ops
+  cli: "rtok stats · expand\ndoctor · report" {class: ops}
+  tui: rtok tui {class: ops}
+  web: rtok web {class: ops}
+}
+
+agent.claude -> surfaces.hook: hook events
+agent -> surfaces.mcp: MCP tool calls
+agent -> surfaces.proxy: API requests
+surfaces.proxy -> llm: forwarded, maybe compressed
+
+surfaces.hook -> runtime.registry
+surfaces.mcp -> runtime.registry
+surfaces.proxy -> runtime.registry
+
+runtime.ctx -> plugins: "Plugin trait\npre_tool · post_tool · session_start\nmcp_tools · proxy_filter"
+plugins -> store: Measurement rows
+plugins -> blobs: originals for expand <id>
+store -> ops: read model (D23)

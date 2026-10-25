@@ -5,7 +5,9 @@ lang: ru
 # Плагины
 
 Каждый метод сокращения токенов в rtok — это плагин за одним трейтом. Плагины — встроенные
-модули за фичами Cargo: никакого демона, никаких подпроцессов, никакого WASM в v0.1.
+модули за фичами Cargo: никакого демона, никаких подпроцессов. Внешние плагины `.wasm`
+загружаются только в сборке с фичей `wasm-host` (её нет в наборе по умолчанию) и при
+`[plugins.wasm] enabled = true`.
 
 Столбец **заменяет** — это цель спецификации, а не зависимость: rtok реализует
 поведение заново, с нуля, и никогда не запускает, не линкует и не читает названный инструмент.
@@ -16,13 +18,13 @@ lang: ru
 | [`cmd`](../../src/plugins/cmd/README.md) | rtk hook, ctx_shell, bash_compress | PreToolUse(Bash) → `rtok run` |
 | [`read`](../../src/plugins/read/README.md) | lean-ctx read/search/tree, read_cache | MCP `read` |
 | [`json_tree`](../../src/plugins/json_tree/README.md) | — | proxy, MCP |
-| [`archive`](../../src/plugins/archive/README.md) | CCR | `expand`, хранилище |
+| [`archive`](../../src/plugins/archive/README.md) | CCR | proxy, MCP `expand`, `rtok archive rewrite` |
 | [`proxy`](../../src/plugins/proxy/README.md) | caveman-proxy | `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` |
 | [`inject`](../../src/plugins/inject/README.md) | caveman/ponytail, lean-ctx | SessionStart, UserPromptSubmit |
-| [`guard`](../../src/plugins/guard/README.md) | — | PreToolUse |
+| [`guard`](../../src/plugins/guard/README.md) | — | PreToolUse, `rtok guard check` |
 | [`memory`](../../src/plugins/memory/README.md) | claude-mem | MCP, PreCompact |
 | [`graph`](../../src/plugins/graph/README.md) | codebase-memory-mcp | MCP |
-| [`toon`](../../src/plugins/toon/README.md) | — | MCP |
+| [`toon`](../../src/plugins/toon/README.md) | — | proxy, MCP `expand` |
 
 ## Отключение плагинов
 

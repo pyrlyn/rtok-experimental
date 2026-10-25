@@ -16,7 +16,7 @@ use rtok_sys::proc::{ProgressRunner, Unit};
 use serde::Serialize;
 
 use super::list::{Cache, orphans, usage};
-use super::{inventory, noted_table};
+use super::{git, noted_table, par_map};
 use crate::render::{Col, duration};
 use change_preview::human_bytes;
 
@@ -68,9 +68,11 @@ fn real(p: &Path) -> PathBuf {
 /// Every worktree git lists plus the orphans (T151), or exactly the paths named — each
 /// of which must be one of those, so nothing outside the repository is ever walked.
 fn targets(cwd: &Path, paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
-    let entries = inventory(cwd)?;
-    let mut dirs: Vec<PathBuf> = entries.iter().map(|e| e.record.path.clone()).collect();
-    dirs.extend(orphans(&entries));
+    // Only the paths matter here, so not `inventory`: its per-worktree git status and merge
+    // checks cost seconds and decide nothing (T936).
+    let mut dirs: Vec<PathBuf> = git::list(cwd)?.into_iter().map(|r| r.path).collect();
+    let orphans = orphans(&dirs);
+    dirs.extend(orphans);
     if paths.is_empty() {
         return Ok(dirs);
     }
@@ -93,9 +95,11 @@ pub fn run(cwd: &Path, paths: &[PathBuf], policy: &Policy, yes: bool) -> Result<
     let mut judged = Vec::new();
     let dirs = targets(cwd, paths)?;
     let current_at = super::deepest(&here, 0..dirs.len(), |i| dirs[*i].clone());
-    for (i, dir) in dirs.into_iter().enumerate() {
+    // Each walk waits on the disk, so the worktrees' walks run side by side (T936).
+    let found = par_map(&dirs, |_, dir| usage(dir).caches);
+    for (i, (dir, caches)) in dirs.into_iter().zip(found).enumerate() {
         let current = current_at == Some(i);
-        for cache in usage(&dir).caches {
+        for cache in caches {
             let kept = kept_because(&cache, current, explicit, policy);
             judged.push((dir.clone(), cache, kept));
         }

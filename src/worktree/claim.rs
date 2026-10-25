@@ -86,6 +86,14 @@ pub fn caller(store: Option<&Store>, flag: Option<&str>) -> Result<Option<AgentD
         (None, Some(env)) => (env, false),
         (None, None) => return Ok(None),
     };
+    // T973: agents copy a plan's `agent: <provider> / <model>` into the flag; "unknown" alone
+    // never told them it wants an id.
+    if explicit && raw.contains(['/', ' ']) {
+        bail!(
+            "--agent {raw}: not an rtok agent id (that looks like a plan's `<provider> / <model>`); \
+             pass your id or a prefix of it, see `rtok agents whoami`"
+        );
+    }
     let found = store
         .context("no store")
         .and_then(|s| s.agent_detail(&s.resolve_agent(&raw)?).map_err(Into::into));
@@ -104,7 +112,8 @@ pub fn caller(store: Option<&Store>, flag: Option<&str>) -> Result<Option<AgentD
 }
 
 /// `--owner`, else `<host> / <model>` of the agent (`<host>` alone while no call has named
-/// a model), else an error: without an agent the owner is the only name a lock has.
+/// a model), else (T988) `RTOK_OWNER`, else the login user: a hook that runs before its
+/// session has an agent id still gets a worktree. The lock then names no agent, so it holds.
 pub fn owner(
     flag: Option<String>,
     agent: Option<&AgentDetail>,
@@ -114,7 +123,12 @@ pub fn owner(
         return Ok(owner);
     }
     let Some(agent) = agent else {
-        bail!("--owner is required when no agent is known (--agent or RTOK_AGENT_ID)");
+        let owner = ["RTOK_OWNER", "USER", "USERNAME"]
+            .into_iter()
+            .find_map(|key| std::env::var(key).ok().filter(|v| !v.trim().is_empty()))
+            .unwrap_or_else(|| "unknown".to_string());
+        crate::log::stderr_ln(&format!("warning: no agent bound; owner `{owner}`"));
+        return Ok(owner);
     };
     let model = store.and_then(|s| s.session_model(&agent.host_session_id).ok().flatten());
     Ok(match model {
@@ -145,6 +159,20 @@ fn remember_with(
     pause: std::time::Duration,
 ) -> Result<()> {
     let shown = path.display().to_string();
+    store_claim(store, path, agent, task, attempts, pause).with_context(|| {
+        format!("claim not stored; {shown} stays locked, run `rtok worktree adopt` once the store is free")
+    })
+}
+
+/// [`remember`] without the advice: a caller that takes the worktree back words its own.
+fn store_claim(
+    store: Option<&Store>,
+    path: &Path,
+    agent: &str,
+    task: &str,
+    attempts: u32,
+    pause: std::time::Duration,
+) -> Result<()> {
     let path = crate::fs::canon(path).to_string_lossy().into_owned();
     let Some(store) = store else {
         return Ok(());
@@ -153,9 +181,7 @@ fn remember_with(
         store.claim_worktree(&path, agent, task)?;
         store.take_pending_worktree(&path).map(drop)
     })
-    .with_context(|| {
-        format!("claim not stored; {shown} stays locked, run `rtok worktree adopt` once the store is free")
-    })
+    .map_err(Into::into)
 }
 
 /// Release the open claim on `path`, retrying like [`remember`]. An unreleased claim keeps its
@@ -235,21 +261,52 @@ pub fn add(
     cwd: &Path,
     wt: &crate::config::Worktree,
     id: (&str, Option<&str>),
-    agent: Option<&AgentDetail>,
-    owner_flag: Option<String>,
+    who: (Option<&AgentDetail>, Option<String>),
+    auto_add: bool,
+) -> Result<super::add::Plan> {
+    add_with(super::add::Seams::HOST, store, cwd, wt, id, who, auto_add)
+}
+
+/// [`add`] on stand-ins for the volume and for git. All or nothing (T970): a step that fails
+/// after the worktree exists takes back the worktree, its branch and the claim.
+pub fn add_with(
+    seams: super::add::Seams,
+    store: Option<&Store>,
+    cwd: &Path,
+    wt: &crate::config::Worktree,
+    id: (&str, Option<&str>),
+    (agent, owner_flag): (Option<&AgentDetail>, Option<String>),
     auto_add: bool,
 ) -> Result<super::add::Plan> {
     let owner = owner(owner_flag, agent, store)?;
     let agent_id = agent.map(|a| a.id.as_str());
-    let plan = super::add::run(cwd, &wt.root, id, (&owner, agent_id))?;
+    let added = super::add::run(cwd, wt, seams, id, (&owner, agent_id), store)?;
+    // T523: a retry finds its worktree claimed, seeded and registered by the add that made it.
+    let (plan, mut undo) = match added {
+        super::add::Added::Existing(plan) => return Ok(plan),
+        super::add::Added::New(plan, undo) => (plan, undo),
+    };
+    if let Some(agent) = agent_id {
+        if let Some(store) = store {
+            undo.claim(store, &plan.path);
+        }
+        store_claim(
+            store,
+            &plan.path,
+            agent,
+            &plan.task,
+            LOCK_ATTEMPTS,
+            LOCK_PAUSE,
+        )
+        .with_context(|| format!("claim not stored; {} removed again", plan.path.display()))?;
+    }
+    // Both are best effort, so the claim goes first: it is the one step that can still fail.
     copy_symbol_index(store, cwd, &plan.path);
     if wt.seed {
         super::seed::from_siblings(cwd, &plan.path, &wt.seed_dirs);
     }
-    if let Some(agent) = agent_id {
-        remember(store, &plan.path, agent, &plan.task)?;
-    }
     register_project(store, auto_add, &plan.path, Some(&plan.branch));
+    undo.keep();
     Ok(plan)
 }
 
@@ -384,27 +441,11 @@ pub fn bind_unattended(
     if hosts.is_empty() {
         bail!("no agent to bind: pass --agent or set RTOK_AGENT_ID");
     }
-    let repo = main.to_string_lossy();
     let host_ids: Vec<i32> = hosts
         .iter()
         .filter_map(|h| store.host_id(h).ok().flatten())
         .collect();
-    // The cwd rule of `agents::link::resolve` (T283.1); only top-level sessions, since a
-    // sub-agent shares its parent's cwd and would make every repository ambiguous.
-    let mut here: Vec<_> = store
-        .live_agents(idle)?
-        .into_iter()
-        .filter(|a| host_ids.contains(&a.host_id) && a.parent_key.is_empty())
-        .filter(|a| {
-            a.cwd
-                .as_deref()
-                .is_some_and(|c| crate::fs::same_dir(c, &repo))
-        })
-        .collect();
-    if here.len() == 1 {
-        let agent = store
-            .agent_detail(&here.remove(0).id)?
-            .context("the live agent vanished")?;
+    if let Some(agent) = sole_live_agent(store, &host_ids, &main, idle)? {
         return bind(Some(store), path, &agent, None, task, true, auto_add);
     }
     let task = task_of(path, task, &record)?;
@@ -423,6 +464,36 @@ pub fn bind_unattended(
         pending: true,
         branch: record.branch.clone(),
     })
+}
+
+/// The one live top-level agent of `host_ids` working in `repo`; `None` with none or several,
+/// since guessing would hand the worktree to another agent.
+pub fn sole_live_agent(
+    store: &Store,
+    host_ids: &[i32],
+    repo: &Path,
+    idle: &str,
+) -> Result<Option<AgentDetail>> {
+    let repo = repo.to_string_lossy();
+    // The cwd rule of `agents::link::resolve` (T283.1); only top-level sessions, since a
+    // sub-agent shares its parent's cwd and would make every repository ambiguous.
+    let mut here: Vec<_> = store
+        .live_agents(idle)?
+        .into_iter()
+        .filter(|a| host_ids.contains(&a.host_id) && a.parent_key.is_empty())
+        .filter(|a| {
+            a.cwd
+                .as_deref()
+                .is_some_and(|c| crate::fs::same_dir(c, &repo))
+        })
+        .collect();
+    if here.len() != 1 {
+        return Ok(None);
+    }
+    let agent = store
+        .agent_detail(&here.remove(0).id)?
+        .context("the live agent vanished")?;
+    Ok(Some(agent))
 }
 
 #[cfg(test)]
@@ -449,6 +520,18 @@ mod tests {
             locked: Some(format!("claude | t1 | 2026-10-01 | agent {agent}")),
             ..Record::default()
         }
+    }
+
+    #[test]
+    fn an_agent_flag_holding_a_provider_and_model_says_it_wants_an_id() {
+        let err = caller(None, Some("OpenAI / GPT-6"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.starts_with("--agent OpenAI / GPT-6: not an rtok agent id")
+                && err.contains("rtok agents whoami"),
+            "{err}"
+        );
     }
 
     #[test]

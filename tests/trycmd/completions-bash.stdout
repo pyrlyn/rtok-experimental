@@ -97,6 +97,9 @@ _rtok() {
             rtok,report)
                 cmd="rtok__subcmd__report"
                 ;;
+            rtok,review)
+                cmd="rtok__subcmd__review"
+                ;;
             rtok,run)
                 cmd="rtok__subcmd__run"
                 ;;
@@ -597,6 +600,9 @@ _rtok() {
                 ;;
             rtok__subcmd__help,report)
                 cmd="rtok__subcmd__help__subcmd__report"
+                ;;
+            rtok__subcmd__help,review)
+                cmd="rtok__subcmd__help__subcmd__review"
                 ;;
             rtok__subcmd__help,run)
                 cmd="rtok__subcmd__help__subcmd__run"
@@ -1184,7 +1190,7 @@ _rtok() {
 
     case "${cmd}" in
         rtok)
-            opts="-h -V --config --help --version hook mcp proxy web tui stats discover bench doctor worktree task batch info agents agent setup run filter expand archive completions man plugins config memory docs graph guard dashboard demon otel logs report help"
+            opts="-h -V --config --help --version hook mcp proxy web tui stats discover bench doctor worktree task batch info agents agent setup run filter expand archive completions man plugins config memory docs review graph guard dashboard demon otel logs report help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2912,17 +2918,21 @@ _rtok() {
             return 0
             ;;
         rtok__subcmd__doctor)
-            opts="-h --instructions --json --fix --yes --dry-run --stat --only --agent --config --help"
+            opts="-h --instructions --json --fix --yes --dry-run --stat --only --agent --project --config --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
                 --only)
-                    COMPREPLY=($(compgen -W "broken-hooks duplicate-hooks duplicate-mcp permissions" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "broken-hooks duplicate-hooks duplicate-mcp stale-skills permissions" -- "${cur}"))
                     return 0
                     ;;
                 --agent)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --project)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -3830,7 +3840,7 @@ _rtok() {
             return 0
             ;;
         rtok__subcmd__help)
-            opts="hook mcp proxy web tui stats discover bench doctor worktree task batch info agents setup run filter expand archive completions man plugins config memory docs graph guard dashboard demon otel logs report help"
+            opts="hook mcp proxy web tui stats discover bench doctor worktree task batch info agents setup run filter expand archive completions man plugins config memory docs review graph guard dashboard demon otel logs report help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -5132,6 +5142,20 @@ _rtok() {
             return 0
             ;;
         rtok__subcmd__help__subcmd__report)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rtok__subcmd__help__subcmd__review)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -6501,6 +6525,60 @@ _rtok() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        rtok__subcmd__review)
+            opts="-h --range --diff --budget --max-related --context --max-defs --dry-run --print-prompt --json --provider --model --base-url --config --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --range)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --diff)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --budget)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --max-related)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --context)
+                    COMPREPLY=($(compgen -W "digest none full" -- "${cur}"))
+                    return 0
+                    ;;
+                --max-defs)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --provider)
+                    COMPREPLY=($(compgen -W "anthropic openai" -- "${cur}"))
+                    return 0
+                    ;;
+                --model)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --base-url)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --config)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         rtok__subcmd__run)
             opts="-h --agent --no-ref --config --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
@@ -7560,7 +7638,7 @@ _rtok() {
             return 0
             ;;
         rtok__subcmd__worktree__subcmd__list)
-            opts="-h --json --config --help"
+            opts="-h --json --sizes --config --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

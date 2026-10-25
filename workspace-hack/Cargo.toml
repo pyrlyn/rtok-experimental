@@ -40,9 +40,7 @@ memchr = { version = "2" }
 num-traits = { version = "0.2", features = ["i128"] }
 once_cell = { version = "1" }
 percent-encoding = { version = "2" }
-ppv-lite86 = { version = "0.2", default-features = false, features = ["simd", "std"] }
-rand = { version = "0.9" }
-rand_chacha = { version = "0.9", default-features = false, features = ["std"] }
+rand = { version = "0.10" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "dfa-search", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
 roxmltree = { version = "0.21" }

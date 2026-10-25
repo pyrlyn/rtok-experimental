@@ -20,7 +20,7 @@ use rtok_plugin_sdk::{
     Class, Ctx, DashboardPage, Manifest, Measurement, Plugin, Surface, ToolResultRef, WireRequest,
 };
 
-pub struct Compress;
+pub struct CompressPlugin;
 
 thread_local! {
     // The proxy filter runs on one blocking thread per request and has no handle to the proxy,
@@ -33,7 +33,7 @@ pub(crate) fn take_offered() -> Vec<String> {
     OFFERED.with(|o| std::mem::take(&mut *o.borrow_mut()))
 }
 
-impl Plugin for Compress {
+impl Plugin for CompressPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "compress",
@@ -248,7 +248,7 @@ mod tests {
         archive_rewrite(ANTHROPIC.tool_results(&mut body), &Ctx::new(&cx));
         let after_archive = body.clone();
         assert!(
-            Compress
+            CompressPlugin
                 .proxy_filter(&mut WireRequest::new(&ANTHROPIC, &mut body), &Ctx::new(&cx))
                 .is_empty()
         );

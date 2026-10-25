@@ -45,9 +45,9 @@ pub fn redact_private(input: &str) -> std::borrow::Cow<'_, str> {
 /// One line in the hook index: titles only; names the MCP tools that fetch bodies (T293).
 const INDEX_GUIDE: &str = "titles only; mem_search this turn; mem_get matching id for body";
 
-pub struct Memory;
+pub struct MemoryPlugin;
 
-impl Plugin for Memory {
+impl Plugin for MemoryPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "memory",
@@ -776,14 +776,14 @@ mod tests {
         let ev = PromptSubmit {
             prompt: "remember: hooks fail open under 10 ms",
         };
-        let first = Memory.prompt_submit(&ev, &ctx).unwrap();
+        let first = MemoryPlugin.prompt_submit(&ev, &ctx).unwrap();
         assert_eq!(first.text, "saved note 1");
-        let second = Memory.prompt_submit(&ev, &ctx).unwrap();
+        let second = MemoryPlugin.prompt_submit(&ev, &ctx).unwrap();
         assert_eq!(second.text, "saved note 1");
         let plain = PromptSubmit {
             prompt: "just a question",
         };
-        assert!(Memory.prompt_submit(&plain, &ctx).is_none());
+        assert!(MemoryPlugin.prompt_submit(&plain, &ctx).is_none());
     }
 
     #[test]
@@ -847,7 +847,7 @@ mod tests {
         let ev = PromptSubmit {
             prompt: "walrus journal",
         };
-        let inj = Memory
+        let inj = MemoryPlugin
             .prompt_submit(&ev, &ctx)
             .expect("prompt_recall on by default");
         assert!(inj.text.starts_with(INDEX_GUIDE), "{}", inj.text);
@@ -870,7 +870,7 @@ mod tests {
         let ev = PromptSubmit {
             prompt: "tell me about hooks fail open",
         };
-        assert!(Memory.prompt_submit(&ev, &ctx).is_none());
+        assert!(MemoryPlugin.prompt_submit(&ev, &ctx).is_none());
     }
 
     const PLANTED_TITLE: &str = "p29-gate-arctic-tern";
@@ -1213,7 +1213,7 @@ mod tests {
     #[test]
     fn mcp_surface_stays_within_sixty_description_tokens() {
         let cx = crate::plugin::Runtime::in_memory("t691-surface").unwrap();
-        let total: i64 = Memory
+        let total: i64 = MemoryPlugin
             .mcp_tools()
             .iter()
             .map(|t| i64::from(cx.estimate(t.description, Class::Prose)))
@@ -1337,7 +1337,7 @@ mod tests {
         let ev = PromptSubmit {
             prompt: "remember: worktree note",
         };
-        Memory.prompt_submit(&ev, &Ctx::new(&cx)).unwrap();
+        MemoryPlugin.prompt_submit(&ev, &Ctx::new(&cx)).unwrap();
         cx.cwd = Some(main.to_string_lossy().into_owned());
         let inj = recall(&Ctx::new(&cx)).unwrap();
         assert!(inj.text.contains("worktree note"), "{}", inj.text);
@@ -1383,7 +1383,7 @@ mod tests {
     fn recall_order(cx: &crate::plugin::Runtime, prompt: &str) -> Vec<&'static str> {
         use rtok_plugin_sdk::PromptSubmit;
         let ev = PromptSubmit { prompt };
-        let Some(inj) = Memory.prompt_submit(&ev, &Ctx::new(cx)) else {
+        let Some(inj) = MemoryPlugin.prompt_submit(&ev, &Ctx::new(cx)) else {
             return Vec::new();
         };
         let mut at: Vec<(usize, &'static str)> = ["plain", "linked"]
@@ -1514,7 +1514,7 @@ mod tests {
     fn recall_text(cx: &crate::plugin::Runtime, prompt: &str) -> String {
         use rtok_plugin_sdk::PromptSubmit;
         let ev = PromptSubmit { prompt };
-        Memory
+        MemoryPlugin
             .prompt_submit(&ev, &Ctx::new(cx))
             .map_or_else(String::new, |i| i.text)
     }
@@ -1634,17 +1634,20 @@ mod tests {
             tool_input: &json!({"command": "cargo test"}),
             tool_response: &json!("sk-ant-abcdefghijklmnopqrstuvwxyz"),
         };
-        assert!(Memory.post_tool(&ev, &ctx).is_none());
-        assert!(Memory.post_tool(&ev, &ctx).is_none());
+        assert!(MemoryPlugin.post_tool(&ev, &ctx).is_none());
+        assert!(MemoryPlugin.post_tool(&ev, &ctx).is_none());
         let hits = cx.store.search_observations(None, "cargo", 5).unwrap();
         assert_eq!(hits.len(), 1, "{hits:?}");
         let body = obs_get(&cx, hits[0].id).unwrap().unwrap();
         assert!(body.contains("cargo test"), "{body}");
         assert!(!body.contains("sk-ant-"), "{body}");
         assert!(body.len() <= 400, "{}", body.len());
+        // T927: storing an observation is not a saving, so it writes no row, not even a cost.
         let rows = cx.store.list_measurements("memory").unwrap();
-        assert_eq!(rows.iter().filter(|r| r.kind == "observe").count(), 1);
+        assert_eq!(rows.iter().filter(|r| r.kind == "observe").count(), 0);
         assert_eq!(rows.iter().filter(|r| r.kind == "obs_get").count(), 1);
+        let totals = cx.store.measurement_totals().unwrap();
+        assert!(!totals.iter().any(|t| t.kind == "observe"), "{totals:?}");
     }
 
     #[test]
@@ -1657,14 +1660,12 @@ mod tests {
             tool_input: &json!({"command": "cargo test"}),
             tool_response: &json!("ok"),
         };
-        assert!(Memory.post_tool(&ev, &Ctx::new(&cx)).is_none());
+        assert!(MemoryPlugin.post_tool(&ev, &Ctx::new(&cx)).is_none());
         // A slow host re-delivers the call long after the narrative window closed (T501).
         cx.store.set_observation_ts("t501-obs", 0).unwrap();
-        assert!(Memory.post_tool(&ev, &Ctx::new(&cx)).is_none());
+        assert!(MemoryPlugin.post_tool(&ev, &Ctx::new(&cx)).is_none());
         let hits = cx.store.search_observations(None, "cargo", 5).unwrap();
         assert_eq!(hits.len(), 1, "{hits:?}");
-        let rows = cx.store.list_measurements("memory").unwrap();
-        assert_eq!(rows.iter().filter(|r| r.kind == "observe").count(), 1);
     }
 
     #[test]
@@ -1711,7 +1712,7 @@ mod tests {
         let ev = rtok_plugin_sdk::PromptSubmit {
             prompt: "walrus cargo",
         };
-        let inj = Memory.prompt_submit(&ev, &ctx).unwrap();
+        let inj = MemoryPlugin.prompt_submit(&ev, &ctx).unwrap();
         let obs_lines: Vec<_> = inj.text.lines().filter(|l| l.starts_with("obs ")).collect();
         assert!(
             !obs_lines.is_empty() && obs_lines.len() <= 2,

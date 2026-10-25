@@ -1,0 +1,94 @@
+# docs: resolve a crate from Cargo.lock, search a cached rustdoc index offline, and fetch from docs.rs only on request.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent" {class: host}
+operator: "Operator\nrtok docs fetch <name>" {class: host}
+docsrs: "docs.rs\ncrate/<name>/<version>/json.zst" {
+  shape: cloud
+  class: host
+}
+
+mcp: "rtok mcp\ndocs_resolve · docs_query · docs_get" {class: surface}
+cli: "rtok docs fetch\nsrc/cli/docs.rs" {class: surface}
+invoke: "src/mcp.rs invoke\nroutes the docs_* tools" {class: core}
+
+docs: "docs plugin (src/plugins/docs/mod.rs), default off" {
+  class: plugin
+  direction: down
+  ingest: "ingest_llms\nllms-full.txt or llms.txt in cwd,\nsplit on # headings" {class: plugin}
+  lock: "resolve_lock\nCargo.lock via toml, safe_part check" {class: plugin}
+  known: "name in Cargo.lock?" {
+    shape: diamond
+    class: plugin
+  }
+  cached: "version cached?" {
+    shape: diamond
+    class: plugin
+  }
+  resolve: "docs_resolve\n{name, version, cached}" {class: plugin}
+  query: "docs_query\nsearch_doc_items: FTS5 MATCH,\nquery_limit hits, snippet_chars" {class: plugin}
+  budget: "keep snippets while the\nestimate stays within max_tokens" {class: plugin}
+  get: "docs_get(id)\nget_doc_item" {class: plugin}
+  meas: "Measurement docs/query\nbefore = full text of the hits considered" {class: plugin}
+  fetch: "fetch_crate\nresolve_lock, GET json.zst" {class: plugin}
+  index: "index_rustdoc\nzstd decode, items that have docs" {class: plugin}
+  ingest -> lock
+  lock -> known
+  known -> resolve: yes
+  known -> cached: "docs_query: yes"
+  cached -> query: yes
+  query -> budget
+  budget -> meas: snippets found
+  fetch -> index
+}
+
+miss: "one-line miss, not an error\nnot in Cargo.lock: <name>\nnot cached: rtok docs fetch <name>" {class: core}
+
+store: "SQLite\ndoc_crates · doc_items · doc_items_fts\nmeasurements" {
+  shape: cylinder
+  class: data
+}
+files: "~/.rtok/docs/<name>/<version>/\nrustdoc.json.zst + .sha256" {
+  shape: stored_data
+  class: data
+}
+sources: "Cargo.lock and llms.txt\nin the working directory" {
+  shape: page
+  class: data
+}
+
+result: "JSON text\nids, path, kind, snippet" {class: host}
+stats: "rtok stats\nplugin docs, kind query" {class: ops}
+
+agent -> mcp: MCP tool call
+mcp -> invoke
+invoke -> docs.ingest
+sources -> docs.ingest: read
+sources -> docs.lock: read
+docs.known -> miss: no
+docs.cached -> miss: no
+docs.resolve -> store: doc_crate_cached
+docs.cached -> store: doc_crate_cached
+docs.query -> store: doc_items_fts
+docs.get -> store: doc_items row
+docs.ingest -> store: sync_doc_crate llms
+invoke -> docs.get: docs_get
+docs.budget -> result
+docs.get -> result
+docs.resolve -> result
+docs.meas -> store
+operator -> cli
+cli -> docs.fetch: run_fetch
+docs.fetch -> docsrs: GET, the only network path
+docs.index -> files: write
+docs.index -> store: replace_doc_crate
+store -> stats: read model

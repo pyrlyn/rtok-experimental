@@ -123,20 +123,26 @@ Inspect hooks, MCP servers and the proxy chain
 Usage: rtok doctor [OPTIONS]
 
 Options:
-      --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
-      --instructions   Also run the instruction-file audit
-      --json           JSON instead of the table
-      --fix            Repair hooks, MCP entries and private data permissions; --yes applies, a pipe
-                       previews
-      --yes            With --fix: apply changes (config edits are backed up; permissions change in
-                       place)
-      --dry-run        With --fix --yes: print the diffs and write nothing
-      --stat           With --fix: stat lines and totals instead of the diffs (a dry run)
-      --only <ONLY>    With --fix: limit it to these problems (repeatable; default: all of them)
-                       [possible values: broken-hooks, duplicate-hooks, duplicate-mcp, permissions]
-      --agent <HOST>   Check (and with --fix, repair) the hooks of one host only (an id of `rtok
-                       agents list`)
-  -h, --help           Print help
+      --config <PATH>     User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
+      --instructions      Also run the instruction-file audit
+      --json              JSON instead of the table
+      --fix               Clean up broken hooks and duplicate hooks and MCP entries, update outdated
+                          rtok skills, and repair private data permissions: a terminal gets a
+                          checklist, a pipe the diff; --yes writes without asking
+      --yes               With --fix: apply changes (config edits are backed up; permissions change
+                          in place)
+      --dry-run           With --fix --yes: print the diffs and write nothing
+      --stat              With --fix: stat lines and totals instead of the diffs (a dry run)
+      --only <ONLY>       With --fix: limit it to these problems (repeatable; default: all of them)
+                          [possible values: broken-hooks, duplicate-hooks, duplicate-mcp,
+                          stale-skills, permissions]
+      --agent <HOST>      Check (and with --fix, repair) the hooks of one host only (an id of `rtok
+                          agents list`)
+      --project [<PATH>]  Add setup advice for the git checkout holding PATH (default: the working
+                          directory): language servers, graph index, instruction files, plugins left
+                          off
+  -h, --help              Print help
+
 
 $ rtok info --help
 Version, effective paths, disk usage, error count and proxy status
@@ -1237,7 +1243,7 @@ Commands:
   finish   Hand your task worktree to review: commit what is left, push, open or reuse the PR, ask
            for squash auto-merge, then unlock. Refuses the main checkout, another agent's lock and
            credential files; never closes the task
-  list     Every worktree and orphan with its owner, state, source and build-cache bytes
+  list     Every worktree and orphan with its owner, state and source bytes
   whoami   Your agent, where new worktrees go, the worktree you are in and the ones you hold
   gc       Remove merged, clean, idle worktrees with their branches; drop records of deleted ones
   clean    Delete idle tagged build caches (`CACHEDIR.TAG`) and keep the worktrees; dry run without
@@ -1250,13 +1256,14 @@ Options:
   -h, --help           Print help
 
 $ rtok worktree list --help
-Every worktree and orphan with its owner, state, source and build-cache bytes
+Every worktree and orphan with its owner, state and source bytes
 
 Usage: rtok worktree list [OPTIONS]
 
 Options:
       --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
       --json           JSON instead of the table
+      --sizes          Also walk every build cache for its bytes (slow with large target/ folders)
   -h, --help           Print help
 
 $ rtok worktree whoami --help
@@ -1326,13 +1333,15 @@ Create the worktree for a task: one location, one name, one locked owner; prints
 Usage: rtok worktree add [OPTIONS] <TASK> [SLUG]
 
 Arguments:
-  <TASK>  Task id, e.g. `t158`; directory `<repo>-<task>`, branch `<task>[-<slug>]`
-  [SLUG]  Optional branch suffix
+  <TASK>  Task id, e.g. `t158`, or `t158 read-hook-same-path` as one argument; directory
+          `<repo>-<task>`, branch `<task>[-<slug>]`
+  [SLUG]  Optional branch suffix (spaces become dashes, as in the one-argument form)
 
 Options:
       --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
       --owner <OWNER>  Who holds it, as `<provider> / <model>`; written into the lock reason.
-                       Defaults to `<host> / <model>` of the agent
+                       Defaults to `<host> / <model>` of the agent, else `RTOK_OWNER`, else the
+                       login user
       --agent <AGENT>  The rtok agent id (any unique prefix) to bind it to; defaults to
                        `RTOK_AGENT_ID`
       --no-seed        Do not seed `[worktree] seed_dirs` from a sibling checkout this time

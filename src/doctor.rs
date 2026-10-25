@@ -32,6 +32,9 @@ mod mcp_dupes;
 mod mcp_fix;
 pub mod permissions;
 pub mod probe;
+pub mod project;
+pub mod skills_fix;
+mod trust;
 pub mod web;
 
 /// What `rtok doctor` found, as data.
@@ -72,6 +75,11 @@ pub struct Report {
     #[serde(skip)]
     #[schemars(skip)]
     pub config_notes: Vec<String>,
+    /// Installed rtok skills older than the ones this binary ships (T975). Text only, like
+    /// [`Self::config_notes`]: `rtok doctor --fix --only stale-skills` updates them.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub stale_skills: Vec<crate::agents::skill::Outdated>,
     /// What `rtok agents junk clear` would free by default (T330.6). Text only, and set by the
     /// `rtok doctor` command alone: sizing every agent's folders takes seconds, far too slow
     /// for the dashboard's snapshot.
@@ -99,6 +107,10 @@ pub struct Report {
     #[cfg(feature = "graph")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub graph_health: Vec<crate::plugins::graph::health::score::Weak>,
+    /// Setup advice for one project (T977): `Some` for `rtok doctor --project` and for the
+    /// snapshot of the checkout the process runs in; `page` leaves it `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<project::ProjectReport>,
 }
 
 #[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
@@ -300,18 +312,7 @@ impl Report {
         }
         if let Some(audit) = &self.instructions {
             out.push_str("instructions\n");
-            for r in &audit.rows {
-                out.push_str(&format!(
-                    "  {} {} tokens {}{}\n",
-                    r.name,
-                    r.tokens,
-                    r.path,
-                    if r.warn { " WARN" } else { "" }
-                ));
-            }
-            for (sent, names) in &audit.duplicates {
-                out.push_str(&format!("  duplicate `{sent}` in {}\n", names.join(", ")));
-            }
+            out.push_str(&instruction_lines(audit, "  "));
         }
         if !self.overlaps.is_empty() {
             out.push_str("overlaps\n");
@@ -374,6 +375,15 @@ impl Report {
                 ));
             }
         }
+        if !self.stale_skills.is_empty() {
+            out.push_str("rtok skills outdated (older than this rtok)\n");
+            for s in &self.stale_skills {
+                out.push_str(&format!("  WARN {} ({})\n", s.path.display(), s.host()));
+            }
+            out.push_str(&format!(
+                "  update: {STALE_SKILLS_FIX} (or `rtok agents update`)\n"
+            ));
+        }
         if let Some(bytes) = self.junk_bytes {
             out.push_str(&format!(
                 "junk\n  reclaimable: {}",
@@ -390,8 +400,36 @@ impl Report {
                 out.push_str(&format!("  {note}\n"));
             }
         }
+        // Last: with `--project` it is what the user asked for, and the terminal ends on it.
+        if let Some(project) = &self.project {
+            out.push_str(&project.render());
+        }
         out
     }
+}
+
+/// The command the outdated-skills lines point at.
+pub const STALE_SKILLS_FIX: &str = "`rtok doctor --fix --only stale-skills`";
+
+/// The rows of an instruction audit, one per line under `indent`.
+fn instruction_lines(audit: &Instructions, indent: &str) -> String {
+    let mut out = String::new();
+    for r in &audit.rows {
+        out.push_str(&format!(
+            "{indent}{} {} tokens {}{}\n",
+            r.name,
+            r.tokens,
+            r.path,
+            if r.warn { " WARN" } else { "" }
+        ));
+    }
+    for (sent, names) in &audit.duplicates {
+        out.push_str(&format!(
+            "{indent}duplicate `{sent}` in {}\n",
+            names.join(", ")
+        ));
+    }
+    out
 }
 
 /// Above this much reclaimable junk the doctor line points at `rtok agents junk list`.
@@ -623,17 +661,21 @@ pub fn page(cfg: &Config) -> Result<Report> {
             .and_then(|s| s.get("autoCompactWindow"))
             .map(|v| v.to_string()),
         read_share: read_share(cfg),
-        instructions: cfg
-            .doctor
-            .instructions
-            .then(|| instruction_audit(cfg, settings.as_ref(), claude.as_ref())),
+        instructions: cfg.doctor.instructions.then(|| {
+            instruction_audit(
+                cfg,
+                settings.as_ref(),
+                claude.as_ref(),
+                std::env::current_dir().ok().as_deref(),
+            )
+        }),
         skills: skills_audit(cfg),
         overlaps: {
             let mut lines = overlap_lines(
                 cfg.plugin_enabled("archive", true),
                 cfg.plugin_enabled("memory", true) && cfg.plugins.memory.recall_tokens > 0,
                 sync_block_present(),
-                &detected_hosts(settings.as_ref()),
+                &detected_hosts(cfg),
             );
             lines.extend(crate::agents::mcp::doctor_lines(cfg));
             lines.extend(always_load);
@@ -645,6 +687,12 @@ pub fn page(cfg: &Config) -> Result<Report> {
         },
         tools_rewrite_advice: tools_rewrite_adv,
         config_notes: config_notes(cfg),
+        // Not under test: the skill roots are the real home's.
+        stale_skills: if cfg!(test) {
+            Vec::new()
+        } else {
+            crate::agents::skill::outdated(cfg)
+        },
         junk_bytes: None,
         // File reads only: no `--version` probe, so the 2 s dashboard tick stays cheap.
         agents: crate::agents::HOSTS
@@ -664,6 +712,7 @@ pub fn page(cfg: &Config) -> Result<Report> {
         graph_alerts: graph_alerts(cfg),
         #[cfg(feature = "graph")]
         graph_health: graph_health(cfg),
+        project: None,
     })
 }
 
@@ -696,7 +745,8 @@ fn config_notes(cfg: &Config) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Every config finding of this machine: hooks, then duplicate MCP entries.
+/// Every config finding of this machine: hooks, duplicate MCP entries, then Claude Code's
+/// trust of this folder.
 fn checks(cfg: &Config) -> Vec<hooks::Problem> {
     let probes = hooks::Probes {
         fs: &probe::RealFs,
@@ -705,6 +755,7 @@ fn checks(cfg: &Config) -> Vec<hooks::Problem> {
     };
     let (mut problems, plugins) = hooks::check_with_plugins(cfg, &probes);
     problems.extend(mcp_dupes::check(cfg, &probes, &plugins));
+    problems.extend(trust::check(cfg, &probes));
     problems
 }
 
@@ -721,22 +772,19 @@ fn hook_client_advice(prefers_client: bool, path: Option<&OsStr>) -> Option<Stri
     })
 }
 
-/// Which hosts this machine runs (T59.7): Claude Code when the doctor's settings
-/// probe found the file, OpenCode and Cursor by their config dirs under $HOME.
-fn detected_hosts(settings: Option<&Value>) -> Vec<&'static str> {
-    let mut v = Vec::new();
-    if settings.is_some() {
-        v.push("claude");
-    }
-    let home = crate::config::env_user_home();
-    let has = |p: &str| home.as_ref().is_some_and(|h| h.join(p).exists());
-    if has(".config/opencode") {
-        v.push("opencode");
-    }
-    if has(".cursor") {
-        v.push("cursor");
-    }
-    v
+/// Which of the hosts the overlap checks know this machine runs (T59.7): any variant the one
+/// agent lookup finds (T966), not a config folder an uninstalled app left behind (T426).
+fn detected_hosts(cfg: &Config) -> Vec<&'static str> {
+    ["claude", "opencode", "cursor"]
+        .into_iter()
+        .filter(|&id| {
+            crate::agents::host(id).is_some_and(|a| {
+                a.variants()
+                    .iter()
+                    .any(|v| crate::agents::present(cfg, id, v))
+            })
+        })
+        .collect()
 }
 
 fn sync_block_present() -> bool {
@@ -1156,17 +1204,20 @@ struct Source {
     text: String,
 }
 
+/// `cwd` is the project to audit: the working directory for `rtok doctor`, the analysed root for
+/// `--project`.
 fn instruction_audit(
     cfg: &Config,
     settings: Option<&Value>,
     claude: Option<&Value>,
+    cwd: Option<&Path>,
 ) -> Instructions {
     let mut srcs = Vec::new();
     if let Some(dir) = cfg.doctor.settings_path.parent() {
         push_file(&mut srcs, "claude-user", &dir.join("CLAUDE.md"));
     }
-    if let Ok(cwd) = std::env::current_dir() {
-        push_project_files(&mut srcs, &cwd);
+    if let Some(cwd) = cwd {
+        push_project_files(&mut srcs, cwd);
     }
     let blob = format!(
         "{}{}",
@@ -1697,11 +1748,13 @@ pub(crate) fn report_fixture() -> Report {
         problems: Vec::new(),
         permissions: Vec::new(),
         config_notes: Vec::new(),
+        stale_skills: Vec::new(),
         #[cfg(feature = "graph")]
         graph_alerts: Vec::new(),
         #[cfg(feature = "graph")]
         graph_health: Vec::new(),
         junk_bytes: None,
+        project: None,
     }
 }
 
@@ -1710,7 +1763,44 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// T381: `enabled = false` under toon is the old default, pinned. Doctor names the
+    /// T975: each outdated skill is a WARN line under its host, then one line with the update.
+    #[test]
+    fn outdated_skills_warn_and_name_the_update() {
+        use crate::agents::skill::Outdated;
+        assert!(!report_fixture().to_text().contains("outdated"));
+        let mut report = report_fixture();
+        report.stale_skills = vec![
+            Outdated {
+                key: "claude",
+                path: "/h/.claude/skills/rtok-tasks".into(),
+            },
+            Outdated {
+                key: "antigravity-cli",
+                path: "/h/.gemini/antigravity-cli/skills/rtok".into(),
+            },
+        ];
+        let text = report.to_text();
+        assert!(
+            text.contains("rtok skills outdated (older than this rtok)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  WARN /h/.claude/skills/rtok-tasks (claude)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  WARN /h/.gemini/antigravity-cli/skills/rtok (antigravity)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "  update: `rtok doctor --fix --only stale-skills` (or `rtok agents update`)\n"
+            ),
+            "{text}"
+        );
+    }
+
+    /// T381:`enabled = false` under toon is the old default, pinned. Doctor names the
     /// key, the value, the current default and the line, and does not treat it as an error.
     #[test]
     fn toon_pinned_off_is_a_config_note() {

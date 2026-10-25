@@ -1,0 +1,133 @@
+# memory plugin: notes are saved through a gate into SQLite FTS5, then recalled as title indexes by hooks or fetched by mem_* tools.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent\n(model, user, host hooks)" {class: host}
+
+surfaces: Surfaces {
+  grid-columns: 3
+  class: surface
+  mcp_write: "MCP mem_save" {class: surface}
+  mcp_read: "MCP mem_search · mem_pack\nmem_get · mem_update" {class: surface}
+  h_prompt: "hook UserPromptSubmit" {class: surface}
+  h_start: "hook SessionStart" {class: surface}
+  h_post: "hook PostToolUse" {class: surface}
+  h_pre: "hook PreCompact" {class: surface}
+  h_sub: "hook SubagentStart\nMCP handoff" {class: surface}
+  cli: "rtok memory\nextract · import · export\nsync · retire · pin · forget" {class: surface}
+}
+
+save: "Save path (mod.rs, admit.rs, files.rs)" {
+  class: plugin
+  direction: down
+  strip: "strip_private\n<private> becomes [REDACTED]" {class: plugin}
+  gate: "admit::judge\ntoo short or duplicate?" {
+    shape: diamond
+    class: plugin
+  }
+  upsert: "upsert_note\nkey: project, kind, title\nbody change keeps old text" {class: plugin}
+  linkfiles: "files::link_note\nexisting root-relative files" {class: plugin}
+  emb: "upsert_note_embedding" {class: plugin}
+  strip -> gate
+  gate -> upsert: admit
+  upsert -> linkfiles
+  linkfiles -> emb
+}
+
+refused: "refused: too_short | duplicate\nreturns the stored id" {class: plugin}
+remember: "remember: prefix on the\nfirst prompt line\nupsert kind user, not gated" {class: plugin}
+extract: "extract::run (opt-in)\nuser-named command reads\nthe transcript, returns notes" {class: plugin}
+observe: "observe::capture\nskips mem_* tools, scrubs,\nnarrative capped, dedup hash" {class: plugin}
+checkpoint: "checkpoint.rs (inject plugin)\nPreCompact and SessionEnd\nupsert note titled compact" {class: core}
+
+recall: "Recall (mod.rs, files.rs)" {
+  class: plugin
+  direction: down
+  start: "recall()\nlist_note_titles\nrender_title_index in recall_tokens" {class: plugin}
+  prompt: "prompt_recall\nsearch_notes (FTS or stored hybrid)\nfiles::recall_hits fuses file links\nplus up to two obs lines" {class: plugin}
+  compact: "compact_context\ntitles + this session's\nobservations" {class: plugin}
+  brief: "handoff::build_brief\npointers from this session's\nPreToolUse ledger" {class: plugin}
+}
+
+query: "MCP query path" {
+  class: plugin
+  direction: down
+  search: "mem_search_in\nbm25 re-ranked by use,\nage, pin, project" {class: plugin}
+  pack: "pack::pack_notes\nabstract, paragraph, body\nwithin max_tokens" {class: plugin}
+  get: "mem_get\nfull body, touch_note,\nretired prefix" {class: plugin}
+  update: "mem_update\nretire, supersede, pin\n(never delete)" {class: plugin}
+}
+
+notes_db: "SQLite\nnotes · notes_fts (FTS5)\nnote_versions\nnote_embeddings" {
+  shape: cylinder
+  class: data
+}
+files_db: "note_files\nobservation_files" {
+  shape: cylinder
+  class: data
+}
+obs_db: "observations\nobservations_fts" {
+  shape: cylinder
+  class: data
+}
+rcache: "read_cache\n(written by read)" {
+  shape: cylinder
+  class: data
+}
+ledger: "measurements\nrecall · prompt_recall · pre_compact\nmem_get · mem_pack · observe · brief" {
+  shape: cylinder
+  class: data
+}
+
+model: "What the model sees\ntitle index: id title (Nt body)\nobs lines, tool results, brief" {class: host}
+ops: "rtok memory history\nrtok stats · web" {class: ops}
+
+agent -> surfaces: calls and hook events
+surfaces.mcp_write -> save.strip
+surfaces.cli -> extract
+extract -> save.strip: "mem_save_gated\nkind note"
+surfaces.h_prompt -> remember: first line
+surfaces.h_prompt -> recall.prompt
+surfaces.h_start -> recall.start
+surfaces.h_post -> observe
+surfaces.h_pre -> checkpoint
+surfaces.h_pre -> recall.compact
+surfaces.h_sub -> recall.brief
+surfaces.mcp_read -> query.search
+surfaces.mcp_read -> query.pack
+surfaces.mcp_read -> query.get
+surfaces.mcp_read -> query.update
+
+save.gate -> refused: refuse
+save.upsert -> notes_db
+save.linkfiles -> files_db
+save.emb -> notes_db
+remember -> notes_db
+checkpoint -> notes_db
+observe -> obs_db
+observe -> files_db
+
+notes_db -> recall: titles, FTS hits
+obs_db -> recall.prompt
+obs_db -> recall.compact
+files_db -> recall.prompt: linked notes
+rcache -> recall.prompt: files the session read
+notes_db -> query
+query.update -> notes_db: retired, pinned
+
+recall -> model: Injection (priority 9 to 12)
+query -> model: tool result
+refused -> model
+recall -> ledger
+query -> ledger
+observe -> ledger
+notes_db -> ops: history
+ledger -> ops

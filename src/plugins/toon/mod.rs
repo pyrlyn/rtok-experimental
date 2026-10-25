@@ -15,13 +15,13 @@ use rtok_plugin_sdk::{
     Class, Ctx, DashboardPage, Manifest, Measurement, Plugin, Surface, ToolResultRef, WireRequest,
 };
 
-pub struct Toon;
+pub struct ToonPlugin;
 
 /// How a toon pointer starts; `archive` shares the `archive_decisions` table and uses it to
 /// leave toon's blocks alone.
 pub(crate) const PREFIX: &str = "[toon ";
 
-impl Plugin for Toon {
+impl Plugin for ToonPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "toon",
@@ -394,7 +394,7 @@ mod tests {
     }
 
     fn filter(body: &mut Value, cx: &Ctx) -> Vec<Measurement> {
-        Toon.proxy_filter(&mut WireRequest::new(&ANTHROPIC, body), cx)
+        ToonPlugin.proxy_filter(&mut WireRequest::new(&ANTHROPIC, body), cx)
     }
 
     #[test]

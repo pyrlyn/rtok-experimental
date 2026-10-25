@@ -566,9 +566,11 @@ fn agent_row(
     v: &crate::agents::Variant,
     cfg: &Config,
 ) -> AgentListRow {
-    let present = crate::agents::present(v);
-    let app = crate::agents::app_path(v).map(|p| p.display().to_string());
-    let version = app.as_ref().map(|_| crate::agents::app_version(v));
+    let app = crate::agents::locate(cfg, a.id(), v).map(|p| p.display().to_string());
+    let present = app.is_some();
+    let version = app
+        .as_ref()
+        .map(|_| crate::agents::app_version(cfg, a.id(), v));
     let config = a
         .files(cfg, v.kind)
         .iter()
@@ -674,7 +676,11 @@ fn doctor_for_snapshot(cfg: &Config) -> DoctorRead {
         cfg.doctor.mcp_json.display()
     );
     let cfg = cfg.clone();
-    doctor_from(&DOCTOR, key, move || doctor(&cfg).ok())
+    doctor_from(&DOCTOR, key, move || {
+        let mut report = doctor(&cfg).ok()?;
+        report.project = doctor::project::audit_cwd(&cfg);
+        Some(report)
+    })
 }
 
 /// [`doctor_for_snapshot`] over any cache and probe, so a test can pass a probe that blocks.
@@ -1116,7 +1122,7 @@ fn services_page_text(cfg: &Config) -> Option<String> {
 
 /// The Worktrees page (T232): [`crate::worktree::list::rows`]'s rows rendered
 /// through its own [`crate::worktree::list::to_table`] — the exact `worktree list`
-/// table (path, branch, owner, state, age, `target/` size), so `worktree list` can
+/// table (path, branch, owner, state, age, source size; build caches unsized, T936), so `worktree list` can
 /// join `COMMAND_PAGES`; `gc`/`clean` stay CLI-only verdicts, not model data.
 /// `usage` walks every worktree's file tree — real cost in a checkout with a built
 /// `target/`, tens of seconds in this one — far too slow for a 2 s tick, so this

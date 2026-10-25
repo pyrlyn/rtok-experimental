@@ -467,7 +467,7 @@ fn running(cfg: &Config) -> impl Fn(&str) -> bool {
     move |id: &str| {
         let hid = store.as_ref().and_then(|s| s.host_id(id).ok().flatten());
         let by_session = hid.is_some_and(|h| live.iter().any(|r| r.host_id == h));
-        by_session || (probe && host(id).is_some_and(|a| host_running(a, &RealProcs)))
+        by_session || (probe && host(id).is_some_and(|a| host_running(cfg, a, &RealProcs)))
     }
 }
 

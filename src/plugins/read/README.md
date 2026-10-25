@@ -5,7 +5,7 @@ Five MCP tools instead of seventy-eight, and no per-turn banner.
 | | |
 |---|---|
 | Surfaces | MCP `read`, `search`, `tree`; PreToolUse(Read) advice |
-| Spec | the `spec (replaces)` column of the catalogue in `plan.md` §1 |
+| Spec | the **Replaces** column of [`docs/plugins.md`](../../../docs/plugins.md) |
 | Default | on |
 
 ## Tools
@@ -33,12 +33,18 @@ Five MCP tools instead of seventy-eight, and no per-turn banner.
   points at `read(mode=diff)` instead.
   Never for files under 32 K, and never for a native `Read` with `limit` 1..=`range_max_lines`
   (300; T127, T383): the host's `Edit` wants a native `Read` first and an MCP `read` does not
-  count, so a ranged Read is the edit gate. Every deny records a `read`/`deny` cost row.
+  count, so a ranged Read is the edit gate. Never for a path MCP `read` cannot serve (T930):
+  an image or PDF, or a path its root guard refuses (scratchpad logs, task outputs,
+  `~/.cargo/registry`), where a deny only pushes the agent to `cat`/`sed`. Every deny records
+  a `read`/`deny` cost row.
 
 Root guard: paths must be under cwd or `allow_paths`. In `rtok mcp` (T351) every worktree of the
 cwd's repository (`git worktree list`, re-read at most every 30 s, only after a path failed the
 cheap checks) and every `file://` root of the client's `roots/list` answer count too; host
 scratchpads and any other directory stay outside, so `allow_paths` is the escape hatch.
+The refusal names both ways out: the host's own file tool and `allow_paths` (T972). A missing
+file under a directory named like one of those worktrees (an old worktree root) names where the
+same file is now.
 
 ## Config
 

@@ -1,0 +1,90 @@
+# proxy plugin: every LLM request is recorded, optionally rewritten by plugin proxy_filter hooks, forwarded and its usage stored.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent\nANTHROPIC_BASE_URL /\nOPENAI_BASE_URL" {class: host}
+
+llm: "LLM provider API\n(upstream per wire or lane)" {
+  shape: cloud
+  class: host
+}
+
+proxy: "rtok proxy\nsrc/proxy/mod.rs handle()\nbind 127.0.0.1, fallback route" {class: surface}
+
+guards: "hop count < MAX_HOPS\nlane gate (max_in_flight)\nwire::for_path(path)" {class: core}
+
+plain: "plain()?\n[proxy] enabled, [core] enabled,\n[plugins.proxy] enabled\nor already shaped by a hop" {
+  shape: diamond
+  class: core
+}
+
+forward_plain: "byte-identical forward\nlive::push only" {class: core}
+
+shaping: "plugin proxy (src/proxy/ drives it)" {
+  class: plugin
+  direction: down
+  route: "route::apply\nlane model routing (opt-in)" {class: plugin}
+  record: "record()\nupsert_session + insert_call" {class: plugin}
+  mode: "mode = compress\nand lane policy.compress?" {
+    shape: diamond
+    class: plugin
+  }
+  compress: "compress()\nfor each enabled plugin:\nproxy_filter(WireRequest)\ncx.record(Measurement)" {class: plugin}
+  rest: "noise::strip\nprepare (stream_options)\ncontext_edits\nrewrite_tools\nflex::apply" {class: plugin}
+  route -> record
+  record -> mode
+  mode -> compress: yes
+  compress -> rest
+  mode -> rest: no
+}
+
+filters: "proxy_filter plugins\narchive, json_tree,\ntoon, compress" {class: plugin}
+
+cache: "semantic cache hit?\n[plugins.proxy.semantic_cache]\nenabled, lane allowed" {
+  shape: diamond
+  class: plugin
+}
+cached: "cache_response\nsemantic_cache_hit row,\nno upstream call" {class: plugin}
+
+tee: "flex::send, then tee task\nstreams SSE chunks unchanged\nbuffer capped at MAX_BODY_BYTES" {class: plugin}
+finish: "finish()\ncall ms, call_io,\ncache store,\nusage_from_response" {class: plugin}
+
+store: "SQLite\ncalls · call_io · usage\ntokens · measurements" {
+  shape: cylinder
+  class: data
+}
+blobs: "archive_dir/<id>\noriginal text for expand <id>" {
+  shape: stored_data
+  class: data
+}
+
+ops: "rtok stats · tui · web\nGET /live, GET /health" {class: ops}
+
+agent -> proxy: API request
+proxy -> guards
+guards -> plain
+plain -> forward_plain: yes
+forward_plain -> llm
+plain -> shaping.route: no
+shaping.compress -> filters
+filters -> blobs: originals
+shaping.record -> store: calls row
+shaping.compress -> store: Measurement rows
+shaping.rest -> cache
+cache -> cached: hit
+cache -> tee: miss
+cached -> agent: stored response
+tee -> llm: rewritten request
+llm -> tee: response stream
+tee -> agent: response unchanged
+tee -> finish: after the stream ends
+finish -> store: usage + tokens
+store -> ops

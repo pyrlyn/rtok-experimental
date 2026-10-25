@@ -1,0 +1,81 @@
+# checkpoint: PreCompact and SessionEnd distil the transcript into a note; SessionStart restores it under a budget.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent\ncompacts, ends and starts sessions" {class: host}
+transcript: "transcript JSONL\ntranscript_path from the hook event" {
+  shape: page
+  class: host
+}
+
+pre: "hook PreCompact" {class: surface}
+end: "hook SessionEnd" {class: surface}
+start: "hook SessionStart\nsource = compact | startup" {class: surface}
+
+inject: "inject plugin\npre_compact / session_start" {class: core}
+hooks: "src/hooks/mod.rs\nSessionEnd branch, catch_unwind" {class: core}
+
+checkpoint: "checkpoint (src/plugins/checkpoint.rs)" {
+  class: plugin
+  direction: down
+  save: "save: kind checkpoint:<session>\nsave_session: kind session:<session>" {class: plugin}
+  extract: "extract_path streams the file\nworth_parsing prefilter, then JSON parse" {class: plugin}
+  cp: "Checkpoint\nlast 20 typed prompts, paths by Action,\nlast 8 error lines, skill bodies" {class: plugin}
+  ids: "attach_ids\nsession_live_archives, newest first" {class: plugin}
+  fits: "render() still within\nmemory.checkpoint_tokens?" {
+    shape: diamond
+    class: plugin
+  }
+  write: "upsert_note\ntitle compact: one row per\n(project, kind, title)" {class: plugin}
+  offer: "offer (compact)\noffer_session (startup)" {class: plugin}
+  startup: "source = startup and\nmemory.startup_recall?" {
+    shape: diamond
+    class: plugin
+  }
+  render: "render_offer\nredact_private, fit_budget" {class: plugin}
+  last: "last_paths(cx, root)" {class: plugin}
+  save -> extract
+  extract -> cp
+  cp -> ids
+  ids -> fits
+  fits -> ids: "yes: try next id"
+  fits -> write: "no: drop that id, stop"
+  offer -> render
+  startup -> offer: yes
+}
+
+store: "SQLite\nnotes · plugin state kv\narchive_decisions · measurements" {
+  shape: cylinder
+  class: data
+}
+
+model: "additionalContext\ncheckpoint note, priority 9" {class: host}
+repo_map: "graph repo map and\nmemory files:\npersonalised by last_paths" {class: ops}
+
+agent -> pre
+agent -> end
+agent -> start
+pre -> inject
+inject -> checkpoint.save: pre_compact
+end -> hooks
+hooks -> checkpoint.save: save_session
+transcript -> checkpoint.extract: read once, line by line
+checkpoint.ids -> store: read live archive ids
+checkpoint.write -> store: notes row + typed/skipped counts
+start -> inject
+inject -> checkpoint.offer: "source = compact: offer"
+inject -> checkpoint.startup: source = startup
+store -> checkpoint.offer: latest note
+checkpoint.offer -> store: "startup: Measurement memory/handoff"
+checkpoint.render -> model: Injection from inject
+model -> agent
+store -> checkpoint.last: latest checkpoint note
+checkpoint.last -> repo_map

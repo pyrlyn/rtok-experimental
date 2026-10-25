@@ -15,12 +15,24 @@ so with `backend = "lsp"` only the first project of that scope answers and the r
 The server is picked from the workspace root — rtok never links or shells out to
 anything else (D6); it spawns one of these from `PATH`:
 
-| Root marker | Server command |
-|-------------|----------------|
-| `Cargo.toml` | `rust-analyzer` |
-| `compile_commands.json` | `clangd` |
-| `tsconfig.json` | `typescript-language-server --stdio` |
-| `pubspec.yaml` | `dart language-server` |
+| Root marker | Server command | Install |
+|-------------|----------------|---------|
+| `Cargo.toml` | `rust-analyzer` | `rustup component add rust-analyzer` |
+| `compile_commands.json` | `clangd` | `brew install llvm` (macOS) or `apt install clangd` (Debian/Ubuntu) |
+| `tsconfig.json` | `typescript-language-server --stdio` | `npm install -g typescript-language-server typescript` |
+| `pubspec.yaml` | `dart language-server` | the Dart SDK: https://dart.dev/get-dart |
+
+Other languages (JavaScript, Go, Python, Java, Kotlin, Ruby, PHP, ...) stay on the tags index.
+
+To see which of these a checkout needs, run `rtok doctor --project [PATH]` (default: the working
+directory). It counts source files per language the way the index walks them (`.gitignore` and
+`[plugins.graph] exclude` honoured), says which server is installed, prints the install command
+for a missing one, and notes a missing root marker (for C, how to generate
+`compile_commands.json`). The same section reports the graph index and backend, the
+`AGENTS.md` / `CLAUDE.md` files of that checkout and the plugins left off there. Saving figures
+come only from your own `Measurement` rows of the last 30 days; without rows the line reads
+`no measurements yet`. `--json` puts the section under `project`, and the dashboard's doctor page
+shows it as the `project` panel for the checkout rtok runs in.
 
 The walkthrough below covers Rust and Dart.
 

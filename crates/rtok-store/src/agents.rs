@@ -199,6 +199,19 @@ fn main_agent_id(
 }
 
 impl Store {
+    /// True when a sub-agent has registered in this host session (T929): more than one context
+    /// window shares the session, so a surface that cannot tell them apart must not answer one
+    /// with a pointer to what another was shown.
+    pub fn session_has_subagent(&self, session: &str) -> Result<bool> {
+        let mut conn = self.lock()?;
+        Ok(diesel::select(diesel::dsl::exists(
+            agents::table
+                .filter(agents::host_session_id.eq(session))
+                .filter(agents::parent_key.ne("")),
+        ))
+        .get_result(&mut *conn)?)
+    }
+
     /// Ensure the row for this host session (or, when `parent_key` names one, its sub-agent)
     /// exists and is fresh; returns its rtok id (existing on repeat, else a freshly minted
     /// UUIDv4). One indexed upsert on the hot path (`parent_key: None`); a sub-agent first
@@ -482,6 +495,22 @@ mod tests {
         // `register`'s second call passed no activity: the first call's sticks (D34: register
         // never blanks it — that is `touch_agent`'s job).
         assert_eq!(row.activity.as_deref(), Some("Bash: ls"));
+    }
+
+    /// T929: the MCP `read` tool asks whether another context window may share the session.
+    #[test]
+    fn session_has_subagent_is_true_only_once_a_child_row_exists() {
+        let store = Store::open_in_memory().unwrap();
+        let claude = store.host_id("claude").unwrap().unwrap();
+        store
+            .register_agent(claude, "sess-3", None, None, None)
+            .unwrap();
+        assert!(!store.session_has_subagent("sess-3").unwrap());
+        store
+            .register_agent(claude, "sess-3", Some("child"), None, None)
+            .unwrap();
+        assert!(store.session_has_subagent("sess-3").unwrap());
+        assert!(!store.session_has_subagent("sess-4").unwrap());
     }
 
     #[test]

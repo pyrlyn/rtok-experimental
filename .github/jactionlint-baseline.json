@@ -18,6 +18,14 @@
       "message": "untrusted input from the variable BUCKET (inputs.bucket) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first or pass it to the next step with $GITHUB_OUTPUT"
     },
     {
+      "file": ".github/workflows/bump.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "36990d02b7d1d103",
+      "context": "389ce7873c6e83e1",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/bump.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
       "file": ".github/workflows/ci.yml",
       "rule": "unpinned-uses",
       "fingerprint": "8d7b11f84c9c3c53",
@@ -210,36 +218,12 @@
       "message": "action \"pyrlyn/ci/.github/actions/cancel-run@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
     },
     {
-      "file": ".github/workflows/competitor-bench.yml",
+      "file": ".github/workflows/dependabot.yml",
       "rule": "unpinned-uses",
-      "fingerprint": "c63faebe3d4b3de9",
-      "context": "64a7c95b399f8b27",
+      "fingerprint": "11bdbe923603cd9b",
+      "context": "ceb7f11afc51628a",
       "occurrence": 0,
-      "message": "action \"actions/checkout@v4\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
-    },
-    {
-      "file": ".github/workflows/competitor-bench.yml",
-      "rule": "artipacked",
-      "fingerprint": "e941c884afcd68dd",
-      "context": "5daafa57dbdb2b94",
-      "occurrence": 0,
-      "message": "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push"
-    },
-    {
-      "file": ".github/workflows/competitor-bench.yml",
-      "rule": "unpinned-uses",
-      "fingerprint": "9acf03a5e1c97111",
-      "context": "2858864698f02f2a",
-      "occurrence": 0,
-      "message": "action \"actions/setup-python@v5\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
-    },
-    {
-      "file": ".github/workflows/competitor-bench.yml",
-      "rule": "unpinned-uses",
-      "fingerprint": "d20e8be84cd4a942",
-      "context": "287303de6a294874",
-      "occurrence": 0,
-      "message": "action \"actions/upload-artifact@v4\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/dependabot-automerge.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
     },
     {
       "file": ".github/workflows/graph-review-comment.yml",
@@ -339,11 +323,19 @@
     },
     {
       "file": ".github/workflows/pipeline.yml",
-      "rule": "missing-timeout",
-      "fingerprint": "3251edda7fcea613",
-      "context": "8a8120cc08f341df",
+      "rule": "unpinned-uses",
+      "fingerprint": "19dc0f9c5f536de9",
+      "context": "922004ff6955016b",
       "occurrence": 0,
-      "message": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+      "message": "action \"pyrlyn/ci/.github/actions/config@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/pipeline.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "10b726717e2a34a0",
+      "context": "abe5e0308a3cc54a",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/ci.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
     },
     {
       "file": ".github/workflows/release-guard.yml",
@@ -352,6 +344,22 @@
       "context": "081b2e27040f94d3",
       "occurrence": 0,
       "message": "workflow has no \"concurrency:\", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level \"concurrency:\" with a \"group:\" and \"cancel-in-progress: true\""
+    },
+    {
+      "file": ".github/workflows/release-guard.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "fce7b2f5a4fb8554",
+      "context": "36fa504e5f98ad23",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/release-guard.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/sync-docs.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "e3a12b3b9f2ef7dd",
+      "context": "1b04748f461a8cb9",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/sync-docs.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
     }
   ]
 }

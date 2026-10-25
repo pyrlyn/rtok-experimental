@@ -583,4 +583,67 @@ mod tests {
                 .is_none()
         );
     }
+
+    /// Savings bench (`bench/token_savings.sh`): the shipped defaults rewrite the fixture
+    /// catalog to at most 70 % of its tokens, deterministically, so the prompt prefix is
+    /// the same on every request and the change is invisible to whatever model is behind it.
+    #[test]
+    #[allow(clippy::print_stderr)]
+    fn savings_default_config_shrinks_the_fixture_catalog() {
+        let cfg = ToolsRewrite::default();
+        assert!(cfg.enabled && cfg.compact_schema, "tools_rewrite ships on");
+        let original: Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/mcp_catalog_github.json"))
+                .unwrap();
+        let mut once = original.clone();
+        let d = rewrite(&mut once, &cfg, &est()).unwrap();
+        let mut twice = original.clone();
+        rewrite(&mut twice, &cfg, &est()).unwrap();
+        assert_eq!(once.to_string(), twice.to_string(), "byte-stable prefix");
+        let (before, after) = (catalog_tokens(&original), catalog_tokens(&once));
+        let (b_bytes, a_bytes) = (
+            original["tools"].to_string().len(),
+            once["tools"].to_string().len(),
+        );
+        eprintln!(
+            "SAVINGS tools_rewrite: {before} -> {after} est. tokens, {b_bytes} -> {a_bytes} bytes"
+        );
+        assert!(after * 100 <= before * 70, "{before} -> {after}");
+        assert!(d.after_bytes < d.before_bytes);
+    }
+
+    /// Prompt-cache friendliness: a `cache_control` breakpoint on the last tool survives the
+    /// rewrite untouched, and two independent rewrites of the same catalog (with the marker)
+    /// produce byte-identical `tools[]`, so the provider cache prefix stays stable across calls.
+    #[test]
+    fn cache_control_marker_survives_and_prefix_is_byte_stable() {
+        let cfg = ToolsRewrite::default();
+        let mut original: Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/mcp_catalog_github.json"))
+                .unwrap();
+        let marker = serde_json::json!({"type": "ephemeral"});
+        let last = original["tools"].as_array().unwrap().len() - 1;
+        original["tools"][last]["cache_control"] = marker.clone();
+        let outs: Vec<String> = (0..3)
+            .map(|_| {
+                let mut b = original.clone();
+                rewrite(&mut b, &cfg, &est()).unwrap();
+                assert_eq!(b["tools"][last]["cache_control"], marker, "marker kept");
+                let marked = b["tools"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|t| t.get("cache_control").is_some())
+                    .count();
+                assert_eq!(marked, 1, "no marker added or moved");
+                b["tools"].to_string()
+            })
+            .collect();
+        assert!(outs.windows(2).all(|w| w[0] == w[1]), "byte-identical");
+        // Rewriting an already rewritten catalog is a no-op on bytes (idempotent prefix).
+        let mut again: Value =
+            serde_json::json!({"tools": serde_json::from_str::<Value>(&outs[0]).unwrap()});
+        let _ = rewrite(&mut again, &cfg, &est());
+        assert_eq!(again["tools"].to_string(), outs[0], "idempotent");
+    }
 }

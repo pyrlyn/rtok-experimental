@@ -49,10 +49,10 @@ archive ids, which makes A11 easier to hit. To take a task, give it a T-id, a ro
 | A7 | low | Proxy paths with `..` or `%2e%2e` climbed out of the upstream base path | 2 | fixed |
 | A8 | low | Semantic cache ignored `openai-project` in the caller key | 2 | fixed |
 | A9 | info | Web handler comments said the Origin check alone guards apply | 3 | fixed |
-| A10 | high | A checkout's `.rtok.toml` or `.env` can redirect data and keys or run a command | 2, 3 | planned |
-| A11 | medium | HTTP `expand` is always on and resolves any archive by an 8-char prefix | 2, 3 | planned |
+| A10 | high | A checkout's `.rtok.toml` or `.env` can redirect data and keys or run a command | 2, 3 | fixed in T961; [report](T961/done.md) |
+| A11 | medium | HTTP `expand` is always on and resolves any archive by an 8-char prefix | 2, 3 | fixed in T960; [review](T960/review.md) |
 | A12 | low | WASM guests have a fuel limit but no memory limit | 1 | fixed in T962 |
-| A13 | low | Log rotation lock sits in the shared temp dir under a predictable name | 1, 2 | planned |
+| A13 | low | Log rotation lock sits in the shared temp dir under a predictable name | 1, 2 | fixed in T960; [review](T960/review.md) |
 | A14 | low | Existing log files and `~/.rtok` keep their old loose modes | 3 | fixed in T965 |
 | A15 | low | Proxy buffers up to 256 MiB per request with no global cap when lanes are off | 1 | fixed in T965 |
 | A16 | low | `[otel] content = true` by default; a generic `OTEL_EXPORTER_OTLP_ENDPOINT` ships prompts | 3 | fixed in T965 |
@@ -64,6 +64,10 @@ Tests added for A1 to A8: `walk_filter_drops_credential_files_only_when_denied`,
 `openai_project_is_part_of_the_caller`.
 
 ### A10. Project config can redirect egress and credentials (high)
+
+T961 restricts both automatic project sources before merging. Sensitive values remain
+under user control, including legacy aliases; ignored keys are reported without their values.
+See [T961](T961/task.md) for scope and validation.
 
 Where: `crates/rtok-config/src/layers.rs`, `assemble`, `read_dotenv`, `dotenv_pairs`; the
 project layer is `<git root>/.rtok.toml`, the dotenv layer reads the nearest `.env` first.
@@ -88,6 +92,9 @@ tokens elsewhere. Same class as the `.env` issue found in stator's audit.
 
 ### A11. HTTP `expand` reaches the whole archive (medium)
 
+Resolved in T960 with per-runtime archive grants rather than a first-writer session filter;
+see the [implementation and compatibility review](T960/review.md).
+
 Where: `src/mcp.rs` `Server::new` (keeps `expand` listed whatever `tools` says),
 `src/mcp/http.rs` `http_server`, `src/expand.rs` `resolve_id` and `fetch_range`,
 `crates/rtok-store/src/archive_rows.rs` `archive_ids_with_prefix`.
@@ -107,6 +114,9 @@ What: fuel stops an endless guest, but `memory.grow` up to 4 GiB is allowed. Cha
 table) and call `store.limiter`. Why: a bad plugin should fail, not exhaust the hook's memory.
 
 ### A13. Rotation lock in the shared temp dir (low)
+
+Resolved in T960 with a sibling lock and best-effort rotation;
+see the [implementation and compatibility review](T960/review.md).
 
 Where: `crates/rtok-log/src/lib.rs` `open_rotate_lock`.
 What: the lock is `$TMPDIR/rtok-log-rotate-<hash>.lock`, the hash from `DefaultHasher` (fixed

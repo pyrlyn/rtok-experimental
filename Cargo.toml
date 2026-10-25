@@ -225,6 +225,7 @@ trycmd = "1.2.1" # full CLI command-output fixtures in tests/trycmd/
 pulldown-cmark = { version = "0.13", default-features = false } # CommonMark parse of README/docs in tests/docs_structure.rs (T359): unclosed fences, skipped heading levels
 tokio-tungstenite = "0.30" # real WebSocket client for the `rtok web` e2e (tests/web_e2e.rs); already in the tree via axum "ws"
 tiktoken-rs = "0.12.1" # o200k_base token counts in tests/bench_fixtures.rs (rtok#1071 harness tokenizer)
+d2-render = { version = "0.1", default-features = false, features = ["native"] } # T959: renders docs/architecture/*.d2 to SVG in-process (no d2 binary) and stamps source hashes for the freshness gate
 # T17.1. No profile may set `panic = "abort"`: `hooks::dispatch` fails open through five
 # `catch_unwind` sites, and aborting would break the rule that a hook exits 0 on error.
 [profile.dev]

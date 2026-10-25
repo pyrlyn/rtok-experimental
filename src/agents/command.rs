@@ -72,7 +72,7 @@ pub fn install(
         desktop: args.desktop,
         all: args.all,
     };
-    apply_hosts(&mut cfg, &req, args.no_restart)
+    apply_hosts(config_file, &mut cfg, &req, args.no_restart)
 }
 
 /// Where `--project` writes: the post-create entries are checked-in files, so a linked
@@ -149,11 +149,31 @@ pub fn update(
         desktop: args.desktop,
         all: args.all,
     };
-    apply_hosts(&mut cfg, &req, args.no_restart)
+    apply_hosts(config_file, &mut cfg, &req, args.no_restart)
 }
 
-/// Run `req` with the desktop-restart handling every `agents` writer shares.
-fn apply_hosts(cfg: &mut Config, req: &Request, no_restart: bool) -> Result<()> {
+/// Run `req` with the desktop-restart handling every `agents` writer shares. A named host
+/// rtok cannot find is asked for on a terminal first (T966), so the run below finds it.
+fn apply_hosts(
+    config_file: Option<&Path>,
+    cfg: &mut Config,
+    req: &Request,
+    no_restart: bool,
+) -> Result<()> {
+    if req.mode != Mode::Remove {
+        let agents = super::resolve(&req.hosts)?;
+        let want = |k| super::wants(k, req.cli, req.desktop, req.all);
+        super::locate::ask_missing(cfg, config_file, &agents, want)?;
+        // `install` refuses a missing host itself; `update` only lists it as not found, so the
+        // key that would point rtok at it is said here.
+        let absent = super::locate::absent(cfg, &agents, want);
+        if req.mode == Mode::Update && !absent.is_empty() {
+            crate::log::stderr_ln(&style::warn(&format!(
+                "warning: {:#}",
+                super::locate::not_found(&absent)
+            )));
+        }
+    }
     // T141: closes a running desktop app before the write if it would change that host's
     // config, and reopens it after; CLI-only hosts just get a "restart your session" note.
     // The per-host bar lives in `agents::run` (T436.4).

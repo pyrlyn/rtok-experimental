@@ -1,0 +1,98 @@
+# archive: old, large tool results in the live zone become byte-stable pointers; the original stays under expand.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+agent: "Coding agent\nrequest carries tool_result blocks" {class: host}
+pi: "pi\ncontext event before every LLM call" {class: host}
+llm: "LLM provider API" {
+  shape: cloud
+  class: host
+}
+
+proxy: "rtok proxy\nproxy.mode = compress" {class: surface}
+cli: "rtok archive rewrite --stdin\nmessage array JSON on stdin" {class: surface}
+mcp: "rtok mcp\nexpand tool" {class: surface}
+
+registry: "Registry\nproxy_filter of each enabled plugin" {class: core}
+
+archive: "archive plugin (src/plugins/archive/mod.rs)" {
+  class: plugin
+  direction: down
+  pf: "Archive::proxy_filter" {class: plugin}
+  mode: "proxy.mode == compress?" {
+    shape: diamond
+    class: plugin
+  }
+  pi_rw: "pi::rewrite_stdin\npi::tool_results / pi::live_blobs\nrestores text-block arrays" {class: plugin}
+  lanes: "rewrite(tool_results)\nrewrite_blobs: live_blobs = true\nrewrite_skills: skills = true" {class: plugin}
+  live: "outside_live_zone\nturn >= keep_turns" {class: plugin}
+  prior: "cx.archive_decision(tool_use_id)" {
+    shape: diamond
+    class: plugin
+  }
+  small: "estimate < min_tokens?" {
+    shape: diamond
+    class: plugin
+  }
+  put: "cx.put_archive(text)" {class: plugin}
+  shape_it: "pointer(): header + head_lines\n... tail_lines, each line clipped\ntiers = true: tier_live L0 / L1" {class: plugin}
+  dec: "cx.put_archive_decision" {class: plugin}
+  meas: "Measurement plugin archive\nkind pointer, tier_l0, tier_l1,\nlive_blob, skill" {class: plugin}
+  run: "record_run\nplugin_run call + before/after tokens" {class: plugin}
+  pf -> mode
+  mode -> lanes: yes
+  lanes -> live
+  live -> prior
+  prior -> small: none yet
+  small -> put: no
+  put -> shape_it
+  shape_it -> dec
+  dec -> meas
+  meas -> run
+}
+
+untouched: "block passes unchanged\n(no decision written)" {class: core}
+expand_fn: "expand::fetch_range\nresolve_id: 8+ hex prefix\nmark_expanded_recorded" {class: core}
+
+store: "SQLite\narchive · archive_decisions\nmeasurements · calls" {
+  shape: cylinder
+  class: data
+}
+blobs: "archive_dir/<id>\noriginal bytes" {
+  shape: stored_data
+  class: data
+}
+
+model: "tool_result text\n[archived <id8>: N lines · T tokens · expand(<id8>)]\nhead and tail lines" {class: host}
+stats: "rtok stats\nexpand rate per plugin" {class: ops}
+
+agent -> proxy: API request
+proxy -> registry
+registry -> archive.pf: proxy_filter
+pi -> cli: messages
+cli -> archive.pi_rw
+archive.pi_rw -> archive.lanes: same rewrite
+archive.mode -> untouched: no
+archive.live -> untouched: "last keep_turns turns"
+archive.prior -> untouched: "expanded, or toon /\njson_tree pointer"
+archive.prior -> archive.meas: "own pointer stored:\nreplayed byte for byte"
+archive.small -> untouched: yes
+archive.put -> blobs: original
+archive.dec -> store: archive_decisions row
+archive.run -> store: plugin_run, measurements
+archive.meas -> model: pointer replaces content
+model -> llm: forwarded
+agent -> mcp: "expand(<id8>)"
+mcp -> expand_fn
+expand_fn -> store: expanded_ts + expand Measurement
+expand_fn -> blobs: read original
+expand_fn -> agent: original bytes
+store -> stats: read model

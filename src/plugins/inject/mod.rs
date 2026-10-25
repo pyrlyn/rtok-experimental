@@ -11,9 +11,9 @@ use rtok_plugin_sdk::{
 use std::io::Read as _;
 
 /// Catalogue plugin `inject`.
-pub struct Inject;
+pub struct InjectPlugin;
 
-impl Plugin for Inject {
+impl Plugin for InjectPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "inject",

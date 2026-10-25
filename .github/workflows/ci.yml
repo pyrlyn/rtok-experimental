@@ -76,7 +76,7 @@ jobs:
       # Rust toolchain from the last run; mise then skips `rustup toolchain install`.
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
       - uses: ./.github/actions/sccache
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -121,7 +121,7 @@ jobs:
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
       # Installs the Rust version pinned in mise.toml — same toolchain as local.
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
       - uses: ./.github/actions/sccache
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -190,7 +190,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
       - uses: ./.github/actions/sccache
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -244,7 +244,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
       - if: steps.rustup.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
@@ -295,7 +295,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
       - uses: ./.github/actions/sccache
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -327,7 +327,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
       - uses: ./.github/actions/sccache
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -362,7 +362,7 @@ jobs:
       NPM: npm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
           install_args: just node
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -407,7 +407,7 @@ jobs:
       # Rust toolchain from the last run; mise then skips `rustup toolchain install`.
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
           install_args: just rust
       - uses: ./.github/actions/sccache
@@ -440,7 +440,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
           # Only what the check needs, not every tool in mise.toml; mise makes sccache an install
           # dependency of every cargo: tool, so it has to come along.

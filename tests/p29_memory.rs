@@ -183,7 +183,7 @@ fn file_context_cases_recall_the_linked_note() {
             )
             .unwrap();
         let prompt = PromptSubmit { prompt: words };
-        let inj = rtok::plugins::memory::Memory
+        let inj = rtok::plugins::memory::MemoryPlugin
             .prompt_submit(&prompt, &Ctx::new(&rt))
             .expect("recall injects");
         let lines: Vec<&str> = inj.text.lines().skip(1).collect();

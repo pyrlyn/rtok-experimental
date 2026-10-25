@@ -1,0 +1,85 @@
+# rtok proxy: one API request, classified by lane, shaped, forwarded, tee'd for usage.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+  fail: {style: {fill: "#FEE2E2"; stroke: "#DC2626"; border-radius: 8}}
+}
+
+client: "Agent or script\nANTHROPIC_BASE_URL / OPENAI_BASE_URL" {class: host}
+
+handle: "axum fallback → proxy::handle" {class: surface}
+
+lane: "lane::classify\nagent · bulk · batch · files\nembeddings · meta · internal" {class: core}
+hops: "x-rtok-proxied hops" {
+  shape: diamond
+  class: core
+}
+loop: "508: proxy loop" {class: fail}
+gate: "gate: per-lane in-flight cap\n(agent lane has none)" {
+  shape: queue
+  class: core
+}
+full: "queue full" {class: fail}
+
+plain: "plain?\nproxy or core disabled,\nor already proxied" {
+  shape: diamond
+  class: core
+}
+
+shaping: "shape_request (blocking pool)" {
+  class: core
+  route: "route::apply\nmodel routing per lane" {class: core}
+  record: "record\ncalls (api_request:<lane>) · call_io" {class: core}
+  compress: "compress mode?\nPlugin::proxy_filter on\nWire tool results" {class: plugin}
+  noise: "noise::strip\nANSI and control chars" {class: plugin}
+  prepare: "prepare\ninclude_usage and wire shaping" {class: core}
+  ctx: "context_edits\n(context_management)" {class: core}
+  tools: "rewrite_tools (opt-in)" {class: core}
+  flex: "flex::apply\nservice_tier per lane" {class: core}
+  route -> record -> compress -> noise -> prepare -> ctx -> tools -> flex
+}
+
+cache: "semantic_cache\nhit? (opt-in)" {
+  shape: diamond
+  class: plugin
+}
+
+upstream: "Provider API\nAnthropic · OpenAI · Gemini" {
+  shape: cloud
+  class: host
+}
+
+tee: "stream response to client\nand tee a copy" {class: surface}
+finish: "finish (spawned task)\nusage · tokens · call_io\nbatch results" {class: core}
+live: "live view\n(plain traffic, memory only)" {class: ops}
+
+store: "SQLite\ncalls · call_io · usage\ntokens · measurements" {
+  shape: cylinder
+  class: data
+}
+
+client -> handle
+handle -> lane
+lane -> hops
+hops -> loop: at MAX_HOPS
+hops -> gate
+gate -> full: past the line
+gate -> plain
+plain -> upstream: yes, byte-forward
+plain -> shaping.route: no
+shaping.flex -> cache
+cache -> client: hit, cached answer
+cache -> upstream: miss
+upstream -> tee
+tee -> client: unchanged bytes
+tee -> finish
+tee -> live: plain only
+shaping.record -> store
+shaping.compress -> store: Measurement rows
+finish -> store

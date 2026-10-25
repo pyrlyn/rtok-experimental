@@ -1,0 +1,65 @@
+# The Cargo workspace: the rtok package, its two binaries, and the crates it is split into.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+bins: Binaries {
+  class: surface
+  rtok: "rtok\nsrc/main.rs\nevery subcommand" {class: surface}
+  hook: "rtok-hook\nsrc/bin/rtok-hook.rs\nstd-only hook client" {class: surface}
+}
+
+lib: "rtok library (src/)\nsurfaces · plugins · agents · proxy · web" {
+  shape: package
+  class: core
+}
+
+spa: "web/ React SPA\nbuilt to web/dist, embedded by src/web" {
+  shape: page
+  class: ops
+}
+
+crates: crates/ {
+  grid-columns: 3
+  class: plugin
+  config: "rtok-config\nfigment layers, toml_edit,\nreference config" {class: plugin}
+  store: "rtok-store\nDiesel models, migrations,\nStore" {class: plugin}
+  mcpc: "rtok-mcp\nper-host MCP install\nand status core" {class: plugin}
+  agentsdk: "rtok-agent-sdk\nhost-install contract:\nreversible, idempotent" {class: plugin}
+  log: "rtok-log\nrotating text log" {class: plugin}
+  sys: "rtok-sys\nprocess and flock shims" {class: plugin}
+  hookwire: "rtok-hook\nclient ↔ resident wire\n(std only)" {class: plugin}
+  sdk: "rtok-plugin-sdk\nPlugin trait, events,\nMeasurement (D25)" {class: plugin}
+  guest: "rtok-wasm-demo-guest\nexample WASM plugin" {class: plugin}
+}
+
+hack: "workspace-hack\n(cargo hakari)" {
+  shape: package
+  class: host
+}
+
+bins.rtok -> lib
+bins.hook -> crates.hookwire
+lib -> spa: serves
+lib -> crates.config
+lib -> crates.store
+lib -> crates.mcpc
+lib -> crates.agentsdk
+lib -> crates.log
+lib -> crates.sys
+lib -> crates.hookwire
+lib -> crates.sdk
+crates.config -> crates.sdk
+crates.config -> crates.hookwire
+crates.config -> crates.agentsdk
+crates.store -> crates.sdk
+crates.mcpc -> crates.agentsdk
+lib -> crates.guest: "loads as .wasm\n(feature wasm-host)" {style.stroke-dash: 4}
+lib -> hack {style.stroke-dash: 4}

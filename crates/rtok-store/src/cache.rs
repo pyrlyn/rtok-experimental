@@ -50,6 +50,28 @@ impl Store {
             .map_err(Into::into)
     }
 
+    /// A compaction (or a fresh context) dropped what a window had been shown (T929): forget
+    /// the session's re-read cache, and take `context`'s archive rows out of
+    /// [`Self::archive_in_session`]'s reach, so the next identical body is printed whole. The
+    /// bodies stay for `expand`. The cache is dropped for every context of the session: its
+    /// keys do not all name one.
+    pub fn forget_seen(&self, session: &str, context: Option<&str>) -> Result<()> {
+        let mut conn = self.lock()?;
+        diesel::delete(read_cache::table.filter(read_cache::session.eq(session)))
+            .execute(&mut *conn)?;
+        let rows = archive::table.filter(archive::session.eq(session));
+        let set = archive::agent_id.eq(FORGOTTEN_CONTEXT);
+        match context {
+            Some(a) => diesel::update(rows.filter(archive::agent_id.eq(a)))
+                .set(set)
+                .execute(&mut *conn)?,
+            None => diesel::update(rows.filter(archive::agent_id.is_null()))
+                .set(set)
+                .execute(&mut *conn)?,
+        };
+        Ok(())
+    }
+
     /// Drop cache rows for `path` and `path\t…` mode/range keys (T4.4). A prefix compare, not
     /// `LIKE`: `%` and `_` are ordinary file-name characters, and `LIKE` ignores ASCII case.
     pub fn clear_read_cache(&self, session: &str, path: &str) -> Result<()> {

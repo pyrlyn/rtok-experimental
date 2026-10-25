@@ -1,0 +1,71 @@
+# wasm host: a feature-gated loader turns each out-of-tree .wasm file into a sandboxed Plugin.
+direction: down
+
+classes: {
+  host: {style: {fill: "#F1F5F9"; stroke: "#64748B"; border-radius: 8}}
+  surface: {style: {fill: "#DBEAFE"; stroke: "#2563EB"; border-radius: 8; bold: true}}
+  core: {style: {fill: "#EDE9FE"; stroke: "#7C3AED"; border-radius: 8}}
+  plugin: {style: {fill: "#DCFCE7"; stroke: "#16A34A"; border-radius: 6}}
+  data: {style: {fill: "#FEF3C7"; stroke: "#D97706"}}
+  ops: {style: {fill: "#FCE7F3"; stroke: "#DB2777"; border-radius: 8}}
+}
+
+files: "[plugins.wasm] dir\n*.wasm files (one level)" {
+  shape: stored_data
+  class: data
+}
+
+registry: "Registry::from_plugins\ncfg(feature = wasm-host)\n[plugins.wasm] enabled" {class: core}
+
+loader: "wasm host (src/plugins/wasm.rs)" {
+  class: plugin
+  direction: down
+  append: "wasm::append\nread_dir, keep *.wasm" {class: plugin}
+  load: "WasmPlugin::load\nEngine with consume_fuel\nModule::new, set_fuel(FUEL)" {class: plugin}
+  imports: "Linker imports (env)\nrtok_estimate\nrtok_record_measurement\nrtok_log" {class: plugin}
+  manifest: "call guest export\nrtok_manifest → WasmManifest" {class: plugin}
+  check: "manifest valid?\nno hook surface,\nat least one of mcp, proxy, cli" {
+    shape: diamond
+    class: plugin
+  }
+  wp: "WasmPlugin\nimpl Plugin\nMutex of Store + Instance" {class: plugin}
+  append -> load
+  imports -> load: linked
+  load -> manifest
+  manifest -> check
+  check -> wp: yes
+}
+
+skip: "load error → stderr line +\nlog event wasm/load\nplugin skipped, rest load" {class: core}
+
+enable: "config.plugin_enabled\n(id, default_on)\npushed into the registry" {class: core}
+
+tools: "WasmPlugin::mcp_tools\nguest export rtok_mcp_tools\n→ ToolDef list" {class: plugin}
+invoke: "WasmPlugin::invoke_mcp\nguest export rtok_on_mcp_tool\nfuel reset per call" {class: plugin}
+
+mcp: "rtok mcp\ntools/list skips ids not in plugins::all()\nno tools/call arm for them yet" {class: surface}
+
+record: "Ctx::record\nstaged Measurement rows\n(plugin id must match)" {class: core}
+store: "SQLite measurements" {
+  shape: cylinder
+  class: data
+}
+log: "rtok log file" {
+  shape: stored_data
+  class: data
+}
+ops: "rtok plugins · dashboard\nDashboardPage from manifest" {class: ops}
+
+files -> loader.append
+registry -> loader.append: wasm::append
+loader.check -> skip: no
+loader.load -> skip: "trap, fuel out,\nbad module" {style: {stroke-dash: 3}}
+skip -> log
+loader.wp -> enable
+loader.imports -> log: rtok_log
+enable -> ops
+loader.wp -> tools
+loader.wp -> invoke
+tools -> mcp: "not listed for\nout-of-tree ids" {style: {stroke-dash: 3}}
+invoke -> record: staged rows flushed
+record -> store

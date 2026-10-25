@@ -6,7 +6,7 @@ before/after number (decision D3).
 | | |
 |---|---|
 | Surfaces | `rtok stats`, `rtok bench`, proxy `usage` capture |
-| Spec | the `spec (replaces)` column of the catalogue in `plan.md` §1 |
+| Spec | the **Replaces** column of [`docs/plugins.md`](../../../docs/plugins.md) |
 | Default | on |
 
 ## What it does

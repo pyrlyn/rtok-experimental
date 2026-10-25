@@ -136,6 +136,29 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// T929: the MCP `read` cannot tell a sub-agent from its parent, so once a sub-agent shares
+    /// the session no read is a stub: the sub-agent's first read of a file the parent read is
+    /// the whole body, and so is every read after it.
+    #[test]
+    fn a_session_with_a_subagent_never_answers_a_read_with_a_stub() {
+        let (cx, dir) = cx("shared");
+        let p = dir.join("a.txt");
+        fs::write(&p, "alpha\nbeta\n").unwrap();
+        let path = p.to_str().unwrap();
+        let parent = read(&Ctx::new(&cx), path, "full", None).unwrap();
+        assert!(parent.contains("1:alpha"), "{parent}");
+        let claude = cx.store.host_id("claude").unwrap().unwrap();
+        cx.store
+            .register_agent(claude, "shared", Some("child"), None, None)
+            .unwrap();
+        for _ in 0..2 {
+            let again = read(&Ctx::new(&cx), path, "full", None).unwrap();
+            assert!(again.contains("1:alpha"), "{again}");
+            assert!(!again.contains("unchanged"), "{again}");
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn edit_fixture_between_reads_is_full() {
         let (cx, dir) = cx("edit");

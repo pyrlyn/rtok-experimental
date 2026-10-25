@@ -302,7 +302,7 @@ fn toon_comma_cell_round_trips_losslessly() {
             "content": original,
         }],
     }]});
-    let ms = rtok::plugins::toon::Toon.proxy_filter(
+    let ms = rtok::plugins::toon::ToonPlugin.proxy_filter(
         &mut WireRequest::new(&rtok::proxy::anthropic::ANTHROPIC, &mut body),
         &Ctx::new(&cx),
     );

@@ -29,9 +29,9 @@ use rtok_plugin_sdk::{
 
 pub mod pi;
 
-pub struct Archive;
+pub struct ArchivePlugin;
 
-impl Plugin for Archive {
+impl Plugin for ArchivePlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "archive",
@@ -221,6 +221,7 @@ fn rewrite_block(
                         est,
                         a.head_lines as usize,
                         a.tail_lines as usize,
+                        a.signal_lines as usize,
                     ),
                     "pointer",
                 )
@@ -280,6 +281,7 @@ fn rewrite_blob(content: &mut Value, cx: &Ctx) -> Option<Measurement> {
                 est,
                 a.head_lines as usize,
                 a.tail_lines as usize,
+                0,
             );
             cx.put_archive_decision(&key, &archive_id, &live)
                 .map_err(|e| cx.log("error", "plugin", "archive", &format!("decision: {e}")))
@@ -369,7 +371,26 @@ pub(crate) fn clip(line: &str) -> std::borrow::Cow<'_, str> {
     }
 }
 
-fn pointer(text: &str, id: &str, est: u32, head: usize, tail: usize) -> String {
+/// Case-insensitive markers of the lines a reader usually comes back for with `expand` grep.
+const SIGNALS: [&str; 6] = [
+    "error",
+    "panic",
+    "fail",
+    "warning",
+    "exception",
+    "traceback",
+];
+
+fn is_signal(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    SIGNALS.iter().any(|s| lower.contains(s))
+}
+
+/// The pointer line, `head` and `tail` lines, and up to `signal` elided lines that look like
+/// errors or failures, numbered as `expand` grep prints them (`N:line`). Those lines are what
+/// an agent most often expands an archive for, so inlining them saves that round-trip; the
+/// output is a pure function of the text, so the frozen prefix stays byte-identical.
+fn pointer(text: &str, id: &str, est: u32, head: usize, tail: usize, signal: usize) -> String {
     let lines: Vec<&str> = text.lines().collect();
     let n = lines.len();
     let mut s = pointer_line(text, id, est);
@@ -385,6 +406,17 @@ fn pointer(text: &str, id: &str, est: u32, head: usize, tail: usize) -> String {
         s.push_str(&clip(l));
     }
     s.push_str(&format!("\n… {} lines …", n - head - tail));
+    let hits: Vec<usize> = (head..n - tail).filter(|&i| is_signal(lines[i])).collect();
+    if signal > 0 && !hits.is_empty() {
+        let shown = hits.len().min(signal);
+        s.push_str(&format!(
+            "\n[{shown} of {} matching elided lines]",
+            hits.len()
+        ));
+        for &i in &hits[..shown] {
+            s.push_str(&format!("\n{}:{}", i + 1, clip(lines[i])));
+        }
+    }
     for l in &lines[n - tail..] {
         s.push('\n');
         s.push_str(&clip(l));
@@ -426,7 +458,7 @@ fn tier_live(
     let head = a.head_lines as usize;
     let tail = a.tail_lines as usize;
     if turn == a.keep_turns as usize {
-        let body = pointer(text, id, est, head, tail);
+        let body = pointer(text, id, est, head, tail, a.signal_lines as usize);
         let extract = l1_extract(text, head * 3, tail * 2);
         (format!("{body}\n{extract}"), "tier_l1")
     } else {
@@ -703,7 +735,7 @@ mod tests {
         );
         assert_eq!(block_text(&serde_json::json!([{"type":"image"}])), None);
         assert_eq!(
-            pointer("a\nb", "abc", 3, 8, 4),
+            pointer("a\nb", "abc", 3, 8, 4, 8),
             "[archived abc: 2 lines · 3 tokens · expand(abc)]\na\nb"
         );
     }
@@ -779,7 +811,7 @@ mod tests {
     #[test]
     fn a_pointer_over_one_huge_line_is_shorter_than_the_line() {
         let text = "é".repeat(20_000);
-        let p = pointer(&text, "abc123", 5000, 8, 4);
+        let p = pointer(&text, "abc123", 5000, 8, 4, 8);
         assert!(p.len() < text.len() / 10, "{}", p.len());
         assert!(p.contains("expand(abc123)"), "{p}");
         let l1 = l1_extract(&text, 8, 4);
@@ -1126,5 +1158,59 @@ mod tests {
         let ms = rewrite_skills(srefs(&mut values), &Ctx::new(&cx));
         assert!(ms.is_empty());
         assert_eq!(values[0], Value::String(body));
+    }
+
+    /// An elided error line comes back under the pointer with its line number, so reading it
+    /// needs no `expand` call; without such lines, or with `signal_lines = 0`, the pointer is
+    /// what it was before.
+    #[test]
+    #[allow(clippy::print_stderr)]
+    fn savings_elided_error_lines_are_inlined_and_save_an_expand() {
+        let mut lines: Vec<String> = (1..=400)
+            .map(|i| format!("compiling crate_{i} v0.1.0"))
+            .collect();
+        lines[199] = "error[E0308]: mismatched types at src/lib.rs:42".into();
+        lines[249] = "test parse::tests::roundtrip ... FAILED".into();
+        let text = lines.join("\n");
+        let p = pointer(&text, "abc123", 5000, 8, 4, 8);
+        assert!(p.contains("\n200:error[E0308]: mismatched types"), "{p}");
+        assert!(
+            p.contains("\n250:test parse::tests::roundtrip ... FAILED"),
+            "{p}"
+        );
+        assert!(p.contains("[2 of 2 matching elided lines]"));
+        assert_eq!(p, pointer(&text, "abc123", 5000, 8, 4, 8), "deterministic");
+        assert!(!pointer(&text, "abc123", 5000, 8, 4, 0).contains("200:error"));
+        // The archived block stays a small fraction of the original.
+        assert!(p.len() * 10 <= text.len(), "{} vs {}", p.len(), text.len());
+        // Expand round-trips needed to see the failure: 1 before (grep), 0 now.
+        let before = pointer(&text, "abc123", 5000, 8, 4, 0);
+        let needs_expand = |s: &str| !s.contains("mismatched types");
+        assert!(needs_expand(&before) && !needs_expand(&p));
+        eprintln!(
+            "SAVINGS archive_signal: original {} bytes, pointer {} -> {} bytes, expand calls 1 -> 0",
+            text.len(),
+            before.len(),
+            p.len()
+        );
+        let clean: String = (1..=400).map(|i| format!("ok {i}\n")).collect();
+        assert_eq!(
+            pointer(&clean, "a", 1, 8, 4, 8),
+            pointer(&clean, "a", 1, 8, 4, 0)
+        );
+    }
+
+    /// The cap holds: no more than `signal_lines` matches are inlined.
+    #[test]
+    fn signal_lines_are_capped() {
+        let text: String = (1..=100).map(|i| format!("warning {i}\n")).collect();
+        let p = pointer(&text, "a", 1, 2, 2, 3);
+        assert!(p.contains("[3 of 96 matching elided lines]"), "{p}");
+        assert_eq!(
+            p.lines()
+                .filter(|l| l.starts_with(char::is_numeric))
+                .count(),
+            3
+        );
     }
 }

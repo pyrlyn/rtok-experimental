@@ -6,7 +6,7 @@ progressive disclosure.
 | | |
 |---|---|
 | Surfaces | MCP `mem_save`, `mem_search`, `mem_pack`, `mem_get`, `mem_update`; PreCompact checkpoint; SessionStart recall |
-| Spec | the `spec (replaces)` column of the catalogue in `plan.md` §1 |
+| Spec | the **Replaces** column of [`docs/plugins.md`](../../../docs/plugins.md) |
 | Default | on |
 
 ## Tools

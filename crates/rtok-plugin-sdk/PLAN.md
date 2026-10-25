@@ -237,8 +237,10 @@ surfaces stay no-op defaults until a later task; Gate P32 needs only **one** dis
 WIT definitions live in `rtok-plugin-sdk` (guest-facing, versioned); the host linker whitelists
 exactly those import names — no raw `Store` escape.
 
-**Sandbox.** Wasmi `Config::consume_fuel(true)` with a per-call fuel budget from
-`[plugins.wasm] fuel_per_call` (default TBD in T32.1). Memory limit via Wasmi `Store` limits.
+**Sandbox.** Wasmi `Config::consume_fuel(true)` with a fixed budget of 100,000,000 fuel per
+guest call and for the `start` function (`FUEL` in `src/plugins/wasm.rs`). It is not
+configurable: `[plugins.wasm]` holds only `enabled` and `dir`, and an unknown key such as
+`fuel_per_call` fails config parsing. No Wasmi `Store` memory limit is set yet.
 Failed guest trap → log + no-op (fail open on MCP/proxy, same spirit as hooks).
 
 #### Measurement example contract

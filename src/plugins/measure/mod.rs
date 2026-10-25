@@ -9,9 +9,9 @@
 
 use rtok_plugin_sdk::{DashboardPage, Manifest, Plugin, Surface};
 
-pub struct Measure;
+pub struct MeasurePlugin;
 
-impl Plugin for Measure {
+impl Plugin for MeasurePlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "measure",

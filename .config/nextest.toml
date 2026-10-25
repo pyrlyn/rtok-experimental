@@ -8,6 +8,8 @@
 # T644: `TMPDIR` (`TMP`/`TEMP` on Windows) is a per-checkout dir emptied each run too, so the
 # dirs tests leave behind never pile up in this machine's own temp dir. On Unix it is a short
 # path in `/tmp`: under a deep worktree's `target/`, `hook.sock` would pass `sun_path`'s limit.
+# T970: `RTOK_WORKTREE_MIN_FREE_MIB=0` keeps the free-space floor of `worktree add` from turning
+# a full host disk into dozens of unrelated test failures; the floor's own tests inject the reading.
 # The temp dir stays outside the checkout on Windows too: under `target\` git discovery from a
 # test's scratch dir would find this repo, and tests that expect "not a git repo" would fail.
 experimental = ["setup-scripts"]
@@ -19,6 +21,7 @@ t="/tmp/rtok-test-$(printf %s "$PWD" | cksum | cut -d ' ' -f 1)" && rm -rf "$t" 
   echo "HOME=$h"
   echo "TMPDIR=$t"
   echo "RTOK_HOST_SANDBOX=1"
+  echo "RTOK_WORKTREE_MIN_FREE_MIB=0"
   echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}"
   echo "RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}"
   echo "MISE_DATA_DIR=${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}"
@@ -39,7 +42,7 @@ Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path $t
 New-Item -ItemType Directory -Force -Path $t | Out-Null
 $c = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE ".cargo" }
 $r = if ($env:RUSTUP_HOME) { $env:RUSTUP_HOME } else { Join-Path $env:USERPROFILE ".rustup" }
-[IO.File]::AppendAllText($env:NEXTEST_ENV, "HOME=$h`nUSERPROFILE=$h`nTMP=$t`nTEMP=$t`nRTOK_HOST_SANDBOX=1`nCARGO_HOME=$c`nRUSTUP_HOME=$r`n")
+[IO.File]::AppendAllText($env:NEXTEST_ENV, "HOME=$h`nUSERPROFILE=$h`nTMP=$t`nTEMP=$t`nRTOK_HOST_SANDBOX=1`nRTOK_WORKTREE_MIN_FREE_MIB=0`nCARGO_HOME=$c`nRUSTUP_HOME=$r`n")
 ''']
 
 [[profile.default.scripts]]

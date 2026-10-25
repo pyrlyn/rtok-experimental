@@ -60,7 +60,9 @@ if split out per T2.5.
   narrative ≤ 400 characters, and existing root-relative files. The raw tool output is not
   copied. A repeat of the same session, tool and narrative within 5 seconds inserts nothing,
   and neither does the same hook call (`<event>:<tool_use_id>`) delivered again at any time.
-  `mem_*` tools are not observed. `mem_get` with `obs` returns that narrative.
+  `mem_*` tools are not observed. `mem_get` with `obs` returns that narrative. An observation
+  writes no `Measurement` row (T927): the agent still gets the whole tool output, so nothing
+  was saved; reading it back (`obs_get`, recall) is what meters.
 - `notes.uses` / `last_used` move on `mem_get` and on a prompt-recall injection. Recall order
   is pinned, then retention score, then newest id. A low score is never a delete.
 - `prompt_recall` appends at most two `obs <id> <title> (<session>)` lines inside
