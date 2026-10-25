@@ -167,13 +167,13 @@ _arguments "${_arguments_options[@]}" : /
 ;;
 (doctor)
 _arguments "${_arguments_options[@]}" : /
-'*--only=[With --fix/: limit it to these problems (repeatable; default/: all of them)]:ONLY:(broken-hooks duplicate-hooks duplicate-mcp)' /
+'*--only=[With --fix/: limit it to these problems (repeatable; default/: all of them)]:ONLY:(broken-hooks duplicate-hooks duplicate-mcp stale-skills)' /
 '--agent=[Check (and with --fix, repair) the hooks of one host only (an id of /`rtok agents list/`)]:HOST:_default' /
 '(--fix)--project=[Add setup advice for the git checkout holding PATH (default/: the working directory)/: language servers, graph index, instruction files, plugins left off]::PATH:_files' /
 '--config=[User config file (else /`RTOK_CONFIG/` or /`<home>/config.toml/`)]:PATH:_files' /
 '--instructions[Also run the instruction-file audit]' /
 '(--fix)--json[JSON instead of the table]' /
-'--fix[Clean up broken hooks and duplicate hooks and MCP entries/: a terminal gets a checklist, a pipe the diff; --yes writes without asking]' /
+'--fix[Clean up broken hooks and duplicate hooks and MCP entries, and update outdated rtok skills/: a terminal gets a checklist, a pipe the diff; --yes writes without asking]' /
 '--yes[With --fix/: write the changes (a copy goes to /`.backup_configs//` first)]' /
 '--dry-run[With --fix --yes/: print the diffs and write nothing]' /
 '--stat[With --fix/: stat lines and totals instead of the diffs (a dry run)]' /

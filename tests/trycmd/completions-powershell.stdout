@@ -170,7 +170,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)')
             [CompletionResult]::new('--instructions', '--instructions', [CompletionResultType]::ParameterName, 'Also run the instruction-file audit')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'JSON instead of the table')
-            [CompletionResult]::new('--fix', '--fix', [CompletionResultType]::ParameterName, 'Clean up broken hooks and duplicate hooks and MCP entries: a terminal gets a checklist, a pipe the diff; --yes writes without asking')
+            [CompletionResult]::new('--fix', '--fix', [CompletionResultType]::ParameterName, 'Clean up broken hooks and duplicate hooks and MCP entries, and update outdated rtok skills: a terminal gets a checklist, a pipe the diff; --yes writes without asking')
             [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'With --fix: write the changes (a copy goes to `.backup_configs/` first)')
             [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'With --fix --yes: print the diffs and write nothing')
             [CompletionResult]::new('--stat', '--stat', [CompletionResultType]::ParameterName, 'With --fix: stat lines and totals instead of the diffs (a dry run)')

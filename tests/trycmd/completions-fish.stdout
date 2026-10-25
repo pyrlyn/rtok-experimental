@@ -119,13 +119,14 @@ complete -c rtok -n "__fish_rtok_using_subcommand bench" -l dry-run -d 'Print th
 complete -c rtok -n "__fish_rtok_using_subcommand bench" -s h -l help -d 'Print help'
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l only -d 'With --fix: limit it to these problems (repeatable; default: all of them)' -r -f -a "broken-hooks/t''
 duplicate-hooks/t''
-duplicate-mcp/t''"
+duplicate-mcp/t''
+stale-skills/t''"
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l agent -d 'Check (and with --fix, repair) the hooks of one host only (an id of `rtok agents list`)' -r
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l project -d 'Add setup advice for the git checkout holding PATH (default: the working directory): language servers, graph index, instruction files, plugins left off' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l config -d 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)' -r -F
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l instructions -d 'Also run the instruction-file audit'
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l json -d 'JSON instead of the table'
-complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l fix -d 'Clean up broken hooks and duplicate hooks and MCP entries: a terminal gets a checklist, a pipe the diff; --yes writes without asking'
+complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l fix -d 'Clean up broken hooks and duplicate hooks and MCP entries, and update outdated rtok skills: a terminal gets a checklist, a pipe the diff; --yes writes without asking'
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l yes -d 'With --fix: write the changes (a copy goes to `.backup_configs/` first)'
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l dry-run -d 'With --fix --yes: print the diffs and write nothing'
 complete -c rtok -n "__fish_rtok_using_subcommand doctor" -l stat -d 'With --fix: stat lines and totals instead of the diffs (a dry run)'

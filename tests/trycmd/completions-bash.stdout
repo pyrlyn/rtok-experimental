@@ -2919,7 +2919,7 @@ _rtok() {
             fi
             case "${prev}" in
                 --only)
-                    COMPREPLY=($(compgen -W "broken-hooks duplicate-hooks duplicate-mcp" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "broken-hooks duplicate-hooks duplicate-mcp stale-skills" -- "${cur}"))
                     return 0
                     ;;
                 --agent)

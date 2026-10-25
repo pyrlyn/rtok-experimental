@@ -32,6 +32,7 @@ mod mcp_dupes;
 mod mcp_fix;
 pub mod probe;
 pub mod project;
+pub mod skills_fix;
 pub mod web;
 
 /// What `rtok doctor` found, as data.
@@ -72,6 +73,11 @@ pub struct Report {
     #[serde(skip)]
     #[schemars(skip)]
     pub config_notes: Vec<String>,
+    /// Installed rtok skills older than the ones this binary ships (T975). Text only, like
+    /// [`Self::config_notes`]: `rtok doctor --fix --only stale-skills` updates them.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub stale_skills: Vec<crate::agents::skill::Outdated>,
     /// What `rtok agents junk clear` would free by default (T330.6). Text only, and set by the
     /// `rtok doctor` command alone: sizing every agent's folders takes seconds, far too slow
     /// for the dashboard's snapshot.
@@ -363,6 +369,15 @@ impl Report {
                 ));
             }
         }
+        if !self.stale_skills.is_empty() {
+            out.push_str("rtok skills outdated (older than this rtok)\n");
+            for s in &self.stale_skills {
+                out.push_str(&format!("  WARN {} ({})\n", s.path.display(), s.host()));
+            }
+            out.push_str(&format!(
+                "  update: {STALE_SKILLS_FIX} (or `rtok agents update`)\n"
+            ));
+        }
         if let Some(bytes) = self.junk_bytes {
             out.push_str(&format!(
                 "junk\n  reclaimable: {}",
@@ -386,6 +401,9 @@ impl Report {
         out
     }
 }
+
+/// The command the outdated-skills lines point at.
+pub const STALE_SKILLS_FIX: &str = "`rtok doctor --fix --only stale-skills`";
 
 /// The rows of an instruction audit, one per line under `indent`.
 fn instruction_lines(audit: &Instructions, indent: &str) -> String {
@@ -663,6 +681,12 @@ pub fn page(cfg: &Config) -> Result<Report> {
         },
         tools_rewrite_advice: tools_rewrite_adv,
         config_notes: config_notes(cfg),
+        // Not under test: the skill roots are the real home's.
+        stale_skills: if cfg!(test) {
+            Vec::new()
+        } else {
+            crate::agents::skill::outdated(cfg)
+        },
         junk_bytes: None,
         // File reads only: no `--version` probe, so the 2 s dashboard tick stays cheap.
         agents: crate::agents::HOSTS
@@ -1714,6 +1738,7 @@ pub(crate) fn report_fixture() -> Report {
         agents: Vec::new(),
         problems: Vec::new(),
         config_notes: Vec::new(),
+        stale_skills: Vec::new(),
         #[cfg(feature = "graph")]
         graph_alerts: Vec::new(),
         #[cfg(feature = "graph")]
@@ -1728,7 +1753,44 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// T381: `enabled = false` under toon is the old default, pinned. Doctor names the
+    /// T975: each outdated skill is a WARN line under its host, then one line with the update.
+    #[test]
+    fn outdated_skills_warn_and_name_the_update() {
+        use crate::agents::skill::Outdated;
+        assert!(!report_fixture().to_text().contains("outdated"));
+        let mut report = report_fixture();
+        report.stale_skills = vec![
+            Outdated {
+                key: "claude",
+                path: "/h/.claude/skills/rtok-tasks".into(),
+            },
+            Outdated {
+                key: "antigravity-cli",
+                path: "/h/.gemini/antigravity-cli/skills/rtok".into(),
+            },
+        ];
+        let text = report.to_text();
+        assert!(
+            text.contains("rtok skills outdated (older than this rtok)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  WARN /h/.claude/skills/rtok-tasks (claude)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  WARN /h/.gemini/antigravity-cli/skills/rtok (antigravity)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "  update: `rtok doctor --fix --only stale-skills` (or `rtok agents update`)\n"
+            ),
+            "{text}"
+        );
+    }
+
+    /// T381:`enabled = false` under toon is the old default, pinned. Doctor names the
     /// key, the value, the current default and the line, and does not treat it as an error.
     #[test]
     fn toon_pinned_off_is_a_config_note() {
