@@ -43,6 +43,7 @@ mod report;
 #[cfg(feature = "graph")]
 mod review;
 mod run_cmd;
+mod skills;
 mod stats;
 mod task;
 mod util;
@@ -222,6 +223,12 @@ enum Cmd {
     /// rtok's own log (`rtok logs` prints, `rtok logs export` strips numbering and colour)
     Logs(logs::Args),
 
+    /// Skills of the agent rtok runs in (`rtok skills list | enable | disable`)
+    Skills {
+        #[command(subcommand)]
+        action: skills::SkillsCmd,
+    },
+
     // D24
     /// The operator model as one document: Markdown, HTML and PDF
     Report(report::Args),
@@ -290,6 +297,7 @@ pub fn run() -> Result<()> {
         Cmd::Otel { action } => otel::run(&config_file, action),
         Cmd::Logs(args) => logs::run(&config_file, args),
         Cmd::Report(args) => report::run(&config_file, args),
+        Cmd::Skills { action } => skills::run(action),
     }
 }
 
