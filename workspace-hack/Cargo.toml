@@ -43,7 +43,6 @@ percent-encoding = { version = "2" }
 rand = { version = "0.10" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "dfa-search", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
-roxmltree = { version = "0.21" }
 rust-embed-utils = { version = "8", default-features = false, features = ["debug-embed"] }
 schemars = { version = "1", features = ["chrono04"] }
 semver = { version = "1", features = ["serde"] }
@@ -54,7 +53,7 @@ serde_spanned = { version = "1" }
 simd-adler32 = { version = "0.3" }
 similar = { version = "3", features = ["inline"] }
 slab = { version = "0.4" }
-smallvec = { version = "1", default-features = false, features = ["const_new", "serde", "union"] }
+smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 strum = { version = "0.28", features = ["derive"] }
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["codec", "io"] }
@@ -116,7 +115,7 @@ libc = { version = "0.2", features = ["extra_traits"] }
 chrono = { version = "0.4", default-features = false, features = ["now", "serde"] }
 getrandom = { version = "0.4", default-features = false, features = ["std", "sys_rng"] }
 hyper-util = { version = "0.1", default-features = false, features = ["client-legacy", "client-proxy"] }
-winapi = { version = "0.3", default-features = false, features = ["basetsd", "consoleapi", "fileapi", "handleapi", "impl-debug", "impl-default", "memoryapi", "minwinbase", "minwindef", "namedpipeapi", "processenv", "processthreadsapi", "std", "synchapi", "sysinfoapi", "timezoneapi", "winbase", "winerror", "winnt", "winreg", "winsock2", "winuser"] }
+winapi = { version = "0.3", default-features = false, features = ["consoleapi", "fileapi", "handleapi", "impl-debug", "impl-default", "minwinbase", "minwindef", "namedpipeapi", "processenv", "processthreadsapi", "synchapi", "timezoneapi", "winbase", "winerror", "winnt", "winreg", "winsock2", "winuser"] }
 windows = { version = "0.62", features = ["Win32_Storage_EnhancedStorage", "Win32_Storage_FileSystem", "Win32_System_Com_StructuredStorage", "Win32_System_IO", "Win32_System_Ioctl", "Win32_System_SystemServices", "Win32_System_Variant", "Win32_UI_Shell_PropertiesSystem"] }
 windows-sys = { version = "0.61", features = ["Wdk_Foundation", "Wdk_Storage_FileSystem", "Wdk_System_IO", "Win32_Devices_Communication", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Console", "Win32_System_IO", "Win32_System_Pipes", "Win32_System_Registry", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 

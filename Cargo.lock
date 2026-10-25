@@ -6873,7 +6873,6 @@ dependencies = [
  "rand 0.10.2",
  "regex-automata",
  "regex-syntax",
- "roxmltree 0.21.1",
  "rust-embed-utils",
  "rustix",
  "schemars",
