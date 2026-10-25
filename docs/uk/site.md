@@ -133,5 +133,4 @@ rtok config show --sources
 - Початок роботи: <https://github.com/pyrlyn/rtok/blob/main/docs/getting-started.md>
 - Релізи: <https://github.com/pyrlyn/rtok/releases>
 - Журнал змін: <https://github.com/pyrlyn/rtok/blob/main/CHANGELOG.md>
-- Ліцензія: на ваш вибір GNU GPLv3, безкоштовна (royalty-free) ліцензія для пропрієтарних настільних, мобільних і
-  вебзастосунків (із зазначенням авторства) або комерційна ліцензія (див. <https://github.com/pyrlyn/rtok#license>)
+- Ліцензія: на ваш вибір GNU GPLv3 або комерційна ліцензія (див. <https://github.com/pyrlyn/rtok#license>)
