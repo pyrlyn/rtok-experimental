@@ -256,6 +256,18 @@ pub fn add_locked(repo: &Path, path: &Path, branch: &str, reason: &str, base: &s
     git_slow(repo, "creating worktree…", &[&args[..], &tail[..]].concat()).map(drop)
 }
 
+/// A plain worktree on `branch`, no lock: what a host makes without rtok. An existing branch
+/// is checked out rather than recreated.
+pub fn add_plain(repo: &Path, path: &Path, branch: &str) -> Result<()> {
+    let path = path_arg(path)?;
+    let args = if has_branch(repo, branch) {
+        ["worktree", "add", "--quiet", path, branch].to_vec()
+    } else {
+        ["worktree", "add", "--quiet", "-b", branch, path].to_vec()
+    };
+    git_slow(repo, "creating worktree…", &args).map(drop)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

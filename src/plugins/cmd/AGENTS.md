@@ -31,7 +31,9 @@ One exception (T176): `bounded.rs` lexes quotes, `\` escapes (T444; `\`-newline 
 `head`/`tail -n`, `grep -A/-B/-C/-m` — a recursive `grep` (`-r`/`-R`) also needs
 `-m`/`--max-count`, or the hit list is unbounded; `rg` is recursive by default and has no such
 recursive flag (`-r` is `--replace`), so this gate is `grep`-only and `rg` stays on the plain
-context/max-count check — `cat -n` of exactly one named file); those pass through unchanged up
+context/max-count check — `cat -n` of exactly one named file; T931: a literal `echo`/`printf`
+label between windows (`sed -n 1,80p a; echo ---; sed -n 1,40p b`) is skipped like `cd`, an
+expansion in it is not); those pass through unchanged up
 to `bounded::MAX_BYTES`. `formatters::compress` reuses the same lexer
 (`bounded::mixed_chain`, T177) to route a single Bash string only when it chains 2+ DISTINCT
 programs to `[script]` in `rules/default.toml` — `cargo build && cargo test` or

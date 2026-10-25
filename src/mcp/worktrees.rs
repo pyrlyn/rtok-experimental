@@ -27,7 +27,7 @@ pub fn add_def() -> ToolDef {
         name: "worktree_add",
         description: "Create a git worktree for a task, locked and bound to this session's agent. Returns {path, branch, task, agent, note}; work only inside path.",
         input_schema: with_repo(with_agent(
-            json!({"type":"object","properties":{"task":{"type":"string","description":"task id, e.g. T12"},"slug":{"type":"string","description":"optional branch suffix"}},"required":["task"]}),
+            json!({"type":"object","properties":{"task":{"type":"string","description":"task id, e.g. T12, or `T12 short-slug` in one string"},"slug":{"type":"string","description":"optional branch suffix"}},"required":["task"]}),
         )),
     }
 }

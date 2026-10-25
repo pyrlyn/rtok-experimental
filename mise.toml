@@ -14,16 +14,17 @@ just = "1.58.0"
 "github:jdx/jactionlint" = "2.0.2" # the pre-push hook and local `mise x -- jactionlint`; CI lints through pyrlyn/ci
 hk = "2.5.0" # runs jactionlint as a pre-push hook (hk.pkl); `mise x -- hk install --mise`
 shellcheck = "0.11.0" # used by jactionlint for run: scripts
-node = "26.8.2" # jscpd, oxlint, oxfmt and vitest run on it; nothing in the binary does
-python = "3.14.7" # T183: tools/publish_marketplace and its tests
-uv = "0.12.19" # resolves the pipx: tool backend on Windows, where pipx itself has no build
+node = "26.12.1" # jscpd, oxlint, oxfmt and vitest run on it; nothing in the binary does
+"npm:agent-browser" = "0.39.2" # browser automation CLI for agents: Drive the rtok web UI in a real browser.
+python = "3.15.1" # T183: tools/publish_marketplace and its tests
+uv = "0.13.5" # resolves the pipx: tool backend on Windows, where pipx itself has no build
 "pipx:pytest" = "9.1.1" # T183: `just python` runs tools/tests
 "npm:jscpd" = "5.1.2" # `just dup` (T26.0): copy-paste detector, config in .jscpd.json
 "npm:oxlint" = "1.83.0" # `just js` (T110): lint for the TS host plugins and tests/node
 "npm:oxfmt" = "0.68.0" # `just js` (T110): format check for the same files
 "npm:vitest" = "5.0.1" # T111: test runner for the TS host plugin tests (run by tests/filter.rs, tests/pi_plugin.rs)
 "npm:vite" = "8.3.0" # peer of vitest 5 mocker; Windows mise install does not hoist it otherwise
-rust = { version = "1.98.1", components = "rustfmt,clippy" } # CI otherwise installs the minimal profile
+rust = { version = "1.99.1", components = "rustfmt,clippy" } # CI otherwise installs the minimal profile
 
 # Lightweight Docker-compatible stack (agents: prefer this over Docker Desktop; see docs/colima.md)
 colima = { version = "0.10.3", os = ["linux", "macos"] } # container runtime UI → Lima VM (aqua:abiosoft/colima)

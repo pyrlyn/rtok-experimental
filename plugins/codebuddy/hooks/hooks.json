@@ -98,6 +98,28 @@
           }
         ]
       }
+    ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CODEBUDDY_PLUGIN_ROOT}/scripts/worktree.sh\" WorktreeCreate codebuddy",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CODEBUDDY_PLUGIN_ROOT}/scripts/worktree.sh\" WorktreeRemove codebuddy",
+            "timeout": 120
+          }
+        ]
+      }
     ]
   }
 }

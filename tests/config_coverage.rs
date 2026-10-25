@@ -89,6 +89,17 @@ const ALLOW_KEYS: &[&str] = &[
     "graph.review.since",
     "graph.review.staged",
     "graph.review.project",
+    // `review` (#1299): which diff, how much context and which model for one call; not stored settings.
+    "review.base_url",
+    "review.model",
+    "review.provider",
+    "review.print_prompt",
+    "review.dry_run",
+    "review.max_defs",
+    "review.max_related",
+    "review.budget",
+    "review.diff",
+    "review.range",
     // `memory export --project` narrows one dump; the store, not a setting, decides it.
     "memory.export.project",
     // `memory retire/revise` (T69.1): one-shot lifecycle values on a single call, not settings.
@@ -192,6 +203,8 @@ const ALLOW_KEYS: &[&str] = &[
     "doctor.only",
     // T416.3: which preview one dry run prints (stat lines or the diff), a per-call choice.
     "doctor.stat",
+    // `doctor --project` (T977): which checkout one call analyses, not a stored setting.
+    "doctor.project",
     "config.init.stat",
     "config.set.stat",
     "memory.sync.stat",

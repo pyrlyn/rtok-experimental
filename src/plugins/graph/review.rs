@@ -9,7 +9,7 @@
 //! follow `tools/review.py`: whole hunks, round-robin, one shared line budget.
 //! Writes no `Measurement`; a shortened answer is capped by `cap` like the other tools.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use anyhow::Result;
@@ -18,7 +18,8 @@ use serde_json::{Value, json};
 use rtok_plugin_sdk::Ctx;
 
 use super::{
-    WalkMemo, git_diff_args, git_stdout_result, impact_walk_memo, index, index_for, is_test_path,
+    WalkMemo, git_diff_args, git_stdout, git_stdout_result, impact_walk_memo, index, index_for,
+    is_support_path, is_test_path,
 };
 
 /// Shared source lines for one review (`tools/review.py` `_MAX_REVIEW_SOURCE_LINES`).
@@ -39,6 +40,16 @@ pub const MAX_RISK_NODES_PER_FILE: usize = 8;
 pub const MAX_RISK_SCORED_NODES: usize = 400;
 
 pub(super) const SCORED_KINDS: &[&str] = &["function", "method", "class"];
+
+/// GitHub Linguist's names, so one `.gitattributes` line folds a path in the PR diff view and
+/// marks it support code here.
+const SUPPORT_ATTRS: &[&str] = &[
+    "linguist-vendored",
+    "linguist-generated",
+    "linguist-documentation",
+];
+/// Paths per `git check-attr` call, under every platform's argument length limit.
+const ATTR_BATCH: usize = 500;
 
 /// Whole-token keywords. Substring matches (`sign` inside `assign`) are not hits.
 const SECURITY: &[&str] = &[
@@ -86,6 +97,8 @@ pub struct FileReview {
     pub regions: Vec<Region>,
     /// Regions that lost the shared line budget.
     pub regions_omitted: u32,
+    /// Fixture, benchmark, example or Linguist-marked file: listed, never scored.
+    pub support: bool,
 }
 
 /// `callers` is depth-1 impact rows. `tested` is test-path reachability.
@@ -99,10 +112,12 @@ pub fn risk_score(callers: u32, tested: bool, security: bool) -> f64 {
     (score.clamp(0.0, 1.0) * 10_000.0).round() / 10_000.0
 }
 
+/// Thresholds fit [`risk_score`]'s reachable 0.05..=0.6, not code-review-graph's 0..=1: only an
+/// untested security-named definition is `high`, any other untested one is `medium`.
 pub fn level(score: f64) -> &'static str {
-    if score > 0.7 {
+    if score > 0.45 {
         "high"
-    } else if score > 0.4 {
+    } else if score > 0.25 {
         "medium"
     } else {
         "low"
@@ -258,7 +273,8 @@ fn share_cap(total: u32) -> u32 {
 
 /// Grant whole regions from `total_budget`, round-robin in the order of `files`
 /// (highest score first). A region bigger than the per-region cap is truncated
-/// to that cap; one that still does not fit is omitted.
+/// to that cap; one that still does not fit is omitted. Files scoring 0 get only
+/// what is left once every scored file had all its regions.
 pub fn allocate_budget(files: &mut [FileReview], total_budget: u32) {
     let pending: Vec<Vec<Region>> = files.iter().map(|f| f.regions.clone()).collect();
     for file in files.iter_mut() {
@@ -275,32 +291,36 @@ pub fn allocate_budget(files: &mut [FileReview], total_budget: u32) {
     let region_cap = MAX_REGION_LINES.min(share);
     let mut used = vec![0u32; files.len()];
     let mut remaining = total_budget;
-    let deepest = pending.iter().map(Vec::len).max().unwrap_or(0);
     let mut granted = vec![Vec::new(); files.len()];
-    for depth in 0..deepest {
-        if remaining == 0 {
-            break;
-        }
-        for i in 0..files.len() {
-            if depth >= pending[i].len() || remaining == 0 {
-                continue;
+    let (scored, unscored): (Vec<usize>, Vec<usize>) =
+        (0..files.len()).partition(|&i| files[i].score > 0.0);
+    for group in [scored, unscored] {
+        let deepest = group.iter().map(|&i| pending[i].len()).max().unwrap_or(0);
+        for depth in 0..deepest {
+            if remaining == 0 {
+                break;
             }
-            let region = &pending[i][depth];
-            let full = region_len(region);
-            if full == 0 {
-                continue;
+            for &i in &group {
+                if depth >= pending[i].len() || remaining == 0 {
+                    continue;
+                }
+                let region = &pending[i][depth];
+                let full = region_len(region);
+                if full == 0 {
+                    continue;
+                }
+                let cost = full.min(region_cap);
+                let room = share.saturating_sub(used[i]);
+                if cost > remaining.min(room) {
+                    continue;
+                }
+                granted[i].push(Region {
+                    start: region.start,
+                    end: region.start + cost - 1,
+                });
+                used[i] += cost;
+                remaining -= cost;
             }
-            let cost = full.min(region_cap);
-            let room = share.saturating_sub(used[i]);
-            if cost > remaining.min(room) {
-                continue;
-            }
-            granted[i].push(Region {
-                start: region.start,
-                end: region.start + cost - 1,
-            });
-            used[i] += cost;
-            remaining -= cost;
         }
     }
     for (i, file) in files.iter_mut().enumerate() {
@@ -338,9 +358,67 @@ fn hunks_of(
     Ok(parse_hunks(&text))
 }
 
-fn scored_names(defs: &[(String, String, i32, i32)]) -> Vec<String> {
+/// Changed paths that are support code: a set Linguist attribute, else [`is_support_path`]. An
+/// explicit `false` or unset attribute keeps a built-in directory in review. When
+/// `git check-attr` fails the directories alone decide.
+fn support_paths(root: &Path, paths: &[String]) -> BTreeSet<String> {
+    let mut attrs = BTreeMap::new();
+    for chunk in paths.chunks(ATTR_BATCH) {
+        let mut args = vec!["check-attr", "-z"];
+        args.extend(SUPPORT_ATTRS);
+        args.push("--");
+        args.extend(chunk.iter().map(String::as_str));
+        let Some(out) = git_stdout(root, &args) else {
+            break;
+        };
+        for (path, on) in parse_check_attr(&out) {
+            *attrs.entry(path).or_insert(on) |= on;
+        }
+    }
+    paths
+        .iter()
+        .filter(|p| {
+            attrs
+                .get(p.as_str())
+                .copied()
+                .unwrap_or_else(|| is_support_path(p))
+        })
+        .cloned()
+        .collect()
+}
+
+/// `git check-attr -z` output is `path NUL attr NUL value NUL` triples. `true` for a set
+/// attribute, `false` for one explicitly off; an unspecified one yields nothing.
+fn parse_check_attr(out: &[u8]) -> Vec<(String, bool)> {
+    let fields: Vec<&[u8]> = out.split(|b| *b == 0).collect();
+    fields
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .filter_map(|[path, _, value]| {
+            let on = match *value {
+                b"set" | b"true" => true,
+                b"unset" | b"false" => false,
+                _ => return None,
+            };
+            Some((String::from_utf8(path.to_vec()).ok()?, on))
+        })
+        .collect()
+}
+
+/// Scored definitions a hunk touches, in file order. Untouched neighbours are not the change.
+fn scored_names(defs: &[(String, String, i32, i32)], hunks: &[(u32, u32)]) -> Vec<String> {
+    let touched = |line: i32, end: i32| {
+        line >= 1
+            && end >= line
+            && hunks
+                .iter()
+                .any(|&(hs, he)| line as u32 <= he && end as u32 >= hs)
+    };
     defs.iter()
-        .filter(|(_, kind, ..)| SCORED_KINDS.contains(&kind.as_str()))
+        .filter(|(_, kind, line, end)| {
+            SCORED_KINDS.contains(&kind.as_str()) && touched(*line, *end)
+        })
         .take(MAX_RISK_NODES_PER_FILE)
         .map(|(name, ..)| name.clone())
         .collect()
@@ -382,6 +460,9 @@ fn render(files: &[FileReview], json: bool) -> String {
     let mut out = format!("review: {} {overall:.4}\n", level(overall));
     for file in files {
         out.push_str(&format!("{} {:.4}", file.path, file.score));
+        if file.support {
+            out.push_str(" support");
+        }
         if !file.untested.is_empty() {
             out.push_str(" untested: ");
             out.push_str(&file.untested.join(", "));
@@ -414,6 +495,7 @@ fn file_json(file: &FileReview) -> Value {
         "untested": file.untested,
         "regions": file.regions.iter().map(|r| json!({"start": r.start, "end": r.end})).collect::<Vec<_>>(),
         "regions_omitted": file.regions_omitted,
+        "support": file.support,
     })
 }
 
@@ -435,13 +517,20 @@ pub fn review(
     index_for(cx, root)?;
     let key = index::canon(root);
     let hunks = hunks_of(root, since, staged)?;
+    let support = support_paths(root, &paths);
     let mut remaining = MAX_RISK_SCORED_NODES;
     // The index is not written again before `review` returns, so every walk may share answers.
     let mut memo = WalkMemo::default();
     let mut files = Vec::with_capacity(paths.len());
     for path in &paths {
         let stored = cx.symbol_file_defs(&key, path).unwrap_or_default();
-        let mut names = scored_names(&stored);
+        let file_hunks = hunks.get(path).map(Vec::as_slice).unwrap_or(&[]);
+        let is_support = support.contains(path);
+        let mut names = if is_support {
+            Vec::new()
+        } else {
+            scored_names(&stored, file_hunks)
+        };
         if names.len() > remaining {
             names.truncate(remaining);
         }
@@ -451,13 +540,14 @@ pub fn review(
         } else {
             score_file(cx, &key, path, &names, &mut memo)?
         };
-        let regions = widen(hunks.get(path).map(Vec::as_slice).unwrap_or(&[]), &stored);
+        let regions = widen(file_hunks, &stored);
         files.push(FileReview {
             path: path.clone(),
             score,
             untested,
             regions,
             regions_omitted: 0,
+            support: is_support,
         });
     }
     files.sort_by(|a, b| {
@@ -482,9 +572,76 @@ mod tests {
         assert_eq!(risk_score(0, false, false), 0.3);
         assert_eq!(risk_score(0, true, false), 0.05);
         assert_eq!(risk_score(100, false, true), 0.6);
-        assert_eq!(level(0.6), "medium");
-        assert_eq!(level(0.3), "low");
-        assert_eq!(level(0.71), "high");
+        // Untested and security-named is high; any other untested is medium; tested is low
+        // unless security-named with callers.
+        assert_eq!(level(risk_score(0, false, true)), "high");
+        assert_eq!(level(risk_score(0, false, false)), "medium");
+        assert_eq!(level(risk_score(100, false, false)), "medium");
+        assert_eq!(level(risk_score(100, true, true)), "medium");
+        assert_eq!(level(risk_score(0, true, true)), "low");
+        assert_eq!(level(risk_score(100, true, false)), "low");
+    }
+
+    #[test]
+    fn support_dirs_are_fixtures_benches_and_examples() {
+        use crate::plugins::graph::is_support_path;
+        assert!(is_support_path("bench/check.py"));
+        assert!(is_support_path("bench/repos/t9/src/lib.rs"));
+        assert!(is_support_path("crates/x/benches/b.rs"));
+        assert!(is_support_path("tests/fixtures/a.rs"));
+        assert!(is_support_path("go/testdata/a.go"));
+        assert!(is_support_path("examples/demo.rs"));
+        assert!(!is_support_path("src/bench.rs"));
+        assert!(!is_support_path("src/benchmark/run.rs"));
+        assert!(!is_support_path("src/lib.rs"));
+    }
+
+    #[test]
+    fn check_attr_reads_set_and_explicitly_off_and_skips_unspecified() {
+        let out = b"a.rs\0linguist-vendored\0set\0a.rs\0linguist-generated\0unspecified\0\
+b.rs\0linguist-vendored\0false\0c.rs\0linguist-documentation\0true\0d.rs\0linguist-vendored\0unset\0";
+        assert_eq!(
+            parse_check_attr(out),
+            vec![
+                ("a.rs".to_string(), true),
+                ("b.rs".to_string(), false),
+                ("c.rs".to_string(), true),
+                ("d.rs".to_string(), false),
+            ]
+        );
+    }
+
+    #[test]
+    fn unscored_files_read_only_what_scored_files_leave() {
+        let file = |path: &str, score: f64, starts: &[u32]| FileReview {
+            path: path.into(),
+            score,
+            untested: vec![],
+            regions: starts
+                .iter()
+                .map(|&s| Region {
+                    start: s,
+                    end: s + 3,
+                })
+                .collect(),
+            regions_omitted: 0,
+            support: false,
+        };
+        // Budget 24, per-file share 9, regions of 4 lines. Plain round-robin would grant
+        // README's region at depth 0 and leave c.rs without its second; now the three scored
+        // files take all 24 lines and README is the one omitted.
+        let mut files = vec![
+            file("a.rs", 0.5, &[1, 20]),
+            file("b.rs", 0.4, &[1, 20]),
+            file("c.rs", 0.3, &[1, 20]),
+            file("README.md", 0.0, &[1]),
+        ];
+        allocate_budget(&mut files, 24);
+        for scored in &files[..3] {
+            assert_eq!(scored.regions.len(), 2, "{files:?}");
+        }
+        assert!(files[3].regions.is_empty(), "{files:?}");
+        assert_eq!(files[3].regions_omitted, 1);
     }
 
     #[test]
@@ -543,6 +700,7 @@ diff --git a/gone.rs b/gone.rs
             untested: vec![],
             regions: vec![region(1)],
             regions_omitted: 0,
+            support: false,
         };
         // Budget 10, per-file share 4, each region 4 lines. The first two fit (8);
         // the lowest-ranked file is the one left out.
@@ -616,6 +774,63 @@ diff --git a/gone.rs b/gone.rs
         assert!(v.get("level").is_some(), "{js}");
         assert!(v.get("score").is_some(), "{js}");
         assert!(v["files"][0]["path"].as_str().unwrap().contains("lib.rs"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn only_definitions_a_hunk_touches_are_scored() {
+        let lib = "fn first() {\n    let _ = 1;\n}\n\nfn second() {\n    let _ = 1;\n}\n";
+        let (cx, dir) = repo("review-touched", lib, None);
+        fs::write(
+            dir.join("lib.rs"),
+            "fn first() {\n    let _ = 1;\n}\n\nfn second() {\n    let _ = 2;\n}\n",
+        )
+        .unwrap();
+        let out = review(&Ctx::new(&cx), &dir, Some("HEAD"), false, false).unwrap();
+        assert!(out.contains("untested: second\n"), "{out}");
+        assert!(!out.contains("first"), "{out}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn support_code_is_listed_unscored_and_an_attribute_overrides_the_directory() {
+        let (cx, dir) = repo("review-support", "fn parse() {\n    let _ = 1;\n}\n", None);
+        let files = ["bench/run.rs", "gen/out.rs", "examples/demo.rs"];
+        for f in files {
+            fs::create_dir_all(dir.join(f).parent().unwrap()).unwrap();
+            fs::write(dir.join(f), "fn run() {\n    let _ = 1;\n}\n").unwrap();
+        }
+        fs::write(
+            dir.join(".gitattributes"),
+            "gen/** linguist-generated\nexamples/** -linguist-vendored\n",
+        )
+        .unwrap();
+        git(&dir, &["add", "--", ".gitattributes"]);
+        git(&dir, &[&["add", "--"][..], &files[..]].concat());
+        git(&dir, &["commit", "-q", "-m", "support"]);
+        for f in files {
+            fs::write(dir.join(f), "fn run() {\n    let _ = 2;\n}\n").unwrap();
+        }
+        let js = review(&Ctx::new(&cx), &dir, Some("HEAD"), false, true).unwrap();
+        let v: Value = serde_json::from_str(&js).unwrap();
+        let by_path = |p: &str| {
+            v["files"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|f| f["path"] == p)
+                .unwrap_or_else(|| panic!("{p} missing: {js}"))
+                .clone()
+        };
+        for p in ["bench/run.rs", "gen/out.rs"] {
+            let f = by_path(p);
+            assert_eq!(f["support"], true, "{js}");
+            assert_eq!(f["score"], 0.0, "{js}");
+            assert!(f["untested"].as_array().unwrap().is_empty(), "{js}");
+        }
+        let demo = by_path("examples/demo.rs");
+        assert_eq!(demo["support"], false, "{js}");
+        assert_eq!(demo["untested"][0], "run", "{js}");
         let _ = fs::remove_dir_all(dir);
     }
 

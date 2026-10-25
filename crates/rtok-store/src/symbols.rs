@@ -876,6 +876,33 @@ impl Store {
             .collect())
     }
 
+    /// Reference kinds of `name` per calling definition: distinct `(path, scope, kind)`
+    /// (`call`, `type`, `class`, `implementation`), imports excluded. `rtok review` uses it
+    /// to keep a call from linking to a type and a type use from linking to a function.
+    pub fn symbol_ref_kinds(
+        &self,
+        root: &str,
+        name: &str,
+    ) -> Result<Vec<(String, String, String)>> {
+        let mut conn = self.lock()?;
+        Ok(symbols::table
+            .filter(
+                symbols::root
+                    .eq(root)
+                    .and(symbols::name.eq(name))
+                    .and(symbols::is_def.eq(0))
+                    .and(symbols::kind.ne("import")),
+            )
+            .select((symbols::path, symbols::scope, symbols::kind))
+            .distinct()
+            .order((
+                symbols::path.asc(),
+                symbols::scope.asc(),
+                symbols::kind.asc(),
+            ))
+            .load(&mut *conn)?)
+    }
+
     pub fn has_symbol_def(&self, root: &str, name: &str) -> Result<bool> {
         Ok(!self.symbol_defs(root, name)?.is_empty())
     }

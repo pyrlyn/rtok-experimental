@@ -25,6 +25,8 @@ pub fn host_visible_prefix(text: &str) -> &str {
 
 /// Whether every command in `snippet` ends in a bounding stage. A leading `cd`/`export`
 /// prints nothing and does not unbound the rest; at least one stage must bound.
+/// T931: a literal `echo`/`printf` label between windows (`sed -n 1,80p a; echo ---;
+/// sed -n 1,40p b`) prints a few bytes and does not unbound the chain either.
 pub fn is_bounded(snippet: &str) -> bool {
     let mut any = false;
     for pipeline in lex(snippet) {
@@ -32,7 +34,8 @@ pub fn is_bounded(snippet: &str) -> bool {
             continue;
         };
         let silent = pipeline.len() == 1
-            && matches!(last.first().map(String::as_str), Some("cd" | "export"));
+            && (matches!(last.first().map(String::as_str), Some("cd" | "export"))
+                || is_label(last));
         if silent {
             continue;
         }
@@ -42,6 +45,15 @@ pub fn is_bounded(snippet: &str) -> bool {
         any = true;
     }
     any
+}
+
+/// `echo`/`printf` of literal words. The lexer keeps `$(…)`, backticks and `$var` inside the
+/// word, so any expansion (whose output could be unbounded) disqualifies the label.
+fn is_label(stage: &[String]) -> bool {
+    matches!(
+        stage.first().map(|c| super::formatters::cmd_stem(c)),
+        Some("echo" | "printf")
+    ) && !stage[1..].iter().any(|w| w.contains(['$', '`']))
 }
 
 /// T177: true only when `snippet` chains 2+ DISTINCT programs — `a && b`, `a; b`,
@@ -321,6 +333,13 @@ mod tests {
     #[case("grep -A3 x f")]
     #[case("cd /repo && sed -n '1,80p' Cargo.toml")]
     #[case("cat -n src/main.rs")]
+    // T931: windows joined by `;`/`&&`/newline, a pipe into `sed`, and literal label lines.
+    #[case("sed -n 1,80p a; sed -n 1,40p b")]
+    #[case("sed -n 1,80p a && sed -n 1,40p b")]
+    #[case("git show x | sed -n 1,100p")]
+    #[case("sed -n 1,80p a; echo ---; sed -n 1,40p b")]
+    #[case("sed -n 1,80p a\necho \"=== b ===\"\nsed -n 1,40p b")]
+    #[case("printf '\\n--\\n'; sed -n 1,9p a")]
     // T177: `rg` is recursive by default and `-r` is `--replace`, not a recursive flag —
     // only `grep`'s recursive-without-`-m` gate applies; the context flag still bounds it.
     #[case("rg -r -C 2 needle src")]
@@ -341,6 +360,13 @@ mod tests {
     #[case("cat a.rs")]
     #[case("cd /repo")]
     #[case("echo 'x | head'")]
+    // T931: a label never bounds on its own, and an expansion is not a literal label.
+    #[case("echo ---")]
+    #[case("echo ---; cargo test")]
+    #[case("sed -n 1,5p a; cargo test")]
+    #[case("sed -n 1,5p a; echo $(cat big)")]
+    #[case("sed -n 1,5p a; echo `cat big`")]
+    #[case("sed -n 1,5p a; echo $BIG")]
     // T177: `-A/-B/-C` bound context per match, not match count; a recursive `grep`
     // without an explicit `-m`/`--max-count` can still return an unbounded hit list.
     // (`rg` has no such gate — see `bounded_forms` above.)

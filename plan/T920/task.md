@@ -1,9 +1,9 @@
 ---
-status: todo
+status: in progress
 priority: P1
 complexity: 3
-readiness: 0%
-agent:
+readiness: 90%
+agent: Claude Code / sonnet-5.5
 ---
 
 # T920. PostToolUse hook went from ~4 ms to ~50 ms with v0.17.0-alpha.2 (memory observations)
@@ -22,3 +22,17 @@ enabled.
 
 Check: `tests/latency.rs` case with observations on, red before the fix; p50 on the live store
 for a day after install recorded in this card; `just check`.
+
+## Execution plan
+
+Measured first (release build, `RTOK_HOME` copies, one `PostToolUse` per spawn with a fresh
+`tool_use_id`): the insert is not the cost. In `observe::capture` the SQL insert takes ~0.3 ms and
+`synthesize` ~7 ms, all of it compiling the scrub regex `(?i)<private>[\s\S]*?</private>`
+(`(?i)` plus the `[\s\S]` union class folds every codepoint: 6.7 ms alone, 0.2 ms as
+`(?is)<private>.*?</private>`). The installed alpha.3 (before T927 dropped the per-observation
+measurement row) pays ~50 ms CPU more than a skipped tool; main since T927 pays ~8 ms.
+
+1. `tests/latency.rs`: release-only case, a new call per spawn, interleaved with a skipped tool
+   (`mem_save`) so load cancels; asserts the observations were stored and the median gap < 4 ms. Red first.
+2. `src/plugins/memory/scrub.rs`: the equivalent cheap pattern, plus a multi-line/any-case unit test.
+3. Verify: `cargo nextest run --release --test latency`, scrub unit tests, `just check`.

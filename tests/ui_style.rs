@@ -36,6 +36,7 @@ fn rtok(home: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
         "RTOK_UI_COLOR",
         "RTOK_CONFIG",
         "RUST_LOG",
+        "RUST_LOG_STYLE",
     ] {
         cmd.env_remove(var);
     }

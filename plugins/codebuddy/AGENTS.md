@@ -8,6 +8,7 @@ Agent rules for the **CodeBuddy Code / WorkBuddy** host package. Humans: [`READM
 | --- | --- |
 | Manifest / entry | `.codebuddy-plugin/plugin.json`, `.codebuddy-plugin/marketplace.json`, `hooks/hooks.json` |
 | Hooks | `hooks/hooks.json` → `rtok hook <Event> --host codebuddy` (Claude-shaped stdin; output via `codebuddy_output`) |
+| Worktrees | `WorktreeCreate` / `WorktreeRemove` → `scripts/worktree.sh <event> codebuddy`, a copy of `plugins/claude/scripts/worktree.sh` (T995.1); edit both together |
 | MCP | none in the plugin (D33): `rtok agents install codebuddy` writes `mcpServers.rtok` into the host's MCP file |
 | Installer | `src/agents/codebuddy/` is plan T560.2 |
 | Versions | `tools/plugin-versions.sh` lists this tree; `plugin.json` keeps a `version` field |

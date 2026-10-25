@@ -42,11 +42,13 @@ Raw `git worktree` records no owner, age or size. `rtok worktree` gives each wor
 | `rtok worktree gc`, `clean` | — | sweep finished worktrees, delete idle build caches; dry runs until `--yes`; a live agent's worktree is kept, unless its task is finished and idle past `--idle`, which opens any lock too; someone else's lock on a merged, clean worktree untouched for `--stale-lock` (`7d`) counts as abandoned |
 | `rtok worktree migrate` | — | moves this repository's worktrees that live outside the root to `<root>/<repo>-<task>` (a worktree without a lock keeps its directory name) with `git worktree move`; lock and claim follow; a dry run until `--yes`; skips main, the worktree you stand in, one locked or claimed by another agent or used by another live session, one with submodules, and a taken target |
 
-The owner is `<host> / <model>` of the agent unless a CLI call passes `--owner`; an MCP call never does. The root is `[worktree] root`, `.rtok/worktrees` by default: a relative root is under the main checkout (from inside a worktree too), and before the first worktree lands there rtok makes git ignore `.rtok/`, in `.gitignore` when the project has one, else in `.git/info/exclude`. A relative root that climbs out of the project is refused; `~` and absolute roots keep their meaning, and worktrees made elsewhere keep working. With `[worktree] enabled = false` rtok leaves worktrees alone: every `rtok worktree` command (`list` too) says they are not enabled, MCP lists no `worktree_*` tool, and Claude's `WorktreeCreate`/`WorktreeRemove` hooks do what Claude does without rtok.
+The owner is `<host> / <model>` of the agent unless a CLI call passes `--owner`; an MCP call never does. With neither an agent nor `--owner` (a hook that runs before its session has an agent id), the owner is `RTOK_OWNER` when it is set, else the login user (`USER`, `USERNAME`, else `unknown`), and rtok warns on stderr; that lock names no agent, so it holds like any lock without one. The root is `[worktree] root`, `.rtok/worktrees` by default: a relative root is under the main checkout (from inside a worktree too), and before the first worktree lands there rtok makes git ignore `.rtok/`, in `.gitignore` when the project has one, else in `.git/info/exclude`. A relative root that climbs out of the project is refused; `~` and absolute roots keep their meaning, and worktrees made elsewhere keep working. With `[worktree] enabled = false` rtok leaves worktrees alone: every `rtok worktree` command (`list` too) says they are not enabled, MCP lists no `worktree_*` tool, and the `WorktreeCreate`/`WorktreeRemove` hooks of Claude Code and CodeBuddy do what the host does without rtok. Command Code has no fallback of its own, so its create hook then makes a plain worktree at `.commandcode/worktrees/<name>` on `worktree-<name>`, as it does when rtok refuses the name.
 
 A new worktree starts with warm build caches. After `git worktree add`, rtok fills each `[worktree] seed_dirs` entry (`target` and `node_modules` by default; a bare name also matches one level down, so `web/node_modules` counts) from the sibling checkout of the same repository that built it most recently. Each file is a copy-on-write clone where the file system shares blocks (APFS on macOS; btrfs, XFS and bcachefs on Linux; ReFS and Dev Drive on Windows), so even a multi-gigabyte `target/` costs almost no disk, and a plain copy elsewhere, which still saves the build but not the disk. Every file keeps its source's modification time, so cargo rebuilds what the new branch changed and keeps every dependency; no `touch` is needed. A place the checkout already has (a tracked directory, an earlier seed) is left alone, and a link is never a source. Seeding is best effort: a failure prints a warning, removes the partial copy, and the worktree is still created. `rtok worktree add --no-seed` skips it once; `[worktree] seed = false` turns it off, for MCP `worktree_add` and Claude's `WorktreeCreate` hook too. It runs before the command returns, so a large cache that has to be copied rather than cloned takes as long as the copy.
 
 `worktree add` is all or nothing. Before it runs git it checks the free space of the volume that will hold the worktree and refuses, in one line, when less than `[worktree] min_free_mib` (2048 MiB by default; 0 turns the check off) is left. If anything fails after that point (git, for example with `No space left on device`, or the claim write), rtok removes the directory, the branch and the claim this call made; a branch or directory that existed before the call stays.
+
+`worktree add` takes the task and the branch name in one argument too: `rtok worktree add "T504 read-hook-same-path"` is task `t504` on branch `t504-read-hook-same-path` (the first word is the id, the rest the slug, spaces become dashes). Asked again for a task whose worktree is already there and locked by the same owner (or agent), it prints that path and changes nothing, so a retry of an add that landed is safe; a worktree held by anyone else is refused as before.
 
 ### Worktrees a host makes itself
 
@@ -61,11 +63,11 @@ The `rtok-worktrees` skill tells the agent all of this: use `worktree_add` for n
 
 ## Per host
 
-*Hooks* is whether a plain `rtok agents install` carries hooks (agent row and message push); a host without them registers through MCP. Native-worktree facts and sources are in `research.md` §26.
+*Hooks* is whether a plain `rtok agents install` carries hooks (agent row and message push); a host without them registers through MCP. Native-worktree facts and sources are in `research.md` §26 and §18.6.
 
 | Host | Hooks | Agent row from | Native worktrees | Adopting a host-made worktree |
 | --- | --- | --- | --- | --- |
-| `claude` | yes | hooks | `.claude/worktrees/<name>`; `WorktreeCreate`/`WorktreeRemove` can replace the default (rtok redirect pending T159) | `worktree_adopt` |
+| `claude` | yes | hooks | `.claude/worktrees/<name>`, replaced by the plugin's `WorktreeCreate`/`WorktreeRemove`: `rtok worktree` creates and removes (T159) | `worktree_adopt` |
 | `cursor` | yes | hooks | `~/.cursor/worktrees/`, cap 25 | `worktree_adopt`; post-create script: `agents install --project` |
 | `codex` | yes | hooks | `$CODEX_HOME/worktrees`, keeps 15 | `worktree_adopt` |
 | `windsurf` | no | MCP | `~/.windsurf/worktrees/<repo>`, cap about 20 | `worktree_adopt`; post-create script: `agents install --project` |
@@ -81,7 +83,7 @@ The `rtok-worktrees` skill tells the agent all of this: use `worktree_add` for n
 | `kimi` | yes | hooks | none documented | `worktree_add` |
 | `copilot` | yes | hooks | none documented for this surface | `worktree_add` |
 | `vscode` | no | MCP | separate Agents-window feature, path unverified | `worktree_adopt` |
-| `commandcode` | yes | hooks | none documented | `worktree_add` |
+| `commandcode` | yes | hooks | `~/.commandcode/worktrees/<repo>/<name>`, replaced by `worktree.createHook`/`removeHook`, which `rtok agents install commandcode` writes: `rtok worktree` creates and removes (T995.2) | `worktree_add` |
 | `gemini` | yes | hooks | none found | `worktree_add` |
 | `cline` | yes | hooks | none (checkpoints, not worktrees) | `worktree_add` |
 | `roo` | no | MCP | not checked yet | `worktree_add` |
@@ -95,14 +97,14 @@ The `rtok-worktrees` skill tells the agent all of this: use `worktree_add` for n
 | `augment` | no | MCP | not checked yet | `worktree_add` |
 | `reasonix` | no | MCP | not checked yet | `worktree_add` |
 | `qwen` | yes | hooks | not checked yet | `worktree_add` |
-| `codebuddy` | yes | hooks | not checked yet | `worktree_add` |
+| `codebuddy` | yes | hooks | `.codebuddy/worktrees/<name>`, replaced by the plugin's `WorktreeCreate`/`WorktreeRemove`: `rtok worktree` creates and removes (T995.1) | `worktree_add` |
 | `goose` | no | MCP | not checked yet | `worktree_add` |
 | `continue` | no | MCP | not checked yet | `worktree_add` |
 | `codewhale` | yes | hooks | none documented | `worktree_add` |
 | `aider` | no | none | none | CLI only |
 | `zed` | no | MCP | threads can point at a worktree you make | `worktree_adopt` |
 
-Every host can create worktrees with `worktree_add` (MCP) or `rtok worktree add` (CLI); a host with no agent row passes `--owner` on the CLI. A worktree whose path matches none of the pools above is listed with origin `other` and adopted the same way. `worktree add` (CLI and MCP `worktree_add`) also sets `env.CLAUDE_CODE_TASK_LIST_ID` to `<project>-<task>` in the new worktree's `.claude/settings.local.json`, so Claude Code sessions there share one task list; only that key is written, the rest of the file stays as it was, a file that is not valid JSON or already sets the id is left alone with a warning, and `.claude/` is git-ignored.
+Every host can create worktrees with `worktree_add` (MCP) or `rtok worktree add` (CLI); a host with no agent row may pass `--owner` on the CLI, else the owner falls back as above. A worktree whose path matches none of the pools above is listed with origin `other` and adopted the same way. `worktree add` (CLI and MCP `worktree_add`) also sets `env.CLAUDE_CODE_TASK_LIST_ID` to `<project>-<task>` in the new worktree's `.claude/settings.local.json`, so Claude Code sessions there share one task list; only that key is written, the rest of the file stays as it was, a file that is not valid JSON or already sets the id is left alone with a warning, and `.claude/` is git-ignored.
 
 ### Windows
 

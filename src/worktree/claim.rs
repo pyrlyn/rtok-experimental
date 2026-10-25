@@ -112,7 +112,8 @@ pub fn caller(store: Option<&Store>, flag: Option<&str>) -> Result<Option<AgentD
 }
 
 /// `--owner`, else `<host> / <model>` of the agent (`<host>` alone while no call has named
-/// a model), else an error: without an agent the owner is the only name a lock has.
+/// a model), else (T988) `RTOK_OWNER`, else the login user: a hook that runs before its
+/// session has an agent id still gets a worktree. The lock then names no agent, so it holds.
 pub fn owner(
     flag: Option<String>,
     agent: Option<&AgentDetail>,
@@ -122,7 +123,12 @@ pub fn owner(
         return Ok(owner);
     }
     let Some(agent) = agent else {
-        bail!("--owner is required when no agent is known (--agent or RTOK_AGENT_ID)");
+        let owner = ["RTOK_OWNER", "USER", "USERNAME"]
+            .into_iter()
+            .find_map(|key| std::env::var(key).ok().filter(|v| !v.trim().is_empty()))
+            .unwrap_or_else(|| "unknown".to_string());
+        crate::log::stderr_ln(&format!("warning: no agent bound; owner `{owner}`"));
+        return Ok(owner);
     };
     let model = store.and_then(|s| s.session_model(&agent.host_session_id).ok().flatten());
     Ok(match model {
@@ -274,7 +280,12 @@ pub fn add_with(
 ) -> Result<super::add::Plan> {
     let owner = owner(owner_flag, agent, store)?;
     let agent_id = agent.map(|a| a.id.as_str());
-    let (plan, mut undo) = super::add::run(cwd, wt, seams, id, (&owner, agent_id))?;
+    let added = super::add::run(cwd, wt, seams, id, (&owner, agent_id), store)?;
+    // T523: a retry finds its worktree claimed, seeded and registered by the add that made it.
+    let (plan, mut undo) = match added {
+        super::add::Added::Existing(plan) => return Ok(plan),
+        super::add::Added::New(plan, undo) => (plan, undo),
+    };
     if let Some(agent) = agent_id {
         if let Some(store) = store {
             undo.claim(store, &plan.path);
@@ -430,27 +441,11 @@ pub fn bind_unattended(
     if hosts.is_empty() {
         bail!("no agent to bind: pass --agent or set RTOK_AGENT_ID");
     }
-    let repo = main.to_string_lossy();
     let host_ids: Vec<i32> = hosts
         .iter()
         .filter_map(|h| store.host_id(h).ok().flatten())
         .collect();
-    // The cwd rule of `agents::link::resolve` (T283.1); only top-level sessions, since a
-    // sub-agent shares its parent's cwd and would make every repository ambiguous.
-    let mut here: Vec<_> = store
-        .live_agents(idle)?
-        .into_iter()
-        .filter(|a| host_ids.contains(&a.host_id) && a.parent_key.is_empty())
-        .filter(|a| {
-            a.cwd
-                .as_deref()
-                .is_some_and(|c| crate::fs::same_dir(c, &repo))
-        })
-        .collect();
-    if here.len() == 1 {
-        let agent = store
-            .agent_detail(&here.remove(0).id)?
-            .context("the live agent vanished")?;
+    if let Some(agent) = sole_live_agent(store, &host_ids, &main, idle)? {
         return bind(Some(store), path, &agent, None, task, true, auto_add);
     }
     let task = task_of(path, task, &record)?;
@@ -469,6 +464,36 @@ pub fn bind_unattended(
         pending: true,
         branch: record.branch.clone(),
     })
+}
+
+/// The one live top-level agent of `host_ids` working in `repo`; `None` with none or several,
+/// since guessing would hand the worktree to another agent.
+pub fn sole_live_agent(
+    store: &Store,
+    host_ids: &[i32],
+    repo: &Path,
+    idle: &str,
+) -> Result<Option<AgentDetail>> {
+    let repo = repo.to_string_lossy();
+    // The cwd rule of `agents::link::resolve` (T283.1); only top-level sessions, since a
+    // sub-agent shares its parent's cwd and would make every repository ambiguous.
+    let mut here: Vec<_> = store
+        .live_agents(idle)?
+        .into_iter()
+        .filter(|a| host_ids.contains(&a.host_id) && a.parent_key.is_empty())
+        .filter(|a| {
+            a.cwd
+                .as_deref()
+                .is_some_and(|c| crate::fs::same_dir(c, &repo))
+        })
+        .collect();
+    if here.len() != 1 {
+        return Ok(None);
+    }
+    let agent = store
+        .agent_detail(&here.remove(0).id)?
+        .context("the live agent vanished")?;
+    Ok(Some(agent))
 }
 
 #[cfg(test)]

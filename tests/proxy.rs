@@ -1242,10 +1242,11 @@ async fn proxy_anthropic_context_edits_arm_platform_path() {
         .into_iter()
         .map(|r| r.kind)
         .collect();
+    // tools_rewrite is on by default (#1295), so it records its own row beside the path's.
     assert_eq!(
         kinds,
-        ["context_management"],
-        "one row naming the path this request took"
+        ["context_management", "tools_rewrite"],
+        "one row naming the path this request took, plus the tool-catalog rewrite"
     );
     task.abort();
 }

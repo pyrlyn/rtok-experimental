@@ -28,6 +28,7 @@ pub mod ping;
 pub mod http;
 
 mod agents;
+mod memo;
 mod messages;
 #[cfg(feature = "read")]
 mod paths;
@@ -408,6 +409,14 @@ struct Server {
     /// shared server does not redo the link rules every time.
     #[cfg(feature = "read")]
     caller: Mutex<Option<(std::time::Instant, Option<std::path::PathBuf>)>>,
+    /// Read-only tool results by full request key (see `memo`).
+    memo: Mutex<memo::Memo>,
+    /// Memo on/off (`[mcp] cache_enabled`, `RTOK_MCP_CACHE`); off skips both layers.
+    memo_on: bool,
+    /// Schema hash per memoizable tool, for the persistent layer.
+    memo_schemas: Vec<(&'static str, String)>,
+    memo_hits: std::sync::atomic::AtomicU64,
+    memo_misses: std::sync::atomic::AtomicU64,
 }
 
 impl Server {
@@ -516,6 +525,30 @@ impl Server {
                     || cfg.mcp.tools.iter().any(|n| n.as_str() == t.def.name)
             });
         }
+        let memo_on = memo::enabled(
+            cfg.mcp.cache_enabled,
+            std::env::var("RTOK_MCP_CACHE").ok().as_deref(),
+        );
+        let memo_schemas: Vec<(&'static str, String)> = listed
+            .iter()
+            .filter(|t| memo::MEMO_TOOLS.contains(&t.def.name))
+            .map(|t| (t.def.name, memo::schema_hash(&t.def)))
+            .collect();
+        if memo_on {
+            let pairs: Vec<(&str, &str)> =
+                memo_schemas.iter().map(|(t, h)| (*t, h.as_str())).collect();
+            let dropped = cx
+                .store
+                .memo_invalidate(env!("CARGO_PKG_VERSION"), &pairs)
+                .unwrap_or(0);
+            let (entries, bytes) = cx.store.memo_stats().unwrap_or((0, 0));
+            cx.log(
+                "info",
+                "mcp",
+                "memo",
+                &format!("memo on: {entries} entries, {bytes} bytes, {dropped} invalidated"),
+            );
+        }
         Ok(Self {
             cx,
             listed,
@@ -524,6 +557,14 @@ impl Server {
             started: crate::log::now() as i64,
             #[cfg(feature = "read")]
             caller: Mutex::new(None),
+            memo: Mutex::new(memo::Memo::new(
+                cfg.mcp.cache_ttl_secs,
+                cfg.mcp.cache_max_entries,
+            )),
+            memo_on,
+            memo_schemas,
+            memo_hits: std::sync::atomic::AtomicU64::new(0),
+            memo_misses: std::sync::atomic::AtomicU64::new(0),
         })
     }
 
@@ -749,6 +790,95 @@ impl Server {
         .to_string())
     }
 
+    /// Who is asking, for the memo key: the cwd and the linked agent. A result may depend on
+    /// either, so a different caller never gets another's cached answer.
+    fn memo_scope(&self) -> String {
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let agent = self
+            .agent
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().map(|(id, _)| id.clone()))
+            .unwrap_or_default();
+        serde_json::json!([cwd.to_string_lossy(), agent]).to_string()
+    }
+
+    /// `invoke_text` through the memo: a hit for a byte-identical request of a memo tool,
+    /// else a real call whose successful answer is kept. A call that may write clears it.
+    fn memoized(&self, name: &str, args: &Value) -> (String, bool) {
+        if !self.memo_on {
+            return self.invoke_text(name, args);
+        }
+        let now = std::time::Instant::now();
+        let key = self
+            .memo
+            .lock()
+            .ok()
+            .and_then(|m| m.key(name, &self.memo_scope(), args));
+        let schema = self
+            .memo_schemas
+            .iter()
+            .find(|(t, _)| *t == name)
+            .map(|(_, h)| h.as_str());
+        let version = env!("CARGO_PKG_VERSION");
+        let ttl = i64::try_from(self.cx.config.mcp.cache_ttl_secs).unwrap_or(i64::MAX);
+        if let Some(k) = &key {
+            let hot = self.memo.lock().ok().and_then(|mut m| m.get(k, now));
+            let hit = hot.or_else(|| {
+                let v = self.cx.store.memo_get(k, schema?, version, ttl).ok()??;
+                if let Ok(mut m) = self.memo.lock() {
+                    m.put(k.clone(), v.clone(), now);
+                }
+                Some(v)
+            });
+            if let Some(v) = hit {
+                self.memo_count(true);
+                return (v, true);
+            }
+            self.memo_count(false);
+        }
+        let (text, ok) = self.invoke_text(name, args);
+        if let Ok(mut m) = self.memo.lock() {
+            if ok && let Some(k) = &key {
+                m.put(k.clone(), text.clone(), now);
+                if let Some(schema_hash) = schema {
+                    let row = crate::store::MemoRow {
+                        key: k,
+                        tool: name,
+                        value: &text,
+                        schema_hash,
+                        rtok_version: version,
+                    };
+                    let max = i64::from(self.cx.config.mcp.cache_max_entries);
+                    let _ = self.cx.store.memo_put(&row, max);
+                }
+            }
+            m.after_call(name, ok);
+            if ok && memo::clears(name) {
+                let _ = self.cx.store.memo_clear();
+            }
+        }
+        (text, ok)
+    }
+
+    /// Count a memo hit or miss; every 100 lookups log the metrics.
+    fn memo_count(&self, hit: bool) {
+        let c = if hit {
+            &self.memo_hits
+        } else {
+            &self.memo_misses
+        };
+        c.fetch_add(1, Ordering::Relaxed);
+        let hits = self.memo_hits.load(Ordering::Relaxed);
+        let misses = self.memo_misses.load(Ordering::Relaxed);
+        if (hits + misses).is_multiple_of(100) {
+            let (entries, bytes) = self.cx.store.memo_stats().unwrap_or((0, 0));
+            let msg =
+                format!("memo: {hits} hits, {misses} misses, {entries} entries, {bytes} bytes");
+            self.cx.log("info", "mcp", "memo", &msg);
+        }
+    }
+
     fn tools(&self) -> Vec<Tool> {
         self.listed.iter().map(|t| to_tool(&t.def)).collect()
     }
@@ -853,7 +983,7 @@ impl Server {
         } else if let Some(msg) = found.and_then(|t| missing_required(&t.def.input_schema, &args)) {
             (format!("invalid params: {msg}"), false)
         } else {
-            self.invoke_text(name, &args)
+            self.memoized(name, &args)
         };
         let _ = record(&self.cx, plugin, name, &args, &text);
         if !ok {
@@ -1283,6 +1413,91 @@ mod tests {
         "mem_save",
         "mem_update",
     ];
+
+    /// Prompt caching: `tools/list` is the host's prompt prefix, so it must be byte-identical
+    /// across calls and across server processes (no timestamps, ids or unordered maps).
+    #[test]
+    fn tools_list_is_byte_stable() {
+        let (cfg, dir) = tmp("mcp-tools-stable");
+        let line = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
+        let one = Server::new(&cfg).unwrap();
+        let two = Server::new(&cfg).unwrap();
+        let first = one.handle_line(line).unwrap();
+        assert_eq!(first, one.handle_line(line).unwrap());
+        assert_eq!(first, two.handle_line(line).unwrap());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Memo bench (`--ignored`): one fixed request set (15 distinct `mem_search` / `mem_get`
+    /// requests, each sent 5 times) run with the memo off and on. Prints wall time, real
+    /// tool executions and the estimated tokens of answers served from the memo.
+    #[cfg(feature = "memory")]
+    #[test]
+    #[ignore = "bench: run with --ignored --nocapture"]
+    fn memo_bench_fixed_request_set() {
+        let mut requests = Vec::new();
+        for r in 0..5 {
+            let _ = r;
+            for q in 0..10 {
+                requests.push(("mem_search", json!({"query": format!("topic{q}")})));
+            }
+            for id in 1..=5 {
+                requests.push(("mem_get", json!({"id": id})));
+            }
+        }
+        for on in [false, true] {
+            let (mut cfg, dir) = tmp(if on { "mcp-bench-on" } else { "mcp-bench-off" });
+            cfg.mcp.cache_enabled = on;
+            let server = Server::new(&cfg).unwrap();
+            for i in 0..200 {
+                let body = format!(
+                    "topic{} note {i} {}",
+                    i % 10,
+                    "lorem ipsum dolor ".repeat(40)
+                );
+                server
+                    .cx
+                    .store
+                    .insert_note(None, "note", &format!("n{i}"), &body)
+                    .unwrap();
+            }
+            let start = std::time::Instant::now();
+            let mut served_tokens = 0u64;
+            for (name, args) in &requests {
+                let (text, ok) = server.memoized(name, args);
+                assert!(ok, "{name}: {text}");
+                served_tokens += u64::from(server.cx.estimate(&text, Class::Json));
+            }
+            let ms = start.elapsed().as_secs_f64() * 1000.0;
+            let hits = server.memo_hits.load(Ordering::Relaxed);
+            let misses = server.memo_misses.load(Ordering::Relaxed);
+            println!(
+                "memo={on} requests={} executions={} hits={hits} ms={ms:.2} tokens_out={served_tokens}",
+                requests.len(),
+                if on { misses } else { requests.len() as u64 },
+            );
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+
+    /// Only read-only tools may be memoized.
+    #[test]
+    fn memo_tools_are_read_only() {
+        for t in memo::MEMO_TOOLS {
+            assert!(READ_ONLY_TOOLS.contains(t), "{t}");
+        }
+    }
+
+    /// A failed call is never memoized: the same request runs (and fails) again.
+    #[test]
+    fn errors_are_not_memoized() {
+        let (cfg, dir) = tmp("mcp-memo-err");
+        let server = Server::new(&cfg).unwrap();
+        let args = json!({"id":"nope"});
+        let _ = server.memoized("docs_get", &args);
+        assert_eq!(server.memo.lock().unwrap().len(), 0);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     /// T528: every built-in tool, enabled or not, is sorted into one list on purpose, so a new
     /// tool can neither skip Codex's approval nor lose it by accident.

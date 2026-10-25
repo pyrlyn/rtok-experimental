@@ -11,8 +11,10 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+// `(?is).` and not `[\s\S]`: under `(?i)` that union class costs ~7 ms to compile (Unicode case
+// folding of every codepoint), paid by every `PostToolUse` process (T920). Same language.
 static PRIVATE_TAG: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)<private>[\s\S]*?</private>").expect("private tag"));
+    LazyLock::new(|| Regex::new(r"(?is)<private>.*?</private>").expect("private tag"));
 static PRIVATE_KEY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----|$)",
@@ -68,6 +70,13 @@ mod tests {
         assert!(!out.contains("nope"), "{out}");
         assert!(!out.contains("sk-ant-"), "{out}");
         assert!(out.contains("[REDACTED]"), "{out}");
+    }
+
+    /// T920: the tag pattern spans lines and ignores case, as it did with `[\s\S]`.
+    #[test]
+    fn strips_a_multiline_private_tag_in_any_case() {
+        let out = strip_private("a <PRIVATE>one\ntwo</Private> b");
+        assert_eq!(out, "a [REDACTED] b");
     }
 
     #[test]

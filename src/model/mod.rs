@@ -676,7 +676,11 @@ fn doctor_for_snapshot(cfg: &Config) -> DoctorRead {
         cfg.doctor.mcp_json.display()
     );
     let cfg = cfg.clone();
-    doctor_from(&DOCTOR, key, move || doctor(&cfg).ok())
+    doctor_from(&DOCTOR, key, move || {
+        let mut report = doctor(&cfg).ok()?;
+        report.project = doctor::project::audit_cwd(&cfg);
+        Some(report)
+    })
 }
 
 /// [`doctor_for_snapshot`] over any cache and probe, so a test can pass a probe that blocks.

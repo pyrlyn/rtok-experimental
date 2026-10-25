@@ -666,6 +666,13 @@ pub trait Symbols {
     /// References to `name` grouped by location: `(path, kind, count, line)`.
     fn symbol_ref_groups(&self, root: &str, name: &str) -> Result<Vec<(String, String, i64, i32)>>;
 
+    /// Reference kinds of `name` per calling definition: `(path, scope, kind)`. The default
+    /// is empty, which callers read as "kind unknown".
+    fn symbol_ref_kinds(&self, root: &str, name: &str) -> Result<Vec<(String, String, String)>> {
+        let _ = (root, name);
+        Ok(Vec::new())
+    }
+
     /// Callees per definition of `name`: `(def_path, def_line, callee, first_line)` (T68.2).
     fn symbol_callees(&self, root: &str, name: &str) -> Result<Vec<(String, i32, String, i32)>> {
         let _ = (root, name);

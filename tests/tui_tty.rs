@@ -26,6 +26,8 @@ fn tui_without_a_tty_exits_one_with_one_clean_stderr_line() {
         .env_remove("RUST_LOG")
         .env("RTOK_HOME", &home)
         .env("HOME", &home)
+        .env_remove("RUST_LOG")
+        .env_remove("RUST_LOG_STYLE")
         .current_dir(&home)
         .output()
         .unwrap();

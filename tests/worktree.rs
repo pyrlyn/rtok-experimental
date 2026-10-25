@@ -109,12 +109,30 @@ fn rtok_as(
     args: &[&str],
     stdin: &[u8],
 ) -> std::process::Output {
+    rtok_env(home, cwd, agent, &[], args, stdin)
+}
+
+/// [`rtok_as`] with extra variables: `Some` sets one, `None` removes it.
+fn rtok_env(
+    home: &Path,
+    cwd: &Path,
+    agent: Option<&str>,
+    vars: &[(&str, Option<&str>)],
+    args: &[&str],
+    stdin: &[u8],
+) -> std::process::Output {
     use std::io::Write as _;
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rtok"));
     match agent {
         Some(id) => cmd.env("RTOK_AGENT_ID", id),
         None => cmd.env_remove("RTOK_AGENT_ID"),
     };
+    for (key, value) in vars {
+        match value {
+            Some(v) => cmd.env(key, v),
+            None => cmd.env_remove(key),
+        };
+    }
     let mut child = cmd
         .current_dir(cwd)
         .env("HOME", home)
@@ -571,9 +589,22 @@ fn add_creates_one_locked_worktree_per_task_from_a_fresh_base() {
         &["worktree", "add", "t158", "--owner", owner],
         b"",
     );
-    assert!(!again.status.success());
+    // T523: a retry by the same owner prints the same path, in any spelling of the name; another
+    // owner is still refused.
     let err = String::from_utf8_lossy(&again.stderr);
-    assert!(err.contains("one worktree per task"), "{err}");
+    assert!(again.status.success(), "{err}");
+    assert_eq!(String::from_utf8_lossy(&again.stdout), printed);
+    let spelled = ["worktree", "add", "T158 Worktree-Add", "--owner", owner];
+    let again = rtok_in(&home, &work, &spelled, b"");
+    assert_eq!(String::from_utf8_lossy(&again.stdout), printed);
+    let theirs = ["worktree", "add", "t158", "--owner", "Cursor / grok"];
+    let refused = rtok_in(&home, &work, &theirs, b"");
+    let err = String::from_utf8_lossy(&refused.stderr);
+    assert!(!refused.status.success(), "{err}");
+    assert!(
+        err.contains("one worktree per task") && err.contains("locked by"),
+        "{err}"
+    );
     assert_eq!(inventory(&work).unwrap().len(), 2);
 
     // `[worktree] root` wins over the default; `~` expands.
@@ -723,8 +754,8 @@ fn lock_of(work: &Path, name: &str) -> rtok::worktree::Owner {
 }
 
 /// T285: `add` binds the worktree to the calling agent — `RTOK_AGENT_ID` or `--agent` — in
-/// a v2 lock and a claim row; the owner defaults to the agent's host; no agent, no owner is
-/// an error.
+/// a v2 lock and a claim row; the owner defaults to the agent's host; with no agent and no
+/// owner, `RTOK_OWNER` or the login user holds a lock that names no agent (T988).
 #[test]
 fn add_binds_the_worktree_to_the_calling_agent() {
     let tmp = rtok::testutil::tmp_dir("worktree-add-agent");
@@ -764,16 +795,43 @@ fn add_binds_the_worktree_to_the_calling_agent() {
     let lock = lock_of(&work, "rtok-t10");
     assert_eq!((lock.owner.as_str(), lock.agent.as_deref()), (ME, Some(me)));
 
-    let bare = rtok_as(&tmp, &work, None, &["worktree", "add", "t11"], b"");
-    assert!(String::from_utf8_lossy(&bare.stderr).contains("--owner is required"));
+    // T988: no agent and no `--owner` — `RTOK_OWNER`, else the login user, else `unknown`,
+    // with a warning; the lock names no agent and still holds against one.
+    let cases = [
+        ("t11", [Some("tester"), None, None], "tester"),
+        ("t12", [Some("tester"), None, Some("Hook / x")], "Hook / x"),
+        ("t13", [None, Some("winner"), Some("")], "winner"),
+        ("t14", [None, None, None], "unknown"),
+    ];
+    for (task, [user, username, owner_var], want) in cases {
+        let vars = [
+            ("USER", user),
+            ("USERNAME", username),
+            ("RTOK_OWNER", owner_var),
+        ];
+        let bare = rtok_env(&tmp, &work, None, &vars, &["worktree", "add", task], b"");
+        let err = String::from_utf8_lossy(&bare.stderr);
+        assert!(bare.status.success(), "{err}");
+        assert!(
+            err.contains(&format!("warning: no agent bound; owner `{want}`")),
+            "{err}"
+        );
+        let lock = lock_of(&work, &format!("rtok-{task}"));
+        assert_eq!((lock.owner.as_str(), lock.agent.as_deref()), (want, None));
+    }
+    let theirs = rtok_as(&tmp, &work, Some(me), &["worktree", "add", "t11"], b"");
+    let err = String::from_utf8_lossy(&theirs.stderr);
+    assert!(!theirs.status.success(), "{err}");
+    assert!(err.contains("locked by tester"), "{err}");
+
     let unknown = [
-        "worktree", "add", "t11", "--agent", "ffffffff", "--owner", ME,
+        "worktree", "add", "t15", "--agent", "ffffffff", "--owner", ME,
     ];
     let unknown = rtok_as(&tmp, &work, None, &unknown, b"");
     assert!(String::from_utf8_lossy(&unknown.stderr).contains("--agent ffffffff: unknown"));
     assert_eq!(
         inventory(&work).unwrap().len(),
-        3,
+        7,
         "a refused add creates nothing"
     );
 }
@@ -1428,7 +1486,8 @@ fn mcp_worktree_tools_act_for_the_linked_agent() {
     let calls = [
         ("worktree_add", r#"{"task":"t9","slug":"mcp"}"#),
         ("worktree_list", "{}"),
-        ("worktree_add", r#"{"task":"t9"}"#),
+        // T523: a retry, spelled as id plus slug in one string, is the same worktree.
+        ("worktree_add", r#"{"task":"T9 mcp"}"#),
     ];
     let mut me = String::new();
     let hooks = || {
@@ -1458,7 +1517,11 @@ fn mcp_worktree_tools_act_for_the_linked_agent() {
     );
 
     let (is_err, text) = &got[2];
-    assert!(*is_err && text.contains("already exists"), "{text}");
+    assert!(!is_err, "{text}");
+    let again: serde_json::Value = serde_json::from_str(text).unwrap();
+    assert_eq!(again["path"], added["path"]);
+    assert_eq!(again["branch"], "t9-mcp");
+    assert_eq!(store.open_worktree_claims().unwrap().len(), 1);
 
     // No agent row for this cwd: the worktree has no one to belong to.
     let elsewhere = tmp.join("elsewhere");
@@ -1470,7 +1533,7 @@ fn mcp_worktree_tools_act_for_the_linked_agent() {
         &[("worktree_add", r#"{"task":"t10"}"#)],
     );
     assert!(
-        got[0].0 && got[0].1.starts_with("not linked to an agent session: "),
+        got[0].0 && got[0].1.starts_with("not linked to an agent session"),
         "{got:?}"
     );
     assert!(got[0].1.contains("rtok doctor"), "{got:?}");
@@ -1717,9 +1780,150 @@ fn worktree_create_hook_returns_the_add_path_bound_to_the_session_agent() {
     assert_eq!(inventory(&work).unwrap().len(), 2);
 
     // A name `add` refuses fails the hook (non-zero, nothing printed); the launcher falls back.
-    let bad = create("two words");
+    let bad = create("../evil");
     assert!(!bad.status.success() && bad.stdout.is_empty());
     assert_eq!(inventory(&work).unwrap().len(), 2);
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// T995.1: CodeBuddy sends the same two hooks with `--host codebuddy`. Its session's agent is
+/// filed under the `other` host, as the dispatcher files it, and gets the worktree and the lock;
+/// remove takes it back. A host that has no such hooks is refused with nothing printed.
+#[test]
+fn codebuddy_worktree_hooks_bind_and_remove_for_its_session_agent() {
+    let tmp = rtok::testutil::tmp_dir("worktree-hook-codebuddy");
+    let work = origin_clone(&tmp, "rtok");
+    std::fs::create_dir_all(tmp.join(".rtok")).unwrap();
+    let store = rtok::store::Store::open(&tmp.join(".rtok/rtok.db")).unwrap();
+    let other = store.host_id_or_other("codebuddy").unwrap();
+    let id = store
+        .register_agent(other, "sess-cb", None, None, None)
+        .unwrap();
+    let send = |event: &str, host: &str, extra: serde_json::Value| {
+        let stdin = host_payload(event, "sess-cb", &work, extra);
+        rtok_in(&tmp, &work, &["hook", event, "--host", host], &stdin)
+    };
+
+    let out = send(
+        "WorktreeCreate",
+        "codebuddy",
+        serde_json::json!({"name": "cb-1"}),
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let path = String::from_utf8(out.stdout)
+        .unwrap()
+        .trim_end()
+        .to_string();
+    let want = work.join(".rtok/worktrees/rtok-cb-1");
+    assert_eq!(
+        Path::new(&path).canonicalize().unwrap(),
+        want.canonicalize().unwrap()
+    );
+    assert_eq!(
+        lock_of(&work, "rtok-cb-1").agent.as_deref(),
+        Some(id.as_str())
+    );
+
+    let refused = send(
+        "WorktreeCreate",
+        "cursor",
+        serde_json::json!({"name": "cb-2"}),
+    );
+    assert!(!refused.status.success() && refused.stdout.is_empty());
+    assert_eq!(inventory(&work).unwrap().len(), 2);
+
+    let gone = send(
+        "WorktreeRemove",
+        "codebuddy",
+        serde_json::json!({"worktree_path": path}),
+    );
+    assert!(
+        gone.status.success(),
+        "{}",
+        String::from_utf8_lossy(&gone.stderr)
+    );
+    assert!(!want.exists());
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// T995.2: Command Code runs `rtok hook <event> --host commandcode` with the name and path in
+/// `COMMAND_CODE_WORKTREE_*`, no stdin and no session. The one live Command Code agent in the
+/// repository gets the worktree and removes it again. A create rtok refuses, and any create while
+/// worktrees are off, still gets a plain worktree, since Command Code has no fallback of its own.
+#[test]
+fn commandcode_worktree_hooks_read_the_environment_and_fall_back_to_plain_git() {
+    let tmp = rtok::testutil::tmp_dir("worktree-hook-commandcode");
+    let work = origin_clone(&tmp, "rtok");
+    std::fs::create_dir_all(tmp.join(".rtok")).unwrap();
+    let store = rtok::store::Store::open(&tmp.join(".rtok/rtok.db")).unwrap();
+    let host = store.host_id_or_other("commandcode").unwrap();
+    let repo = work.canonicalize().unwrap();
+    let id = store
+        .register_agent(host, "sess-cc", None, Some(&repo.to_string_lossy()), None)
+        .unwrap();
+    let send = |event: &str, vars: &[(&str, Option<&str>)]| {
+        let args = ["hook", event, "--host", "commandcode"];
+        rtok_env(&tmp, &work, None, vars, &args, b"")
+    };
+    let path_of = |out: std::process::Output| {
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let path = String::from_utf8(out.stdout).unwrap();
+        Path::new(path.trim_end()).canonicalize().unwrap()
+    };
+
+    let made = send(
+        "WorktreeCreate",
+        &[("COMMAND_CODE_WORKTREE_NAME", Some("cc-1"))],
+    );
+    let path = path_of(made);
+    let want = work.join(".rtok/worktrees/rtok-cc-1");
+    assert_eq!(path, want.canonicalize().unwrap());
+    assert_eq!(
+        lock_of(&work, "rtok-cc-1").agent.as_deref(),
+        Some(id.as_str())
+    );
+    let gone = send(
+        "WorktreeRemove",
+        &[
+            ("COMMAND_CODE_WORKTREE_PATH", Some(&path.to_string_lossy())),
+            ("COMMAND_CODE_WORKTREE_NAME", Some("cc-1")),
+        ],
+    );
+    assert!(
+        gone.status.success(),
+        "{}",
+        String::from_utf8_lossy(&gone.stderr)
+    );
+    assert!(!want.exists());
+
+    // Command Code allows `/` in a name; rtok's task ids do not, so the plain worktree is made
+    // where the plugin launchers make theirs.
+    let plain = path_of(send(
+        "WorktreeCreate",
+        &[("COMMAND_CODE_WORKTREE_NAME", Some("feat/auth"))],
+    ));
+    assert_eq!(plain, repo.join(".commandcode/worktrees/feat-auth"));
+    let branch = run(&plain, &["branch", "--show-current"]);
+    assert_eq!(branch.trim(), "worktree-feat-auth");
+
+    std::fs::write(
+        tmp.join(".rtok/config.toml"),
+        "[worktree]\nenabled = false\n",
+    )
+    .unwrap();
+    let off = path_of(send(
+        "WorktreeCreate",
+        &[("COMMAND_CODE_WORKTREE_NAME", Some("cc-2"))],
+    ));
+    assert_eq!(off, repo.join(".commandcode/worktrees/cc-2"));
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
