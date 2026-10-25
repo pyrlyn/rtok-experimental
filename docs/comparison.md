@@ -39,22 +39,22 @@ does not mean giving up the minimal-code rules.
   budget, so it is byte-stable and counted with every other injection.
 - `rtok stats` reports what was saved and, with per-model prices in `[stats.prices]`, what it
   costs in USD (`src/cli/stats.rs`); `rtok dashboard` shows the same store in a local UI.
-- `rtok doctor --audit` checks your instruction files, and `rtok doctor` also audits what the
+- `rtok doctor --instructions` audits your instruction files, and `rtok doctor` also audits what the
   installed skills cost to list on every turn (`src/cli/doctor.rs`, `src/doctor.rs`).
 - `rtok task` keeps the plan as tasks the agent can claim instead of loose TODO prose
   ([commands](commands.md)).
 - `rtok graph review` turns a git diff into a deterministic reading list, with no model call
   ([review](review.md)).
 
-**In progress (not on main).** A model-backed `rtok review` is in draft PR
-[#1299](https://github.com/pyrlyn/rtok/pull/1299). Until it merges, `rtok graph review` is the
-only review command.
+- `rtok review` hands a reviewer model the diff plus signature digests
+  ([review-context](review-context.md)).
 
 **Benchmarks.** ponytail is [not measurable in this suite](../bench/competitors/ponytail/README.md):
 it is prompt-only and needs a live model. A side-by-side reading is in
 [rtok-vs-ponytail](comparison/rtok-vs-ponytail.md); the `mode_bench` fixture results for the
 yagni mode are in section 2, "Prompt-level", and the survey is in [research.md](../research.md).
-There are no live end-to-end numbers comparing rtok and ponytail. ponytail 5 reports −53 % lines of code, −45 % output tokens and −26 % cost from its own
+There are no live end-to-end numbers comparing rtok and ponytail.
+ponytail 5 reports −53 % lines of code, −45 % output tokens and −26 % cost from its own
 bench ([ponytail.dev](https://ponytail.dev)); these numbers are unverified here.
 
 ## 2. What each category does well
