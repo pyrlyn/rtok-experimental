@@ -57,6 +57,8 @@ pub mod proxy;
 pub mod removal_preview;
 pub mod render;
 pub mod report;
+#[cfg(feature = "graph")]
+pub mod review;
 pub mod sanitize;
 pub mod shell_agent;
 pub mod since;

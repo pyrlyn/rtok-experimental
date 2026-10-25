@@ -787,6 +787,10 @@ impl Symbols for Runtime {
         self.store.symbol_ref_groups(root, name).map_err(Into::into)
     }
 
+    fn symbol_ref_kinds(&self, root: &str, name: &str) -> Result<Vec<(String, String, String)>> {
+        self.store.symbol_ref_kinds(root, name).map_err(Into::into)
+    }
+
     fn symbol_callees(&self, root: &str, name: &str) -> Result<Vec<(String, i32, String, i32)>> {
         self.store.symbol_callees(root, name).map_err(Into::into)
     }
