@@ -2310,19 +2310,20 @@ mod tests {
     #[test]
     fn tools_rewrite_defaults_overlay_and_unknown_key() {
         let d = ToolsRewrite::default();
-        assert!(!d.enabled);
+        // On by default since the token-savings defaults (#1295).
+        assert!(d.enabled);
         assert_eq!(d.max_description_tokens, 60);
         assert!(d.allow.is_empty());
         assert!(d.deny.is_empty());
         let cfg: Config = parse(
             "[proxy.tools_rewrite]
-enabled = true
+enabled = false
 max_description_tokens = 40
 deny = [\"Bash\"]
 ",
         )
         .unwrap();
-        assert!(cfg.proxy.tools_rewrite.enabled);
+        assert!(!cfg.proxy.tools_rewrite.enabled);
         assert_eq!(cfg.proxy.tools_rewrite.max_description_tokens, 40);
         assert_eq!(cfg.proxy.tools_rewrite.deny, ["Bash"]);
         let err = parse("[proxy.tools_rewrite]\nbogus = true\n").unwrap_err();
