@@ -54,8 +54,8 @@ only review command.
 it is prompt-only and needs a live model. A side-by-side reading is in
 [rtok-vs-ponytail](comparison/rtok-vs-ponytail.md); the `mode_bench` fixture results for the
 yagni mode are in section 2, "Prompt-level", and the survey is in [research.md](../research.md).
-There are no live end-to-end numbers comparing rtok and ponytail. ponytail's −54 % LOC and
-−22 % tokens come from its own bench and are unverified here.
+There are no live end-to-end numbers comparing rtok and ponytail. ponytail 5 reports −53 % lines of code, −45 % output tokens and −26 % cost from its own
+bench ([ponytail.dev](https://ponytail.dev)); these numbers are unverified here.
 
 ## 2. What each category does well
 
