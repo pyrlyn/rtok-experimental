@@ -1220,6 +1220,34 @@ Options:
       --ai               Model-shaped rendering of the same document instead of `--format`
   -h, --help             Print help
 
+$ rtok skills --help
+Agent skills on this machine (`rtok skills audit`: which ones this project will use)
+
+Usage: rtok skills [OPTIONS] <COMMAND>
+
+Commands:
+  audit  Likelihood each listed skill is used in a project: static analysis of its files, manifests,
+         imports, tests and CI against each skill's description; no model
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
+  -h, --help           Print help
+
+$ rtok skills audit --help
+Likelihood each listed skill is used in a project: static analysis of its files, manifests, imports,
+tests and CI against each skill's description; no model
+
+Usage: rtok skills audit [OPTIONS] [PATH]
+
+Arguments:
+  [PATH]  Project directory; defaults to the current directory
+
+Options:
+      --config <PATH>  User config file (else `RTOK_CONFIG` or `<home>/config.toml`)
+      --json           JSON instead of the table
+  -h, --help           Print help
+
 $ rtok worktree --help
 Git worktrees of this repository: owner, state and disk cost
 

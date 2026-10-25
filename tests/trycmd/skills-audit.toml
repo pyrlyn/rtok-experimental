@@ -1,0 +1,10 @@
+bin.name = "rtok"
+args = "skills audit tests/trycmd/input/skills-audit/project"
+
+# Hermetic: HOME points at a fixture with four skills, RTOK_HOME under target/, env cleared.
+[env]
+inherit = false
+
+[env.add]
+HOME = "tests/trycmd/input/skills-audit/home"
+RTOK_HOME = "target/tmp/skills-audit"

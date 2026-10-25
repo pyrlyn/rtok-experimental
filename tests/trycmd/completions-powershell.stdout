@@ -35,6 +35,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('discover', 'discover', [CompletionResultType]::ParameterValue, 'Shell commands your agents ran that have no rule or formatter, most output first')
             [CompletionResult]::new('bench', 'bench', [CompletionResultType]::ParameterValue, 'A/B benchmark of host configurations')
             [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Inspect hooks, MCP servers and the proxy chain')
+            [CompletionResult]::new('skills', 'skills', [CompletionResultType]::ParameterValue, 'Agent skills on this machine (`rtok skills audit`: which ones this project will use)')
             [CompletionResult]::new('worktree', 'worktree', [CompletionResultType]::ParameterValue, 'Git worktrees of this repository: owner, state and disk cost')
             [CompletionResult]::new('task', 'task', [CompletionResultType]::ParameterValue, 'This project''s tasks: numbered by rtok, stored by the `[tasks]` adapter')
             [CompletionResult]::new('batch', 'batch', [CompletionResultType]::ParameterValue, 'Provider Batch jobs (Anthropic, OpenAI) sent through `rtok proxy`')
@@ -176,6 +177,32 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('--stat', '--stat', [CompletionResultType]::ParameterName, 'With --fix: stat lines and totals instead of the diffs (a dry run)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'rtok;skills' {
+            [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('audit', 'audit', [CompletionResultType]::ParameterValue, 'Likelihood each listed skill is used in a project: static analysis of its files, manifests, imports, tests and CI against each skill''s description; no model')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'rtok;skills;audit' {
+            [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'User config file (else `RTOK_CONFIG` or `<home>/config.toml`)')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'JSON instead of the table')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'rtok;skills;help' {
+            [CompletionResult]::new('audit', 'audit', [CompletionResultType]::ParameterValue, 'Likelihood each listed skill is used in a project: static analysis of its files, manifests, imports, tests and CI against each skill''s description; no model')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'rtok;skills;help;audit' {
+            break
+        }
+        'rtok;skills;help;help' {
             break
         }
         'rtok;worktree' {
@@ -2089,6 +2116,7 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             [CompletionResult]::new('discover', 'discover', [CompletionResultType]::ParameterValue, 'Shell commands your agents ran that have no rule or formatter, most output first')
             [CompletionResult]::new('bench', 'bench', [CompletionResultType]::ParameterValue, 'A/B benchmark of host configurations')
             [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Inspect hooks, MCP servers and the proxy chain')
+            [CompletionResult]::new('skills', 'skills', [CompletionResultType]::ParameterValue, 'Agent skills on this machine (`rtok skills audit`: which ones this project will use)')
             [CompletionResult]::new('worktree', 'worktree', [CompletionResultType]::ParameterValue, 'Git worktrees of this repository: owner, state and disk cost')
             [CompletionResult]::new('task', 'task', [CompletionResultType]::ParameterValue, 'This project''s tasks: numbered by rtok, stored by the `[tasks]` adapter')
             [CompletionResult]::new('batch', 'batch', [CompletionResultType]::ParameterValue, 'Provider Batch jobs (Anthropic, OpenAI) sent through `rtok proxy`')
@@ -2144,6 +2172,13 @@ Register-ArgumentCompleter -Native -CommandName 'rtok' -ScriptBlock {
             break
         }
         'rtok;help;doctor' {
+            break
+        }
+        'rtok;help;skills' {
+            [CompletionResult]::new('audit', 'audit', [CompletionResultType]::ParameterValue, 'Likelihood each listed skill is used in a project: static analysis of its files, manifests, imports, tests and CI against each skill''s description; no model')
+            break
+        }
+        'rtok;help;skills;audit' {
             break
         }
         'rtok;help;worktree' {

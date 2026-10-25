@@ -46,6 +46,9 @@ A/B benchmark of host configurations
 rtok/-doctor(1)
 Inspect hooks, MCP servers and the proxy chain
 .TP
+rtok/-skills(1)
+Agent skills on this machine (`rtok skills audit`: which ones this project will use)
+.TP
 rtok/-worktree(1)
 Git worktrees of this repository: owner, state and disk cost
 .TP
@@ -109,7 +112,7 @@ rtok/*(Aqs own log (`rtok logs` prints, `rtok logs export` strips numbering and 
 rtok/-report(1)
 The operator model as one document: Markdown, HTML and PDF
 .SH VERSION
-v[..] ([..])
+v0.17.0/-alpha.3 (449f55f00)
 .SH "SEE ALSO"
 /fBrtok-hook/fR(1),
 /fBrtok-mcp/fR(1),
@@ -120,6 +123,7 @@ v[..] ([..])
 /fBrtok-discover/fR(1),
 /fBrtok-bench/fR(1),
 /fBrtok-doctor/fR(1),
+/fBrtok-skills/fR(1),
 /fBrtok-worktree/fR(1),
 /fBrtok-task/fR(1),
 /fBrtok-batch/fR(1),

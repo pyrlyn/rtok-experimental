@@ -61,6 +61,7 @@ pub mod sanitize;
 pub mod shell_agent;
 pub mod since;
 pub mod skill_path;
+pub mod skills_audit;
 pub mod stat_preview;
 pub mod stdio;
 pub mod store;

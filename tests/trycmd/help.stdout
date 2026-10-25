@@ -12,6 +12,7 @@ Commands:
   discover     Shell commands your agents ran that have no rule or formatter, most output first
   bench        A/B benchmark of host configurations
   doctor       Inspect hooks, MCP servers and the proxy chain
+  skills       Agent skills on this machine (`rtok skills audit`: which ones this project will use)
   worktree     Git worktrees of this repository: owner, state and disk cost
   task         This project's tasks: numbered by rtok, stored by the `[tasks]` adapter
   batch        Provider Batch jobs (Anthropic, OpenAI) sent through `rtok proxy`

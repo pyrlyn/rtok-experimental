@@ -103,6 +103,9 @@ _rtok() {
             rtok,setup)
                 cmd="rtok__subcmd__setup"
                 ;;
+            rtok,skills)
+                cmd="rtok__subcmd__skills"
+                ;;
             rtok,stats)
                 cmd="rtok__subcmd__stats"
                 ;;
@@ -604,6 +607,9 @@ _rtok() {
             rtok__subcmd__help,setup)
                 cmd="rtok__subcmd__help__subcmd__setup"
                 ;;
+            rtok__subcmd__help,skills)
+                cmd="rtok__subcmd__help__subcmd__skills"
+                ;;
             rtok__subcmd__help,stats)
                 cmd="rtok__subcmd__help__subcmd__stats"
                 ;;
@@ -820,6 +826,9 @@ _rtok() {
             rtok__subcmd__help__subcmd__otel,status)
                 cmd="rtok__subcmd__help__subcmd__otel__subcmd__status"
                 ;;
+            rtok__subcmd__help__subcmd__skills,audit)
+                cmd="rtok__subcmd__help__subcmd__skills__subcmd__audit"
+                ;;
             rtok__subcmd__help__subcmd__task,claim)
                 cmd="rtok__subcmd__help__subcmd__task__subcmd__claim"
                 ;;
@@ -1015,6 +1024,18 @@ _rtok() {
             rtok__subcmd__otel__subcmd__help,status)
                 cmd="rtok__subcmd__otel__subcmd__help__subcmd__status"
                 ;;
+            rtok__subcmd__skills,audit)
+                cmd="rtok__subcmd__skills__subcmd__audit"
+                ;;
+            rtok__subcmd__skills,help)
+                cmd="rtok__subcmd__skills__subcmd__help"
+                ;;
+            rtok__subcmd__skills__subcmd__help,audit)
+                cmd="rtok__subcmd__skills__subcmd__help__subcmd__audit"
+                ;;
+            rtok__subcmd__skills__subcmd__help,help)
+                cmd="rtok__subcmd__skills__subcmd__help__subcmd__help"
+                ;;
             rtok__subcmd__task,claim)
                 cmd="rtok__subcmd__task__subcmd__claim"
                 ;;
@@ -1184,7 +1205,7 @@ _rtok() {
 
     case "${cmd}" in
         rtok)
-            opts="-h -V --config --help --version hook mcp proxy web tui stats discover bench doctor worktree task batch info agents agent setup run filter expand archive completions man plugins config memory docs graph guard dashboard demon otel logs report help"
+            opts="-h -V --config --help --version hook mcp proxy web tui stats discover bench doctor skills worktree task batch info agents agent setup run filter expand archive completions man plugins config memory docs graph guard dashboard demon otel logs report help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -3834,7 +3855,7 @@ _rtok() {
             return 0
             ;;
         rtok__subcmd__help)
-            opts="hook mcp proxy web tui stats discover bench doctor worktree task batch info agents setup run filter expand archive completions man plugins config memory docs graph guard dashboard demon otel logs report help"
+            opts="hook mcp proxy web tui stats discover bench doctor skills worktree task batch info agents setup run filter expand archive completions man plugins config memory docs graph guard dashboard demon otel logs report help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -5166,6 +5187,34 @@ _rtok() {
         rtok__subcmd__help__subcmd__setup)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rtok__subcmd__help__subcmd__skills)
+            opts="audit"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rtok__subcmd__help__subcmd__skills__subcmd__audit)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -6542,6 +6591,84 @@ _rtok() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rtok__subcmd__skills)
+            opts="-h --config --help audit help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --config)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rtok__subcmd__skills__subcmd__audit)
+            opts="-h --json --config --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --config)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rtok__subcmd__skills__subcmd__help)
+            opts="audit help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rtok__subcmd__skills__subcmd__help__subcmd__audit)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rtok__subcmd__skills__subcmd__help__subcmd__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
                 *)
                     COMPREPLY=()
                     ;;

@@ -20,6 +20,7 @@ config; reading cases set `inherit = false` and `RTOK_HOME` under `target/tmp/`.
 - `stats.toml` — `stats` table on the empty fixture store
 - `stats-json.toml` — `stats --json` on the empty fixture store
 - `info-json.toml` — `info --json`; paths/version/status via `[..]`
+- `skills-audit.toml` — `skills audit` of a fixture project against four fixture skills
 - `doctor.toml` — `doctor` table; MCP binary and skills via `[..]` / `...`
 - `plugins.toml` — `plugins` table: id, enabled, surfaces
 - `config-init.toml` — `config init --dry-run` of a missing user file

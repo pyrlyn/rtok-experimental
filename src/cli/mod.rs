@@ -41,6 +41,7 @@ mod plugins;
 mod proxy;
 mod report;
 mod run_cmd;
+mod skills;
 mod stats;
 mod task;
 mod util;
@@ -96,6 +97,12 @@ enum Cmd {
 
     /// Inspect hooks, MCP servers and the proxy chain
     Doctor(doctor::Args),
+
+    /// Agent skills on this machine (`rtok skills audit`: which ones this project will use)
+    Skills {
+        #[command(subcommand)]
+        action: skills::SkillsCmd,
+    },
 
     /// Git worktrees of this repository: owner, state and disk cost
     Worktree {
@@ -254,6 +261,7 @@ pub fn run() -> Result<()> {
         Cmd::Discover(args) => discover::run(&config_file, args),
         Cmd::Bench(args) => bench::run(&config_file, args),
         Cmd::Doctor(args) => doctor::run(&config_file, args),
+        Cmd::Skills { action } => skills::run(&config_file, action),
         Cmd::Worktree { action } => worktree::run(&config_file, action),
         Cmd::Task { action } => task::run(action, config_file.as_deref()),
         Cmd::Batch { action } => batch::run(action, config_file.as_deref()),

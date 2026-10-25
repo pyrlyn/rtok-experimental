@@ -874,6 +874,21 @@ fn skills_audit(cfg: &Config) -> Option<SkillsAudit> {
     // host's dir, `~/.rtok` never holds skills.
     let home = crate::config::env_user_home().unwrap_or_else(|| cfg.home.clone());
     let cwd = std::env::current_dir().ok()?;
+    let roots = skill_roots(&home, &cwd);
+    let (invocations, repeats) = skill_usage(cfg).unzip();
+    let mut audit = audit_from(
+        &roots,
+        &|p| std::fs::read_to_string(p).ok(),
+        &list_subdirs,
+        &invocations,
+    );
+    audit.repeats = repeats.map(repeat_rows).unwrap_or_default();
+    Some(audit)
+}
+
+/// `(source label, root dirs)` of every documented skill root: user roots under `home`,
+/// project roots under `cwd`, and the enabled Claude plugin skill dirs (`[id]` suffix).
+fn skill_roots(home: &Path, cwd: &Path) -> Vec<(String, Vec<String>)> {
     let user = SKILL_ROOTS
         .iter()
         .map(|r| home.join(r.dir).display().to_string())
@@ -886,28 +901,78 @@ fn skills_audit(cfg: &Config) -> Option<SkillsAudit> {
     let roots = vec![
         ("user".to_string(), user),
         ("project".to_string(), project),
-        ("plugin".to_string(), plugin_skill_dirs(&home)),
+        ("plugin".to_string(), plugin_skill_dirs(home)),
     ];
-    let (invocations, repeats) = skill_usage(cfg).unzip();
-    let mut audit = audit_from(
-        &roots,
+    roots
+}
+
+/// Sorted one-level subdirectories of `d`; an unreadable dir lists nothing (fail open).
+fn list_subdirs(d: &str) -> Vec<String> {
+    let mut out: Vec<String> = std::fs::read_dir(d)
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.path().display().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    out.sort();
+    out
+}
+
+/// One `SKILL.md` a host on this machine lists, as the skills audit sees it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FoundSkill {
+    pub name: String,
+    /// `user`, `project`, or `plugin:<id>@<marketplace>` — the same labels as [`SkillRow::source`].
+    pub source: String,
+    pub dir: String,
+    pub md: String,
+}
+
+/// Every skill the doctor's skills audit lists for `home` and `cwd` (same roots, same
+/// order), one entry per `(source, name)`. `rtok skills audit` scores these.
+pub fn found_skills(home: &Path, cwd: &Path) -> Vec<FoundSkill> {
+    found_from(
+        &skill_roots(home, cwd),
         &|p| std::fs::read_to_string(p).ok(),
-        &|d| {
-            let mut out: Vec<String> = std::fs::read_dir(d)
-                .map(|rd| {
-                    rd.flatten()
-                        .filter(|e| e.path().is_dir())
-                        .map(|e| e.path().display().to_string())
-                        .collect()
-                })
-                .unwrap_or_default();
-            out.sort();
-            out
-        },
-        &invocations,
-    );
-    audit.repeats = repeats.map(repeat_rows).unwrap_or_default();
-    Some(audit)
+        &list_subdirs,
+    )
+}
+
+fn found_from(
+    roots: &[(String, Vec<String>)],
+    read: &dyn Fn(&str) -> Option<String>,
+    subdirs: &dyn Fn(&str) -> Vec<String>,
+) -> Vec<FoundSkill> {
+    let mut out: Vec<FoundSkill> = Vec::new();
+    for (source, dirs) in roots {
+        for dir in dirs {
+            let (dir, plugin) = match dir.split_once(" [") {
+                Some((d, id)) => (d, Some(format!("plugin:{}", id.trim_end_matches(']')))),
+                None => (dir.as_str(), None),
+            };
+            let source = plugin.as_deref().unwrap_or(source);
+            for sub in subdirs(dir) {
+                let Some(name) = Path::new(&sub).file_name().and_then(OsStr::to_str) else {
+                    continue;
+                };
+                let Some(md) = read(&format!("{sub}/SKILL.md")) else {
+                    continue;
+                };
+                if out.iter().any(|f| f.source == source && f.name == name) {
+                    continue;
+                }
+                out.push(FoundSkill {
+                    name: name.to_string(),
+                    source: source.to_string(),
+                    dir: sub.clone(),
+                    md,
+                });
+            }
+        }
+    }
+    out
 }
 
 /// Per skill name: the invocation count, and `(loads, tokens)` of its repeat loads.
