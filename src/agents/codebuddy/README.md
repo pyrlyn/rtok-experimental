@@ -33,6 +33,14 @@ it reads hooks and MCP from the same file names as the CLI. Not verified on a li
 `installed_plugins.json`'s schema (setup looks for the quoted `rtok@rtok` id) and the WorkBuddy
 app paths.
 
+Worktrees (T995.1): the plugin also registers `WorktreeCreate` and `WorktreeRemove`, which
+replace CodeBuddy's own `git worktree` create and remove (https://www.workbuddy.ai/docs/cli/worktree,
+`research.md` §18.6). They run `scripts/worktree.sh <event> codebuddy`, which calls
+`rtok hook <event> --host codebuddy`, so `codebuddy --worktree` gets rtok's location, name, lock
+and agent claim. When rtok fails, the launcher makes a plain worktree at CodeBuddy's
+`.codebuddy/worktrees/<name>`. As with Claude Code (T159), these two hooks come only with the
+plugin (D21), never from the `settings.json` entries.
+
 `--host codebuddy` answers PreToolUse rewrites as `hookSpecificOutput.modifiedInput`, the key
 CodeBuddy reads instead of Claude's `updatedInput` (T560.1). SubagentStart is not registered:
 CodeBuddy's hooks page names the event without an input or output shape.
@@ -49,6 +57,7 @@ Not reachable: proxy, compress
 Host documentation setup writes against; re-check the links when this host changes.
 
 - Hooks (`settings.json` `hooks`, events, `modifiedInput`): https://www.codebuddy.ai/docs/cli/hooks
+- Worktrees (`--worktree`, `WorktreeCreate` / `WorktreeRemove` input, path output, exit codes): https://www.workbuddy.ai/docs/cli/worktree
 - MCP (`.mcp.json`, `mcp.json`, `~/.codebuddy.json`, `mcpServers`): https://www.codebuddy.ai/docs/cli/mcp
 - Plugins (`codebuddy plugin`, `installed_plugins.json`, the cache): https://www.codebuddy.ai/docs/cli/plugins-reference
 - Plugin marketplaces (`marketplace add`): https://www.codebuddy.ai/docs/cli/plugin-marketplaces

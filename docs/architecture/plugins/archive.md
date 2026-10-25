@@ -32,7 +32,10 @@ bytes and the provider's prompt cache stays valid.
    leaves the block unchanged and writes nothing.
 6. **Archive and write the pointer.** `cx.put_archive` stores the original bytes. `pointer()`
    builds `[archived <id8>: N lines · T tokens · expand(<id8>)]` followed by `head_lines`
-   and `tail_lines` of the original, each line cut by `clip`. With `tiers = true`,
+   and `tail_lines` of the original, each line cut by `clip`. Up to `signal_lines` elided
+   lines that look like failures (`error`, `panic`, `fail`, `warning`, `exception`,
+   `traceback`, case-insensitive) follow the `… N lines …` marker as `N:line`, the format of
+   `expand` grep, so the usual follow-up `expand` is not needed. With `tiers = true`,
    `tier_live` emits the pointer line alone (L0) and adds a lossless extract (L1) for results
    at exactly turn `keep_turns`.
 7. **Persist the decision.** `cx.put_archive_decision` stores the pointer text before the
@@ -58,7 +61,7 @@ bytes and the provider's prompt cache stays valid.
 | Measurement and run row | `src/plugins/archive/mod.rs` (`record_run`) |
 | `expand` | `src/expand.rs` (`fetch_range`, `resolve_id`); `src/mcp.rs` (`expand_text`) |
 | Tables | `crates/rtok-store/src/schema.rs` (`archive`, `archive_decisions`, `measurements`) |
-| Config | `crates/rtok-config/src/lib.rs` (`Archive` section: `keep_turns`, `min_tokens`, `head_lines`, `tail_lines`, `tiers`, `live_blobs`, `skills`) |
+| Config | `crates/rtok-config/src/lib.rs` (`Archive` section: `keep_turns`, `min_tokens`, `head_lines`, `tail_lines`, `signal_lines`, `tiers`, `live_blobs`, `skills`) |
 
 ## Invariants
 

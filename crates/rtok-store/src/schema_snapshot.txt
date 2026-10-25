@@ -11,6 +11,7 @@ index|events_session|events|CREATE INDEX events_session ON events (session, ts)
 index|logs_session|logs|CREATE INDEX logs_session ON logs (session, ts)
 index|logs_source|logs|CREATE INDEX logs_source ON logs (source, name, ts)
 index|logs_ts|logs|CREATE INDEX logs_ts ON logs (ts)
+index|mcp_memo_last_used|mcp_memo|CREATE INDEX mcp_memo_last_used ON mcp_memo (last_used)
 index|measurements_call|measurements|CREATE INDEX measurements_call ON measurements (call_id)
 index|measurements_once|measurements|CREATE UNIQUE INDEX measurements_once ON measurements (once_key)
 index|measurements_plugin|measurements|CREATE INDEX measurements_plugin ON measurements (plugin, ts)
@@ -37,6 +38,7 @@ index|sqlite_autoindex_file_rank_1|file_rank|
 index|sqlite_autoindex_hook_sessions_1|hook_sessions|
 index|sqlite_autoindex_hosts_1|hosts|
 index|sqlite_autoindex_kv_1|kv|
+index|sqlite_autoindex_mcp_memo_1|mcp_memo|
 index|sqlite_autoindex_models_1|models|
 index|sqlite_autoindex_note_files_1|note_files|
 index|sqlite_autoindex_note_versions_1|note_versions|
@@ -81,6 +83,7 @@ table|hook_sessions|hook_sessions|CREATE TABLE hook_sessions ( id INTEGER PRIMAR
 table|hosts|hosts|CREATE TABLE hosts ( id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, kind TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()) )
 table|kv|kv|CREATE TABLE kv ( key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL )
 table|logs|logs|CREATE TABLE logs ( id INTEGER PRIMARY KEY, ts INTEGER NOT NULL DEFAULT (unixepoch()), level TEXT NOT NULL, source TEXT NOT NULL, name TEXT NOT NULL, session TEXT, call_id INTEGER REFERENCES calls(id), plugin TEXT, message TEXT NOT NULL, fields TEXT )
+table|mcp_memo|mcp_memo|CREATE TABLE mcp_memo ( key_hash TEXT PRIMARY KEY NOT NULL, key TEXT NOT NULL, tool TEXT NOT NULL, value TEXT NOT NULL, created BIGINT NOT NULL, last_used BIGINT NOT NULL, schema_hash TEXT NOT NULL, rtok_version TEXT NOT NULL )
 table|measurements|measurements|CREATE TABLE measurements ( id INTEGER PRIMARY KEY, ts INTEGER NOT NULL DEFAULT (unixepoch()), session TEXT NOT NULL, plugin TEXT NOT NULL, kind TEXT NOT NULL, before_bytes INTEGER NOT NULL, after_bytes INTEGER NOT NULL, est_before INTEGER NOT NULL, est_after INTEGER NOT NULL, ref_id TEXT , call_id INTEGER REFERENCES calls(id), once_key TEXT)
 table|messages|messages|CREATE TABLE messages ( id INTEGER PRIMARY KEY, from_agent TEXT REFERENCES agents(id), to_agent TEXT NOT NULL REFERENCES agents(id), body TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()), delivered_at INTEGER, read_at INTEGER , task TEXT)
 table|models|models|CREATE TABLE models ( id INTEGER PRIMARY KEY, provider_id INTEGER NOT NULL REFERENCES providers(id), slug TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()), UNIQUE (provider_id, slug) )

@@ -67,6 +67,68 @@ const doctor: Report = {
   mcp_tool_search: { source: "heuristic: ANTHROPIC_BASE_URL set", state: "unknown" },
   mcp_tool_search_disabled: true,
   overlaps: ["host-native grep duplicates the rtok search tool ([mcp] search = false)"],
+  // One installed server, one missing with its install command, a tags-only language, an
+  // unhealthy index, and one plugin with measurements next to one without.
+  project: {
+    root: "/work/app",
+    window_days: 30,
+    walk_cut: false,
+    languages: [
+      {
+        language: "rust",
+        files: 412,
+        marker: "Cargo.toml",
+        server: "rust-analyzer",
+        installed: true,
+        install: null,
+        note: null,
+        saving: { calls: 240, saved_per_call: 1_150, project_calls: 38, approx_tokens: 43_700 },
+      },
+      {
+        language: "typescript",
+        files: 96,
+        marker: "tsconfig.json",
+        server: "typescript-language-server",
+        installed: false,
+        install: "npm install -g typescript-language-server typescript",
+        note: null,
+        saving: null,
+      },
+      {
+        language: "shell",
+        files: 7,
+        marker: null,
+        server: null,
+        installed: false,
+        install: null,
+        note: "tags only — rtok has no language server for shell",
+        saving: null,
+      },
+    ],
+    graph: {
+      registered: true,
+      state: "stale",
+      indexed: true,
+      files: 508,
+      score: 72,
+      reasons: [{ text: "index is 3 days old", fix: "rtok graph index /work/app" }],
+      backend: "auto",
+      served_by: "lsp",
+      next: [],
+    },
+    instructions: {
+      duplicates: [],
+      rows: [{ name: "AGENTS.md", path: "/work/app/AGENTS.md", tokens: 2_300, warn: false }],
+    },
+    plugins: [
+      {
+        plugin: "compress",
+        where: ".rtok.toml",
+        saving: { calls: 52, saved_per_call: 610, project_calls: null, approx_tokens: null },
+      },
+      { plugin: "proxy", where: "user config", saving: null },
+    ],
+  },
   proxy: "claude-code → rtok proxy → api.anthropic.com",
   proxy_openai: "",
 };

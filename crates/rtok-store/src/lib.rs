@@ -8,6 +8,8 @@
 //! step comes back as [`StoreWarning`].
 
 #![forbid(unsafe_code)]
+// Clippy 1.99 flags the field inits that `#[derive(QueryableByName)]` expands to; the source has none.
+#![allow(clippy::redundant_field_names)]
 
 /// `bail!` that returns [`StoreError`], not `anyhow::Error`. `anyhow::bail!` returns
 /// `Err(anyhow::Error)` and will not coerce into this crate's `Result`.
@@ -397,6 +399,8 @@ pub fn rank_blend(rank: usize, retention: f64) -> f64 {
 
 mod archive_rows;
 mod cache;
+mod mcp_memo;
+pub use mcp_memo::{MemoRow, memo_key_hash};
 mod call_log;
 mod handle;
 mod measure_rows;

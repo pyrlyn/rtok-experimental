@@ -138,6 +138,7 @@ Every effective key with its origin — the `config show --sources` page.
 | plugins.archive.keep_turns | 4 | default |
 | plugins.archive.live_blobs | false | default |
 | plugins.archive.min_tokens | 1500 | default |
+| plugins.archive.signal_lines | 8 | default |
 | plugins.archive.skills | false | default |
 | plugins.archive.tail_lines | 4 | default |
 | plugins.archive.tiers | false | default |
@@ -317,9 +318,9 @@ Every effective key with its origin — the `config show --sources` page.
 | proxy.routing.internal.to |  | default |
 | proxy.timeout_s | 600 | default |
 | proxy.tools_rewrite.allow | [] | default |
-| proxy.tools_rewrite.compact_schema | false | default |
+| proxy.tools_rewrite.compact_schema | true | default |
 | proxy.tools_rewrite.deny | [] | default |
-| proxy.tools_rewrite.enabled | false | default |
+| proxy.tools_rewrite.enabled | true | default |
 | proxy.tools_rewrite.max_description_tokens | 60 | default |
 | proxy.upstream | https://api.anthropic.com | default |
 | report.ai | false | default |
@@ -473,7 +474,7 @@ Every effective key with its origin — the `config show --sources` page.
 | worktree.seed | true | default |
 | worktree.seed_dirs | [target, node_modules] | default |
 
-426 keys.
+428 keys.
 
 ## Doctor
 
@@ -485,7 +486,7 @@ hooks check none found
 duplicate hooks none found
 duplicate mcp servers none found
 mcp
-  rtok (41 tools, ~1137 desc tokens) [CWD]/target/[..]
+  rtok (41 tools, ~1137 desc tokens) /Users/listepo/Grok/target/rtok/debug/rtok
 proxy 
 proxy openai 
 BASH_MAX_OUTPUT_LENGTH (unset)
@@ -757,9 +758,12 @@ agents
     mcp     not installed
     proxy   not supported: Reasonix has no single endpoint setting; each [[providers]] entry carries its own base_url
     plugin  not supported: Reasonix plugin packages are its own format; rtok ships no Reasonix plugin
-skills (1 listed, 154 desc bytes ≈ 38 tokens per request)
-  descriptions over 120 chars: 1 skills, ≈ 8 tokens/request recoverable
+skills (4 listed, 2102 desc bytes ≈ 525 tokens per request)
+  descriptions over 120 chars: 4 skills, ≈ 405 tokens/request recoverable
+  core project desc 563c body 37629B calls - WARN desc>120 WARN body>8K (references/) WARN never invoked
+  dogfood project desc 460c body 10285B calls - WARN desc>120 WARN body>8K (references/) WARN never invoked
   dry-refactoring project desc 154c body 2772B calls - WARN desc>120 WARN never invoked
+  agent-browser project desc 925c body 2413B calls - WARN desc>120 WARN never invoked
 config
   note tests/trycmd/input/json-readers.toml:2: stats.transcripts_dir = "tests/trycmd/input/stats-price-tx" (default ~/.claude/projects)
 ```

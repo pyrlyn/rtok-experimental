@@ -1250,4 +1250,88 @@ mod tests {
         let report = report.unwrap();
         assert_eq!((report.semantic_pairs, report.hit_rate), (0, 0.0));
     }
+
+    /// Negative matrix: after one stored answer, every request that differs in anything that
+    /// can change the answer misses (no foreign entry is ever served); the identical request
+    /// and a moved `cache_control` marker (which does not change the answer) still hit.
+    #[test]
+    fn a_stored_answer_is_never_served_to_a_different_request() {
+        use axum::http::{HeaderMap, HeaderValue};
+        let cfg = SemanticCache {
+            enabled: true,
+            ..SemanticCache::default()
+        };
+        let wire = crate::proxy::wire::for_path("/v1/messages").unwrap();
+        let base = serde_json::json!({
+            "model": "m-1", "max_tokens": 100, "temperature": 0,
+            "system": [{"type": "text", "text": "be brief"}],
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "2+2?"}]}]
+        });
+        let headers = |key: &str| {
+            let mut h = HeaderMap::new();
+            h.insert("x-api-key", HeaderValue::from_str(key).unwrap());
+            h
+        };
+        let prompt = |body: &Value, key: &str| {
+            build_prompt(wire, body, &cfg)
+                .unwrap()
+                .with_caller(&caller_identity(&headers(key)))
+        };
+        let mut cache = Cache::new();
+        cache.store(&prompt(&base, "k1"), &cfg, b"4", None, 200);
+        assert!(
+            cache.lookup(&prompt(&base, "k1"), &cfg).is_some(),
+            "identical hits"
+        );
+        let mut marked = base.clone();
+        marked["messages"][0]["content"][0]["cache_control"] =
+            serde_json::json!({"type": "ephemeral"});
+        assert!(
+            cache.lookup(&prompt(&marked, "k1"), &cfg).is_some(),
+            "cache_control only"
+        );
+
+        let variant = |path: &str, v: Value| {
+            let mut b = base.clone();
+            *b.pointer_mut(path).unwrap() = v;
+            b
+        };
+        let mut with_tool = base.clone();
+        with_tool["tools"] = serde_json::json!([{"name": "t", "input_schema": {"type": "object"}}]);
+        let mut with_stop = base.clone();
+        with_stop["stop_sequences"] = serde_json::json!(["\\n"]);
+        let cases = [
+            (
+                "prompt",
+                variant("/messages/0/content/0/text", "2+3?".into()),
+            ),
+            (
+                "prompt case",
+                variant("/messages/0/content/0/text", "2+2?!".into()),
+            ),
+            ("system", variant("/system/0/text", "be verbose".into())),
+            ("model", variant("/model", "m-2".into())),
+            ("max_tokens", variant("/max_tokens", 101.into())),
+            ("temperature", variant("/temperature", 1.into())),
+            ("tools", with_tool),
+            ("stop", with_stop),
+        ];
+        for (name, body) in &cases {
+            assert!(
+                cache.lookup(&prompt(body, "k1"), &cfg).is_none(),
+                "{name} hit a foreign entry"
+            );
+        }
+        assert!(
+            cache.lookup(&prompt(&base, "k2"), &cfg).is_none(),
+            "another caller"
+        );
+        let other_wire = crate::proxy::wire::for_path("/v1/chat/completions").unwrap();
+        let chat =
+            serde_json::json!({"model": "m-1", "messages": [{"role": "user", "content": "2+2?"}]});
+        let other = build_prompt(other_wire, &chat, &cfg)
+            .unwrap()
+            .with_caller(&caller_identity(&headers("k1")));
+        assert!(cache.lookup(&other, &cfg).is_none(), "another provider");
+    }
 }

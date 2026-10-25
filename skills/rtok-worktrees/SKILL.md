@@ -16,7 +16,7 @@ lack it: run `rtok agents whoami` for the id and `rtok worktree list` for the re
 ## Create
 
 MCP `worktree_add` (task, slug) or, inside the repository,
-`rtok worktree add <task> [slug] --owner "<provider> / <model>"`; both print the path.
+`rtok worktree add <task> [slug]` (`--owner "<provider> / <model>"` when no agent is bound; else `RTOK_OWNER` or the login user); both print the path.
 A worktree the host made itself: `worktree_adopt` or `rtok worktree adopt --task <task>`.
 
 ## Finish

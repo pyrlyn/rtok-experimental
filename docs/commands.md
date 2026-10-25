@@ -20,6 +20,7 @@ build never blocks the host.
 | `rtok stats` | measurements from session logs and the proxy |
 | `rtok discover` | shell commands your agents ran that have no rule or formatter, most output first |
 | `rtok doctor` | inspect hooks, MCP servers, proxy chain — including what each costs per turn, and how much space `rtok agents junk clear` would free |
+| `rtok doctor --project [PATH]` | add setup advice for one checkout: language servers with install commands, graph index, instruction files, plugins left off, with savings only from measurements ([lsp.md](lsp.md)) |
 | `rtok agents install claude\|cursor\|codex\|opencode\|kilo\|pi\|zcode\|kimi\|copilot\|aider\|windsurf\|zed` | install into a host, with backups; `--dry-run` |
 | `rtok agents uninstall claude\|cursor\|codex\|opencode\|kilo\|pi\|zcode\|kimi\|copilot\|aider\|windsurf\|zed` | take rtok back out of a host, with backups; `--dry-run` |
 | `rtok agents list` | every known app: kind and name, path and version, config files, rtok modules, installed plugin version |

@@ -661,9 +661,15 @@ pub fn dispatch(stdin: &[u8], input: &HookInput, cx: &Runtime) -> Vec<u8> {
     };
     forget_after_compaction(input, cx);
     let out = match input.hook_event_name.as_str() {
-        "PreToolUse" => pre_tool(input, cx, &registry),
+        "PreToolUse" => {
+            auto_add_on_tool(cx);
+            pre_tool(input, cx, &registry)
+        }
         "PostToolUse" => post_tool(input, cx, &registry, agent.as_deref()),
-        "AfterMCPExecution" => after_mcp(input, cx),
+        "AfterMCPExecution" => {
+            auto_add_on_tool(cx);
+            after_mcp(input, cx)
+        }
         // T295: Claude Code's PostCompact has no decision control and rejects any
         // `hookSpecificOutput` (code.claude.com/docs/en/hooks, checked 2026-09-27); its
         // checkpoint arrives on SessionStart source=compact. `compact_summary` is Claude's own
@@ -675,16 +681,6 @@ pub fn dispatch(stdin: &[u8], input: &HookInput, cx: &Runtime) -> Vec<u8> {
         }
         "SessionStart" => {
             write_agent_env_file(agent.as_deref());
-            // T329.6: one upsert beside `register_agent`'s; a locked store only skips it.
-            if cx.config.plugins.graph.auto_add_projects
-                && let Some(cwd) = cx.cwd.as_deref()
-            {
-                let _ = cx.store.auto_add_project(
-                    std::path::Path::new(cwd),
-                    crate::store::Origin::Session,
-                    None,
-                );
-            }
             // T289.5: a worktree a post-create script left without an agent goes to the first
             // session that starts inside it.
             if let (Some(id), Some(cwd)) = (agent.as_deref(), cx.cwd.as_deref()) {
@@ -825,6 +821,26 @@ fn defer_session_end(cfg: &Config, event: &str, stdin: &[u8]) {
 /// rather than re-shortening the same result a second time on a second, divergent path (T190).
 fn after_mcp(_input: &HookInput, _cx: &Runtime) -> HookOutput {
     HookOutput::default()
+}
+
+/// T940: probes fire only SessionStart/SessionEnd and used to become graph projects.
+/// The first tool event is the write; a known root or a locked store is skipped.
+fn auto_add_on_tool(cx: &Runtime) {
+    if !cx.config.plugins.graph.auto_add_projects {
+        return;
+    }
+    let Some(cwd) = cx.cwd.as_deref() else {
+        return;
+    };
+    let path = std::path::Path::new(cwd);
+    match cx.store.project_by_root(path) {
+        Ok(None) => {
+            let _ = cx
+                .store
+                .auto_add_project(path, crate::store::Origin::Session, None);
+        }
+        Ok(Some(_)) | Err(_) => {}
+    }
 }
 
 fn pre_tool(input: &HookInput, cx: &Runtime, registry: &Registry) -> HookOutput {

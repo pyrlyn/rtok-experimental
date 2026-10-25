@@ -25,6 +25,13 @@ Files:
   `scripts/hook.sh` only when PATH has neither.
 - `scripts/hook.sh` — resolves `rtok` from PATH or the ketch store; a missing `rtok` fails the hook
   open (exit 0), printing `ketch install pyrlyn/rtok` once on SessionStart.
+- `hooks/hooks.json` `WorktreeCreate` / `WorktreeRemove` (T995.1) — replace CodeBuddy's own
+  worktree create and remove with `scripts/worktree.sh <event> codebuddy` (timeout 120 s).
+- `scripts/worktree.sh` — a byte-for-byte copy of `plugins/claude/scripts/worktree.sh`
+  (`tests/codebuddy_plugin.rs` holds them equal). It runs `rtok hook <event> --host codebuddy`.
+  If rtok is missing or fails, it makes a plain worktree at `.codebuddy/worktrees/<name>` on
+  `worktree-<name>`, because a create hook that prints no path fails the session. The folder is
+  CodeBuddy's documented default; the branch name is not documented and is Claude Code's.
 - No `.mcp.json` (D33): MCP is the `mcpServers.rtok` entry `rtok agents install codebuddy` writes into the host's own MCP file, so the plugin never adds a second rtok server.
 - `.rtok-plugin-version` — the version stamp `tools/plugin-versions.sh` keeps equal to `Cargo.toml`.
 

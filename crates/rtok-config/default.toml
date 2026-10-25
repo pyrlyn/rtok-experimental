@@ -97,8 +97,8 @@
 # dry_run         = false               # --dry-run: print effective [proxy] settings and exit, don't serve
 
 [proxy.tools_rewrite]                 # off: request bytes stay identical
-# enabled = false
-# compact_schema = false                # also first-sentence property descriptions + redundant default/examples inside input_schema; originals archived (Measurement.ref_id)
+# enabled = true
+# compact_schema = true                 # also first-sentence property descriptions + redundant default/examples inside input_schema; originals archived (Measurement.ref_id)
 # max_description_tokens = 60           # 0 = no truncate; sentence boundary; estimator Class::Prose
 # allow = []                            # empty = keep all names not in deny
 # deny = []                             # drop these names from tools[]; later calls still forward
@@ -497,6 +497,7 @@
 # min_tokens = 1500                     # only rewrite tool results above this (estimated)
 # head_lines = 8
 # tail_lines = 4
+# signal_lines = 8                     # elided error/fail/panic lines inlined as N:line (saves an expand); 0 = off
 # tiers      = false                    # optional L0/L1/L2 depth (OpenViking spec, AGPL-3.0 — rtok does not vendor/link/subprocess; native implementation)
 # live_blobs = false                    # shrink nested JSON dumps + data: blobs in user blocks, never results/system/tools/last-2-turns (opt-in)
 # skills     = false                    # opt-in skill body archiving outside the live zone

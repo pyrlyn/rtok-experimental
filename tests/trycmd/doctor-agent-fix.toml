@@ -2,6 +2,7 @@ bin.name = "rtok"
 args = "--config tests/trycmd/input/json-readers.toml doctor --fix --agent claude"
 stdout = """
 nothing to remove
+rtok skills: up to date
 """
 
 # One host's filter, hermetic like doctor-fix.toml: an empty home has nothing to fix.
