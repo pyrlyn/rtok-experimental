@@ -419,7 +419,7 @@ mod tests {
 
             fake_plugin(&c, kind);
             let lines = Codebuddy.apply(&c, kind, Mode::Install).unwrap();
-            assert!(lines.iter().any(|l| l.contains("9 removed")), "{lines:?}");
+            assert!(lines.iter().any(|l| l.contains("10 removed")), "{lines:?}");
             assert_eq!(Codebuddy.installed(&c, kind), ["mcp", "plugin"]);
             assert!(!super::super::read(&settings_path(&c, kind)).contains("rtok"));
             let _ = fs::remove_dir_all(root);
