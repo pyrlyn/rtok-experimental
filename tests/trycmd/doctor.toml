@@ -1,5 +1,5 @@
 bin.name = "rtok"
-args = "--config tests/trycmd/input/json-readers.toml doctor"
+args = "--config json-readers.toml doctor"
 stdout = """
 hooks 0
 hooks check none found
@@ -116,10 +116,17 @@ agents
 ...
 """
 
-# Hermetic by construction: isolated HOME/RTOK_HOME, inherit = false.
+# Keep the real CLI and its output checks, but scan only fixtures, not the checkout's worktrees.
+[fs]
+base = "input"
+sandbox = true
+
+# Hermetic by construction: isolated cwd/HOME/RTOK_HOME, inherit = false.
 [env]
 inherit = false
 
 [env.add]
 HOME = "target/tmp/t60-2-doctor"
 RTOK_HOME = "target/tmp/t60-2-doctor"
+RTOK_STATS_TRANSCRIPTS_DIR = "stats-price-tx"
+RTOK_HOST_SANDBOX = "1"

@@ -109,6 +109,13 @@ threads-required = "num-test-threads"
 filter = 'test(/hook_returns_despite_exclusive_lock/)'
 threads-required = "num-test-threads"
 
+# T991: these checks require an unlocked hook to persist a write before checking the
+# refusal/lock path. Full-suite I/O pressure made those hooks fail open (10-14 s cases),
+# while the same checks passed alone. Keep their write assertions and timing bounds.
+[[profile.default.overrides]]
+filter = 'binary(guard_check) | (binary(hook_fail_open) & test(a_locked_store_fails_the_hook_open_in_ms))'
+threads-required = "num-test-threads"
+
 # trycmd spawns the real rtok binary for every case; under a full-suite parallel run its
 # output drifted 3x on 2026-09-20/21 (fast, load-only failures; green standalone and in
 # CI). Isolate the runner on the machine like the heavy benches above -- each case still
