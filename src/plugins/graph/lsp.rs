@@ -1276,6 +1276,20 @@ fn workspace_of(file: &Path) -> PathBuf {
     file.parent().unwrap_or(file).to_path_buf()
 }
 
+/// Select the same workspace for capability probing and the outline session.
+pub(crate) fn outline_workspace(root: &Path, abs: &Path) -> PathBuf {
+    // Same session key as `symbol` / `callers` / `impact` (cwd) when the file sits under cwd and
+    // its nearest manifest speaks cwd's server; otherwise the nearest manifest. Keyed by the
+    // nearest manifest alone, alternating `outline` and `symbol` calls in a Cargo workspace
+    // killed and respawned the server each time; keyed by cwd alone, a Dart file outside a
+    // Cargo cwd was sent to rust-analyzer and outlined as empty.
+    let near = workspace_of(abs);
+    match (pick(root), pick(&near)) {
+        (Ok((a, _)), Ok((b, _))) if a == b && abs.starts_with(root) => root.to_path_buf(),
+        _ => near,
+    }
+}
+
 pub(crate) fn outline(cx: &Ctx, root: &Path, path: &str) -> Result<String> {
     let t0 = Instant::now();
     let abs = if Path::new(path).is_absolute() {
@@ -1283,16 +1297,7 @@ pub(crate) fn outline(cx: &Ctx, root: &Path, path: &str) -> Result<String> {
     } else {
         root.join(path)
     };
-    // Same session key as `symbol` / `callers` / `impact` (cwd) when the file sits under cwd and
-    // its nearest manifest speaks cwd's server; otherwise the nearest manifest. Keyed by the
-    // nearest manifest alone, alternating `outline` and `symbol` calls in a Cargo workspace
-    // killed and respawned the server each time; keyed by cwd alone, a Dart file outside a
-    // Cargo cwd was sent to rust-analyzer and outlined as empty.
-    let near = workspace_of(&abs);
-    let ws = match (pick(root), pick(&near)) {
-        (Ok((a, _)), Ok((b, _))) if a == b && abs.starts_with(root) => root.to_path_buf(),
-        _ => near,
-    };
+    let ws = outline_workspace(root, &abs);
     with_session(&ws, |s| {
         let uri = file_uri(&abs);
         s.did_open(&uri)?;
@@ -1354,6 +1359,29 @@ mod tests {
         assert_eq!(args, &["language-server"]);
         assert_eq!(workspace_of(&main), dir);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn outline_workspace_preserves_shared_cargo_sessions() {
+        let dir = crate::testutil::tmp_dir("outline-session-root");
+        let cargo = dir.join("cargo");
+        let nested = cargo.join("member");
+        let external = dir.join("external");
+        let dart = cargo.join("dart");
+        for root in [&cargo, &nested, &external, &dart] {
+            std::fs::create_dir_all(root).unwrap();
+        }
+        for root in [&cargo, &nested, &external] {
+            std::fs::write(root.join("Cargo.toml"), "[workspace]\n").unwrap();
+        }
+        std::fs::write(dart.join("pubspec.yaml"), "name: outline_fixture\n").unwrap();
+        assert_eq!(outline_workspace(&cargo, &nested.join("lib.rs")), cargo);
+        assert_eq!(
+            outline_workspace(&cargo, &external.join("lib.rs")),
+            external
+        );
+        assert_eq!(outline_workspace(&cargo, &dart.join("main.dart")), dart);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     /// The cached server outlived `rtok mcp`: it sat in a `static`, and statics never drop.

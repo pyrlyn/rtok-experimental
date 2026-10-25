@@ -46,7 +46,7 @@ lang: uk
 | `rtok worktree gc`, `clean` | — | прибирають завершені worktree, видаляють неактивні кеші збірки; пробні запуски, доки немає `--yes`; worktree живого агента зберігається, а якщо його задачу завершено й він простоює довше за `--idle`, його видаляють за будь-якого блокування; чуже блокування на злитому чистому worktree, якого не торкалися `--stale-lock` (`7d`), вважається покинутим |
 | `rtok worktree migrate` | — | переносить worktree репозиторію, що лежать поза коренем, у `<root>/<repo>-<task>` (worktree без блокування зберігає назву каталогу) через `git worktree move`; блокування та claim переїжджають разом із ним; без `--yes` це пробний прогін; пропускає основний checkout, worktree, у якому ви стоїте, worktree з блокуванням чи claim іншого агента або з іншою живою сесією, worktree з підмодулями та зайнятий цільовий шлях |
 
-Власник — це `<host> / <model>` агента, доки виклик CLI не передасть `--owner`; виклик MCP ніколи цього не робить. Без агента й без `--owner` (хук, що запускається раніше, ніж сесія отримала id агента) власник — це `RTOK_OWNER`, якщо змінну задано, інакше користувач ОС (`USER`, `USERNAME`, інакше `unknown`), і rtok пише попередження в stderr; таке блокування не називає агента, тож тримає, як будь-яке блокування без нього. Корінь — це `[worktree] root`, типово `.rtok/worktrees`: відносний корінь відлічується від основного checkout (і зсередини worktree теж), а перед першим worktree там rtok робить так, щоб git ігнорував `.rtok/`: у `.gitignore`, якщо він є в проєкті, інакше в `.git/info/exclude`. Відносний корінь, що виходить за межі проєкту, відхиляється; `~` і абсолютні корені означають те саме, що й раніше, а worktree, створені деінде, далі працюють. З `[worktree] enabled = false` rtok не чіпає worktree: кожна команда `rtok worktree` (і `list` теж) каже, що вони не ввімкнені, MCP не показує жодного інструмента `worktree_*`, а хуки Claude `WorktreeCreate`/`WorktreeRemove` роблять те, що Claude робить без rtok.
+Власник — це `<host> / <model>` агента, доки виклик CLI не передасть `--owner`; виклик MCP ніколи цього не робить. Без агента й без `--owner` (хук, що запускається раніше, ніж сесія отримала id агента) власник — це `RTOK_OWNER`, якщо змінну задано, інакше користувач ОС (`USER`, `USERNAME`, інакше `unknown`), і rtok пише попередження в stderr; таке блокування не називає агента, тож тримає, як будь-яке блокування без нього. Корінь — це `[worktree] root`, типово `.rtok/worktrees`: відносний корінь відлічується від основного checkout (і зсередини worktree теж), а перед першим worktree там rtok робить так, щоб git ігнорував `.rtok/`: у `.gitignore`, якщо він є в проєкті, інакше в `.git/info/exclude`. Відносний корінь, що виходить за межі проєкту, відхиляється; `~` і абсолютні корені означають те саме, що й раніше, а worktree, створені деінде, далі працюють. З `[worktree] enabled = false` rtok не чіпає worktree: кожна команда `rtok worktree` (і `list` теж) каже, що вони не ввімкнені, MCP не показує жодного інструмента `worktree_*`, а хуки `WorktreeCreate`/`WorktreeRemove` Claude Code і CodeBuddy роблять те, що хост робить без rtok. Command Code не має власного запасного шляху, тож його хук створення тоді робить простий worktree у `.commandcode/worktrees/<name>` на гілці `worktree-<name>` — так само, як коли rtok відхиляє назву.
 
 Новий worktree починає з прогрітими кешами збірки. Після `git worktree add` rtok заповнює кожен запис `[worktree] seed_dirs` (типово `target` і `node_modules`; голе ім'я збігається й на рівень нижче, тож `web/node_modules` теж рахується) із сусіднього checkout того самого репозиторію, який збирав його останнім. Кожен файл — copy-on-write клон, де файлова система вміє ділити блоки (APFS на macOS; btrfs, XFS і bcachefs на Linux; ReFS і Dev Drive на Windows), тому навіть багатогігабайтний `target/` майже не займає місця, а деінде — звичайна копія, яка заощаджує збірку, але не диск. Кожен файл зберігає час зміни джерела, тому cargo перезбирає те, що змінила нова гілка, і лишає всі залежності; `touch` не потрібен. Місце, яке в checkout уже зайняте (відстежуваний каталог, попередній засів), не чіпається, а посилання ніколи не буває джерелом. Засів робиться за можливості: у разі помилки виводиться попередження, часткова копія видаляється, а worktree однаково створюється. `rtok worktree add --no-seed` пропускає його один раз; `[worktree] seed = false` вимикає його, зокрема для MCP `worktree_add` і хука Claude `WorktreeCreate`. Він виконується до повернення команди, тому великий кеш, який доводиться копіювати, а не клонувати, займає стільки ж часу, скільки копіювання.
 
@@ -67,11 +67,11 @@ Skill `worktrees` розповідає агентові все це: `worktree_a
 
 ## За хостами
 
-*Хуки* — чи звичайне `rtok agents install` несе хуки (рядок агента й надсилання повідомлень); хост без них реєструється через MCP. Факти про нативні worktree й джерела — у `research.md` §26.
+*Хуки* — чи звичайне `rtok agents install` несе хуки (рядок агента й надсилання повідомлень); хост без них реєструється через MCP. Факти про нативні worktree й джерела — у `research.md` §26 і §18.6.
 
 | Хост | Хуки | Рядок агента з | Нативні worktree | Прийняття worktree, створеного хостом |
 | --- | --- | --- | --- | --- |
-| `claude` | так | хуки | `.claude/worktrees/<name>`; `WorktreeCreate`/`WorktreeRemove` можуть замінити типовий (перенаправлення rtok очікує T159) | `worktree_adopt` |
+| `claude` | так | хуки | `.claude/worktrees/<name>`; замінюються хуками `WorktreeCreate`/`WorktreeRemove` плагіна: створює й видаляє `rtok worktree` (T159) | `worktree_adopt` |
 | `cursor` | так | хуки | `~/.cursor/worktrees/`, ліміт 25 | `worktree_adopt`; скрипт після створення: `agents install --project` |
 | `codex` | так | хуки | `$CODEX_HOME/worktrees`, зберігає 15 | `worktree_adopt` |
 | `windsurf` | ні | MCP | `~/.windsurf/worktrees/<repo>`, ліміт приблизно 20 | `worktree_adopt`; скрипт після створення: `agents install --project` |
@@ -87,7 +87,7 @@ Skill `worktrees` розповідає агентові все це: `worktree_a
 | `kimi` | так | хуки | не задокументовано | `worktree_add` |
 | `copilot` | так | хуки | не задокументовано для цього інтерфейсу | `worktree_add` |
 | `vscode` | ні | MCP | окрема функція вікна Agents, шлях не перевірено | `worktree_adopt` |
-| `commandcode` | так | хуки | не задокументовано | `worktree_add` |
+| `commandcode` | так | хуки | `~/.commandcode/worktrees/<repo>/<name>`; замінюються ключами `worktree.createHook`/`removeHook`, які пише `rtok agents install commandcode`: створює й видаляє `rtok worktree` (T995.2) | `worktree_add` |
 | `gemini` | так | хуки | не знайдено | `worktree_add` |
 | `cline` | так | хуки | немає (checkpoints, не worktree) | `worktree_add` |
 | `roo` | ні | MCP | ще не перевірено | `worktree_add` |
@@ -101,7 +101,7 @@ Skill `worktrees` розповідає агентові все це: `worktree_a
 | `augment` | ні | MCP | ще не перевірено | `worktree_add` |
 | `reasonix` | ні | MCP | ще не перевірено | `worktree_add` |
 | `qwen` | так | хуки | ще не перевірено | `worktree_add` |
-| `codebuddy` | так | хуки | ще не перевірено | `worktree_add` |
+| `codebuddy` | так | хуки | `.codebuddy/worktrees/<name>`, замінюються хуками `WorktreeCreate`/`WorktreeRemove` плагіна: створює й видаляє `rtok worktree` (T995.1) | `worktree_add` |
 | `goose` | ні | MCP | ще не перевірено | `worktree_add` |
 | `continue` | ні | MCP | ще не перевірено | `worktree_add` |
 | `codewhale` | так | хуки | не задокументовано | `worktree_add` |

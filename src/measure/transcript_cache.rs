@@ -111,7 +111,8 @@ fn aggregate(t: &super::jsonl::Parsed, size: u64, mtime_ns: u64) -> FileAgg {
             && let Some(s) = u.input.get("skill").and_then(|v| v.as_str())
         {
             *agg.skills.entry(s.to_string()).or_default() += 1;
-            let now = t.compactions.iter().filter(|&&c| c <= u.turn).count();
+            // The parser appends boundaries in turn order, including equal-turn ones.
+            let now = t.compactions.partition_point(|&c| c <= u.turn);
             if window.insert(s, now) == Some(now) {
                 let e = agg.skill_repeats.entry(s.to_string()).or_default();
                 e.0 += 1;
@@ -180,6 +181,19 @@ mod tests {
         let agg = aggregate(&super::super::jsonl::parse_jsonl(&text), 0, 0);
         assert_eq!(agg.skills["rtok"], 3);
         assert_eq!(agg.skill_repeats["rtok"], (1, 10), "{agg:?}");
+    }
+
+    #[test]
+    fn repeated_compaction_boundaries_separate_skill_windows() {
+        let load = |uid| pair(uid, "Skill", r#"{"skill":"rtok"}"#, "ok");
+        let boundary = "{\"type\":\"system\",\"subtype\":\"compact_boundary\"}\n";
+        let text =
+            load("a") + &load("b") + boundary + boundary + &load("c") + &load("d") + boundary;
+        let parsed = super::super::jsonl::parse_jsonl(&text);
+        assert_eq!(parsed.compactions, [4, 4, 8]);
+        let agg = aggregate(&parsed, 0, 0);
+        assert_eq!(agg.skills["rtok"], 4);
+        assert_eq!(agg.skill_repeats["rtok"].0, 2);
     }
 
     /// The T135 Check: a second pass over unchanged transcripts parses 0 bytes, a changed

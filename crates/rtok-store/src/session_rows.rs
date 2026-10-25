@@ -98,6 +98,13 @@ impl Store {
             .optional()?)
     }
 
+    /// [`Self::host_id`], else the seeded `other` row (id 6). Only some hosts have a row of
+    /// their own, and the hook dispatcher files every other host's sessions and agents under
+    /// `other`, so a lookup for one of those agents has to use the same row.
+    pub fn host_id_or_other(&self, slug: &str) -> Result<i32> {
+        Ok(self.host_id(slug)?.unwrap_or(6))
+    }
+
     /// One session's `(host_id slug, project, cwd)` — T25.0's Check reads the row a hook run
     /// left rather than re-deriving it from `upsert_session`'s arguments, and the live Graph
     /// calls feed (T329.34) names a session by its host when no agent row exists.

@@ -386,17 +386,25 @@ section! {
         /// The public HTTPS URL a tunnel serves the HTTP server at. Its host passes the Host
         /// check and its origin the Origin check; anything else is refused.
         public_url: String = String::new(),
+        /// The MCP tool-result memo on/off; `RTOK_MCP_CACHE=0` turns it off too.
+        cache_enabled: bool = true,
+        /// Seconds a memoized read-only tool result stays fresh (see `src/mcp/memo.rs`).
+        /// `0` turns the memo off.
+        cache_ttl_secs: u64 = 300,
+        /// Most memoized results kept; the least recently used is dropped first. `0`: off.
+        cache_max_entries: u32 = 256,
     }
 }
 
 section! {
-    /// `[proxy.tools_rewrite]` — opt-in `tools[]` description rewrite (T59.5). Off: bytes
-    /// identical. Empty `allow` keeps every tool not in `deny`. `input_schema` keeps its names,
+    /// `[proxy.tools_rewrite]` — `tools[]` description rewrite (T59.5), on by default with
+    /// `compact_schema`; the originals are archived for `expand`. Off: bytes identical. Empty
+    /// `allow` keeps every tool not in `deny`. `input_schema` keeps its names,
     /// `type`, `required` and `enum` byte for byte; only with `compact_schema` (T686) do its
     /// `description`, `default` and `examples` strings shrink.
     ToolsRewrite {
-        enabled: bool = false,
-        compact_schema: bool = false,
+        enabled: bool = true,
+        compact_schema: bool = true,
         max_description_tokens: u32 = 60,
         allow: Vec<String> = Vec::new(),
         deny: Vec<String> = Vec::new(),
@@ -1288,6 +1296,10 @@ section! {
         min_tokens: u32 = 1500,
         head_lines: u32 = 8,
         tail_lines: u32 = 4,
+        /// Elided lines that look like errors or failures (`error`, `panic`, `fail`, …) shown
+        /// under the pointer with their line numbers, so the common `expand` grep round-trip is
+        /// not needed. 0 = head and tail only.
+        signal_lines: u32 = 8,
         /// Opt-in L0/L1/L2 tiered loading (P33). Default off — v0.1 archive+inject unchanged.
         /// Behaviour spec: OpenViking (AGPL-3.0); rtok does not vendor, link, or subprocess it
         /// (D6). Gates native implementation in T33.2.

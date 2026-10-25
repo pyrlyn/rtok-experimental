@@ -2,6 +2,7 @@ bin.name = "rtok"
 args = "--config tests/trycmd/input/json-readers.toml doctor --fix"
 stdout = """
 nothing to remove
+rtok skills: up to date
 """
 
 # Hermetic by construction: isolated HOME/RTOK_HOME, inherit = false. An empty home has no hook

@@ -152,3 +152,5 @@ Two workflows post the list on every pull request to `main` that is not a draft:
 - Only functions, methods and classes are scored; a change to a constant, type or config file
   scores 0.
 - A deleted file is listed with score 0 and no line ranges: there is nothing left to read.
+
+See also [`rtok review`](review-context.md): diff plus signature digests for a reviewer model.

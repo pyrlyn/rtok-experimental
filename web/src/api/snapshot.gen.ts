@@ -1517,7 +1517,7 @@ export interface Problem {
   keep?: boolean;
   /**
    * `broken-hook`, `suspect-hook`, `unverified-hook`, `duplicate-hook`, `duplicate-mcp`,
-   * `conflicting-mcp`, `own-mcp`, `stale-plugin` or `unreadable-config`.
+   * `conflicting-mcp`, `own-mcp`, `stale-plugin`, `unreadable-config` or `untrusted-folder`.
    */
   kind: string;
   matcher?: string | null;
