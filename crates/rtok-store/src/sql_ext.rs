@@ -268,6 +268,34 @@ impl Query for ExplainArchiveInSessionPlan {
 #[cfg(test)]
 impl RunQueryDsl<SqliteConnection> for ExplainArchiveInSessionPlan {}
 
+/// `EXPLAIN QUERY PLAN` of `recent_hook_inputs_for_event`, restating the SQL Diesel generates for it
+/// (T525): no form in the typed DSL.
+#[cfg(test)]
+#[derive(QueryId)]
+pub(crate) struct ExplainRecentHookInputsPlan;
+
+#[cfg(test)]
+impl QueryFragment<Sqlite> for ExplainRecentHookInputsPlan {
+    fn walk_ast<'b>(&'b self, mut out: AstPass<'_, 'b, Sqlite>) -> QueryResult<()> {
+        out.push_sql(
+            "EXPLAIN QUERY PLAN SELECT call_io.request_json, hook_sessions.fields \
+             FROM calls INNER JOIN call_io ON call_io.call_id = calls.id \
+             LEFT JOIN hook_sessions ON call_io.hook_session_id = hook_sessions.id \
+             WHERE calls.session_id = 's' AND calls.kind = 'hook' AND calls.name = 'PreToolUse' \
+             ORDER BY calls.id DESC LIMIT 100",
+        );
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+impl Query for ExplainRecentHookInputsPlan {
+    type SqlType = (Integer, Integer, Integer, Text);
+}
+
+#[cfg(test)]
+impl RunQueryDsl<SqliteConnection> for ExplainRecentHookInputsPlan {}
+
 /// `sqlite_master` catalog — not a `table!` Diesel can model.
 #[cfg(test)]
 #[derive(QueryId)]
