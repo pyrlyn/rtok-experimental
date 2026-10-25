@@ -15,13 +15,19 @@
 
 use std::collections::HashSet;
 use std::path::Path;
+use std::time::Duration;
 
 use anyhow::Result;
 
 use crate::config::Graph;
 use crate::plugin::{Ctx, Runtime};
 use crate::project::refs::discover;
-use crate::store::{LinkKind, Origin, Project, Store};
+use crate::store::{LinkKind, Origin, Project, Store, is_locked, retry_locked};
+
+/// Same bound as a worktree claim (T934): one `busy_timeout` is not enough when graph
+/// indexing holds the writer, and a warning on every MCP start was the 53-line flood.
+const LOCK_ATTEMPTS: u32 = 8;
+const LOCK_PAUSE: Duration = Duration::from_millis(250);
 
 /// Why a branch of references was not followed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,10 +153,18 @@ pub fn index_new(rt: &Runtime, followed: &Followed) {
 }
 
 /// [`follow`] with the limits and failures logged; what `rtok mcp` and `rtok graph index` call.
-/// Fails open: a registry error is logged and nothing is returned.
+/// Fails open: a registry error is logged and nothing is returned. A locked store is retried
+/// and, if it stays locked, skipped without a warning — the next MCP start tries again.
 pub fn refresh(rt: &Runtime, root: &Path) -> Followed {
+    refresh_with(rt, root, LOCK_ATTEMPTS, LOCK_PAUSE)
+}
+
+fn refresh_with(rt: &Runtime, root: &Path, attempts: u32, pause: Duration) -> Followed {
     let cfg = &rt.config.plugins.graph;
-    match follow(&rt.store, cfg, root) {
+    match retry_locked(attempts, pause, || {
+        rt.store.drop_toolless_session_projects()?;
+        follow(&rt.store, cfg, root).map_err(Into::into)
+    }) {
         Ok(f) => {
             for line in f
                 .stops
@@ -162,6 +176,7 @@ pub fn refresh(rt: &Runtime, root: &Path) -> Followed {
             }
             f
         }
+        Err(e) if is_locked(&e) => Followed::default(),
         Err(e) => {
             let msg = format!("following references of {} failed: {e:#}", root.display());
             crate::log::append(&rt.config, "warn", "graph", "references", &msg);
@@ -404,5 +419,64 @@ mod tests {
         fx.cfg.auto_link_references = false;
         assert_eq!(fx.follow("A").registered.len(), 0);
         assert!(fx.links().is_empty());
+    }
+
+    fn locked_refresh(tag: &str) -> (crate::plugin::Runtime, PathBuf, PathBuf) {
+        use crate::store::LockWait;
+        let dir = tmp_dir(tag);
+        let db = dir.join("rtok.db");
+        let mut cfg = crate::config::Config::default();
+        cfg.rebase_paths(&dir);
+        cfg.core.db_path = db.clone();
+        cfg.log.path = dir.join("rtok.log");
+        let wait = LockWait {
+            busy: Duration::from_millis(20),
+            ..LockWait::STEADY
+        };
+        let rt = crate::plugin::Runtime::open_with(cfg, "t940", wait).unwrap();
+        (rt, dir, db)
+    }
+
+    fn cargo_dep(dir: &Path, name: &str, deps: &[&str]) -> PathBuf {
+        let proj = dir.join(name);
+        std::fs::create_dir_all(&proj).unwrap();
+        let body: String = deps
+            .iter()
+            .map(|d| format!("{d} = {{ path = \"../{d}\" }}\n"))
+            .collect();
+        std::fs::write(proj.join("Cargo.toml"), format!("[dependencies]\n{body}")).unwrap();
+        proj
+    }
+
+    #[test]
+    fn a_locked_references_write_waits_out_a_lock_that_ends() {
+        use crate::store::{HeldWrite, hold_write_lock};
+        let (rt, dir, db) = locked_refresh("follow-lock-ends");
+        let a = cargo_dep(&dir, "A", &["B"]);
+        cargo_dep(&dir, "B", &[]);
+        rt.store.register_project(&a, Origin::Manual).unwrap();
+        let holder = hold_write_lock(&db, HeldWrite::Immediate, Duration::from_millis(300));
+        let f = refresh_with(&rt, &a, 100, Duration::from_millis(20));
+        holder.join().unwrap();
+        assert_eq!(f.registered.len(), 1, "{:?}", f.registered);
+        assert!(rt.store.project_by_root(&dir.join("B")).unwrap().is_some());
+    }
+
+    #[test]
+    fn a_locked_references_write_does_not_warn_when_the_lock_stays() {
+        use crate::store::{HeldWrite, hold_write_lock};
+        let (rt, dir, db) = locked_refresh("follow-lock-stays");
+        let a = cargo_dep(&dir, "A", &["B"]);
+        cargo_dep(&dir, "B", &[]);
+        rt.store.register_project(&a, Origin::Manual).unwrap();
+        let holder = hold_write_lock(&db, HeldWrite::Immediate, Duration::from_millis(600));
+        let f = refresh_with(&rt, &a, 2, Duration::from_millis(5));
+        holder.join().unwrap();
+        assert!(f.registered.is_empty(), "{:?}", f.registered);
+        let log = std::fs::read_to_string(&rt.config.log.path).unwrap_or_default();
+        assert!(
+            !log.contains("database is locked"),
+            "locked write must back off without warning: {log}"
+        );
     }
 }

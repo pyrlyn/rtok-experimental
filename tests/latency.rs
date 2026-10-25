@@ -345,8 +345,9 @@ fn hook_returns_despite_exclusive_lock() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// T329.6: `SessionStart` with a real cwd also upserts the session's project (the
-/// `auto_add_projects` default); the fixture's own cwd does not exist and would skip it.
+/// T329.6 / T940: `SessionStart` with a real cwd (the fixture's own cwd does not exist
+/// and would skip other work). Project registration waits for a tool; this path must
+/// still stay under 10 ms.
 #[test]
 fn latency_hook_session_start_with_project_registration_p95_under_10ms() {
     let mut v: serde_json::Value =

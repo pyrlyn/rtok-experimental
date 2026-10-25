@@ -6,6 +6,7 @@
 //! as one unit, identified by its canonical root; the symbol index stays keyed by that root,
 //! so switching projects never re-indexes or mixes rows. No CLI, links or page yet.
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use crate::Result;
@@ -13,8 +14,12 @@ use diesel::prelude::*;
 use serde::Serialize;
 
 use super::Store;
-use super::schema::{extractor, file_rank, projects, symbol_stale, symbols};
+use super::schema::{calls, extractor, file_rank, projects, sessions, symbol_stale, symbols};
 use super::unixepoch;
+
+/// Host events that mean a session used a tool. SessionStart/SessionEnd alone do not:
+/// probe apps fire only those and must not keep a registry row.
+const TOOL_HOOKS: &[&str] = &["PreToolUse", "PostToolUse", "AfterMCPExecution"];
 
 /// Canonical absolute path as one string: the index key of a root, and the match key of a
 /// file for `mark_symbols_stale` (T8.3). Rows are scoped to it so one store holds many repos.
@@ -150,6 +155,40 @@ impl Store {
             self.rename_project(project.id, name)?;
         }
         Ok(())
+    }
+
+    /// Drop session-origin projects whose sessions never recorded a tool. Probe apps
+    /// register on SessionStart, then `graph/references` keeps hitting a locked write.
+    pub fn drop_toolless_session_projects(&self) -> Result<u64> {
+        let used = self.tool_session_roots()?;
+        let ids: Vec<i32> = self
+            .projects()?
+            .into_iter()
+            .filter(|p| p.origin == Origin::Session && !used.contains(&p.root))
+            .map(|p| p.id)
+            .collect();
+        let mut n = 0;
+        for id in ids {
+            if self.remove_project(id)? {
+                n += 1;
+            }
+        }
+        Ok(n)
+    }
+
+    fn tool_session_roots(&self) -> Result<HashSet<String>> {
+        let mut conn = self.lock()?;
+        let cwds: Vec<Option<String>> = sessions::table
+            .inner_join(calls::table)
+            .filter(calls::name.eq_any(TOOL_HOOKS).or(calls::surface.eq("mcp")))
+            .select(sessions::cwd)
+            .distinct()
+            .load(&mut *conn)?;
+        Ok(cwds
+            .into_iter()
+            .flatten()
+            .map(|c| canon_root(Path::new(&c)))
+            .collect())
     }
 
     pub fn projects(&self) -> Result<Vec<Project>> {
@@ -487,5 +526,120 @@ mod tests {
         assert!(store.file_rank_get(&b.root).unwrap().is_some());
         assert_eq!(store.selected_project().unwrap(), None);
         assert!(dir.0.join("a").is_dir(), "the files are never touched");
+    }
+
+    #[test]
+    fn session_projects_with_no_tool_are_dropped() {
+        let dir = Dir::new("toolless-session");
+        let store = Store::open_in_memory().unwrap();
+        let probe = store
+            .register_project(&dir.sub("Probe"), Origin::Session)
+            .unwrap();
+        let github = store
+            .register_project(&dir.sub("GitHub"), Origin::Session)
+            .unwrap();
+        let used = store
+            .register_project(&dir.sub("app"), Origin::Session)
+            .unwrap();
+        let mcp = store
+            .register_project(&dir.sub("mcp-root"), Origin::Session)
+            .unwrap();
+        let manual = store
+            .register_project(&dir.sub("manual"), Origin::Manual)
+            .unwrap();
+        let reference = store
+            .register_project(&dir.sub("dep"), Origin::Reference)
+            .unwrap();
+
+        store
+            .upsert_session("probe", None, None, Some(&probe.root), Some("hook"))
+            .unwrap();
+        store
+            .insert_call(
+                "probe",
+                "hook",
+                "hook",
+                None,
+                None,
+                None,
+                None,
+                Some("SessionStart"),
+            )
+            .unwrap();
+        store
+            .insert_call(
+                "probe",
+                "hook",
+                "hook",
+                None,
+                None,
+                None,
+                None,
+                Some("SessionEnd"),
+            )
+            .unwrap();
+
+        store
+            .upsert_session("gh", None, None, Some(&github.root), Some("hook"))
+            .unwrap();
+        store
+            .insert_call(
+                "gh",
+                "hook",
+                "hook",
+                None,
+                None,
+                None,
+                None,
+                Some("SessionStart"),
+            )
+            .unwrap();
+
+        store
+            .upsert_session("app", None, None, Some(&used.root), Some("hook"))
+            .unwrap();
+        store
+            .insert_call(
+                "app",
+                "hook",
+                "hook",
+                None,
+                None,
+                None,
+                None,
+                Some("PostToolUse"),
+            )
+            .unwrap();
+
+        store
+            .upsert_session("mcp", None, None, Some(&mcp.root), Some("mcp"))
+            .unwrap();
+        store
+            .insert_call(
+                "mcp",
+                "mcp",
+                "symbol",
+                None,
+                None,
+                None,
+                None,
+                Some("symbol"),
+            )
+            .unwrap();
+
+        assert_eq!(store.drop_toolless_session_projects().unwrap(), 2);
+        let roots: Vec<_> = store
+            .projects()
+            .unwrap()
+            .into_iter()
+            .map(|p| p.root)
+            .collect();
+        assert!(roots.contains(&used.root), "{roots:?}");
+        assert!(roots.contains(&mcp.root), "{roots:?}");
+        assert!(roots.contains(&manual.root), "{roots:?}");
+        assert!(roots.contains(&reference.root), "{roots:?}");
+        assert!(!roots.contains(&probe.root), "{roots:?}");
+        assert!(!roots.contains(&github.root), "{roots:?}");
+        assert_eq!(store.drop_toolless_session_projects().unwrap(), 0);
     }
 }
