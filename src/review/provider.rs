@@ -96,6 +96,15 @@ pub fn text_of(p: Provider, v: &Value) -> Option<String> {
     }
 }
 
+/// Request timeout: `RTOK_REVIEW_TIMEOUT_SECS`, default 300 (a local model may need more).
+pub fn timeout_secs() -> u64 {
+    std::env::var("RTOK_REVIEW_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(300)
+}
+
 impl Reviewer for Http {
     fn name(&self) -> String {
         format!("{:?}/{}", self.provider, self.model).to_lowercase()
@@ -103,7 +112,7 @@ impl Reviewer for Http {
 
     fn review(&self, prompt: &str) -> Result<String> {
         let client = reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(300))
+            .timeout(std::time::Duration::from_secs(timeout_secs()))
             .build()?;
         let rb = match self.provider {
             Provider::Anthropic => client

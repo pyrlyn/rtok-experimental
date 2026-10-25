@@ -45,6 +45,11 @@ def main() -> None:
     ap.add_argument("shas", nargs="+")
     ap.add_argument("--tokens-only", action="store_true")
     ap.add_argument("--model")
+    ap.add_argument("--provider")
+    ap.add_argument("--base-url")
+    ap.add_argument("--review-modes", default="none,digest,full", help="modes sent to the model")
+    ap.add_argument("--max-prompt", type=int, help="skip a review whose prompt exceeds this many tokens")
+    ap.add_argument("--tag", default="", help="suffix for review files, e.g. the model name")
     a = ap.parse_args()
     enc = tiktoken.get_encoding("o200k_base")
     table = []
@@ -57,16 +62,28 @@ def main() -> None:
             prompt = rtok("--range", rng, "--context", mode, "--print-prompt")
             (d / f"prompt-{mode}.md").write_text(prompt)
             row[f"tokens_{mode}"] = len(enc.encode(prompt, disallowed_special=()))
-            if not a.tokens_only:
-                extra = ["--model", a.model] if a.model else []
-                rep = json.loads(rtok("--range", rng, "--context", mode, "--json", *extra))
-                (d / f"review-{mode}.md").write_text(f"reviewer: {rep['reviewer']}\n\n{rep['review']}\n")
+            if a.tokens_only or mode not in a.review_modes.split(","):
+                continue
+            if a.max_prompt and row[f"tokens_{mode}"] > a.max_prompt:
+                row[f"review_{mode}"] = "skipped: prompt exceeds the model context"
+                continue
+            extra = []
+            for flag, val in (("--model", a.model), ("--provider", a.provider), ("--base-url", a.base_url)):
+                if val:
+                    extra += [flag, val]
+            t0 = time.time()
+            rep = json.loads(rtok("--range", rng, "--context", mode, "--json", *extra))
+            row[f"review_{mode}_secs"] = round(time.time() - t0)
+            name = f"review-{mode}{'-' + a.tag if a.tag else ''}.md"
+            (d / name).write_text(f"reviewer: {rep['reviewer']}\n\n{rep['review']}\n")
+            row[f"review_{mode}"] = name
         row["saving_vs_full_pct"] = round(100 * (1 - row["tokens_digest"] / row["tokens_full"]), 1)
         table.append(row)
         print(json.dumps(row))
     tot = {m: sum(r[f"tokens_{m}"] for r in table) for m in MODES}
     summary = {"rows": table, "total": tot, "total_saving_vs_full_pct": round(100 * (1 - tot["digest"] / tot["full"]), 1)}
-    (OUT / "tokens.json").write_text(json.dumps(summary, indent=2) + "\n")
+    out_name = f"tokens{'-' + a.tag if a.tag else ''}.json" if not a.tokens_only else "tokens.json"
+    (OUT / out_name).write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary["total"]), summary["total_saving_vs_full_pct"])
 
 

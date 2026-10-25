@@ -98,11 +98,24 @@ Tokens are counted with tiktoken `o200k_base`. Results are in
 | `659e107f2` (#1274) | 4 | 5,643 | 14,535 | 119,977 | 87.9% |
 | **total** | | 11,843 | 44,492 | 312,705 | **85.8%** |
 
-**Quality: not measured yet.** The run needs a reviewer key. Only `OPENAI_API_KEY` was
-available, and OpenAI answered `credit_balance_exhausted`, so no review ran in any mode. To
-run it, set a working key and run `eval.py` without `--tokens-only`. Each issue in
-`results/<sha>/review-<mode>.md` is then classified by hand, against the code, as real or as
-a false positive from missing context.
+**Quality: Bonsai 27B, local.** Reviewer: `prism-ml/bonsai-27b` (Ternary-Bonsai-27B, MLX
+2-bit), run on LM Studio's OpenAI-compatible server at a 32k context. The run was
+`--provider openai --base-url http://localhost:1234`, with `RTOK_REVIEW_TIMEOUT_SECS`
+raised for the slow local model. `full` does not fit in 32k on any of the three commits, so
+it was skipped.
+
+Each finding was checked against the code. Results and the per-finding notes are in
+[`results/quality-bonsai-before.md`](../../bench/review-eval/results/quality-bonsai-before.md).
+
+| mode | findings | real | FP from missing or misleading context | other FP |
+|---|---|---|---|---|
+| diff only | 3 | 0 | 1 | 2 |
+| diff + digests | 2 | 0 | 2 | 0 |
+
+The sample is small: three already reviewed commits, and no real issue in any of them. All
+findings were false positives in both modes, so this run shows no quality gain. One
+digest-mode error came from a same-name `scan` in another file. That is the noise the usage
+filters below address.
 
 ## Enable, disable, use
 
