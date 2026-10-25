@@ -24,7 +24,7 @@ use crate::config::Config;
 #[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct Problem {
     /// `broken-hook`, `suspect-hook`, `unverified-hook`, `duplicate-hook`, `duplicate-mcp`,
-    /// `conflicting-mcp`, `own-mcp`, `stale-plugin` or `unreadable-config`.
+    /// `conflicting-mcp`, `own-mcp`, `stale-plugin`, `unreadable-config` or `untrusted-folder`.
     pub kind: &'static str,
     pub agent: &'static str,
     /// The config file the entry lives in.
@@ -949,6 +949,7 @@ pub fn render(problems: &[Problem]) -> String {
                     | "unverified-hook"
                     | "unreadable-config"
                     | "stale-plugin"
+                    | "untrusted-folder"
             )
         })
         .collect();
@@ -964,6 +965,7 @@ pub fn render(problems: &[Problem]) -> String {
         ("unverified-hook", "cannot verify"),
         ("stale-plugin", "stale plugin"),
         ("unreadable-config", "unreadable"),
+        ("untrusted-folder", "untrusted folder"),
     ] {
         for p in hook_problems.iter().filter(|p| p.kind == kind) {
             let matcher = p
@@ -971,7 +973,10 @@ pub fn render(problems: &[Problem]) -> String {
                 .as_deref()
                 .map(|m| format!("[{m}]"))
                 .unwrap_or_default();
-            if matches!(kind, "unreadable-config" | "stale-plugin") {
+            if matches!(
+                kind,
+                "unreadable-config" | "stale-plugin" | "untrusted-folder"
+            ) {
                 out.push_str(&format!("  {title} {} {}\n", p.agent, p.detail));
                 continue;
             }

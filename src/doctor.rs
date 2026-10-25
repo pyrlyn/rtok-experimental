@@ -33,6 +33,7 @@ mod mcp_fix;
 pub mod probe;
 pub mod project;
 pub mod skills_fix;
+mod trust;
 pub mod web;
 
 /// What `rtok doctor` found, as data.
@@ -738,7 +739,8 @@ fn config_notes(cfg: &Config) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Every config finding of this machine: hooks, then duplicate MCP entries.
+/// Every config finding of this machine: hooks, duplicate MCP entries, then Claude Code's
+/// trust of this folder.
 fn checks(cfg: &Config) -> Vec<hooks::Problem> {
     let probes = hooks::Probes {
         fs: &probe::RealFs,
@@ -747,6 +749,7 @@ fn checks(cfg: &Config) -> Vec<hooks::Problem> {
     };
     let (mut problems, plugins) = hooks::check_with_plugins(cfg, &probes);
     problems.extend(mcp_dupes::check(cfg, &probes, &plugins));
+    problems.extend(trust::check(cfg, &probes));
     problems
 }
 
