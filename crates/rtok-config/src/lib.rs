@@ -539,6 +539,10 @@ section! {
         openai_upstream: String = s("https://api.openai.com"),
         gemini_upstream: String = s("https://generativelanguage.googleapis.com"),
         timeout_s: u64 = 600,
+        /// Maximum request body and retained response prefix; larger responses still stream.
+        max_body_bytes: std::num::NonZeroU32 = std::num::NonZeroU32::MIN.saturating_add(8 * 1024 * 1024 - 1),
+        /// Global bound including plain mode and disabled lanes; excess requests receive 429.
+        max_in_flight: std::num::NonZeroU16 = std::num::NonZeroU16::MIN.saturating_add(7),
         include_usage: bool = true,
         /// Opt-in Anthropic server-side context editing (T51.2): add
         /// `context_management.edits: [{type: "clear_tool_uses_20250919"}]` plus the
@@ -1184,7 +1188,8 @@ section! {
         endpoint: String = String::new(),
         headers: String = String::new(),
         service_name: String = s("rtok"),
-        content: bool = true,
+        /// Explicit opt-in for prompt, tool argument and result content on exported spans.
+        content: bool = false,
         content_bytes: u32 = 65536,
         flush_secs: u32 = 5,
     }
@@ -2159,6 +2164,7 @@ mod tests {
     #[test]
     fn otel_is_off_until_an_endpoint_resolves() {
         let o = Otel::default();
+        assert!(!o.content);
         assert_eq!(o.resolve_with(|_| None), None);
         let env = |k: &str| match k {
             "OTEL_EXPORTER_OTLP_ENDPOINT" => Some("http://localhost:4318/".to_string()),
@@ -2179,6 +2185,22 @@ mod tests {
         let e = o.resolve_with(env).unwrap();
         assert_eq!(e.url, "https://otel.example");
         assert_eq!(e.headers, vec![("signoz-ingestion-key".into(), "k".into())]);
+    }
+
+    #[test]
+    fn proxy_limits_cannot_disable_the_global_bound() {
+        for body in [
+            "[proxy]\nmax_body_bytes=0",
+            "[proxy]\nmax_in_flight=0",
+            "[proxy]\nmax_in_flight=65536",
+        ] {
+            assert!(parse(body).is_err(), "{body}");
+        }
+        let cfg =
+            parse("[proxy]\nmax_body_bytes=1024\nmax_in_flight=1\n[otel]\ncontent=true").unwrap();
+        assert_eq!(cfg.proxy.max_body_bytes.get(), 1024);
+        assert_eq!(cfg.proxy.max_in_flight.get(), 1);
+        assert!(cfg.otel.content);
     }
 
     /// Commented defaults still parse as [`Config::default`], an empty file does the same,

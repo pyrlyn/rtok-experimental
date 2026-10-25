@@ -13,7 +13,9 @@ use std::sync::{Mutex, PoisonError};
 use rtok_plugin_sdk::{Class, Ctx, DashboardPage, Manifest, Measurement, Plugin, Surface, ToolDef};
 use serde::Deserialize;
 use serde_json::Value;
-use wasmi::{Caller, Engine, Error, Instance, Linker, Module, Store};
+use wasmi::{
+    Caller, Engine, Error, Instance, Linker, Module, Store, StoreLimits, StoreLimitsBuilder,
+};
 
 /// Append WASM plugins from `config.plugins.wasm.dir` when enabled.
 pub fn append(
@@ -51,6 +53,7 @@ pub fn append(
 }
 
 struct WasmHost {
+    limits: StoreLimits,
     plugin_id: String,
     staged: Vec<Measurement>,
     estimator: crate::config::Estimator,
@@ -69,6 +72,10 @@ struct WasmInner {
 /// Fuel per guest call (≈ wasm instructions). Without a budget a guest `loop` never returns and
 /// wedges the synchronous `rtok mcp` loop for every tool, not just the plugin's own.
 const FUEL: u64 = 100_000_000;
+
+// Fuel bounds execution, but a single allocation can exhaust the host before fuel runs out.
+const MAX_MEMORY_BYTES: usize = 64 * 1024 * 1024;
+const MAX_TABLE_ELEMENTS: usize = 65_536;
 
 /// One loaded `.wasm` plugin instance.
 pub struct WasmPlugin {
@@ -120,6 +127,13 @@ impl WasmPlugin {
         let mut store = Store::new(
             &engine,
             WasmHost {
+                limits: StoreLimitsBuilder::new()
+                    .memory_size(MAX_MEMORY_BYTES)
+                    .table_elements(MAX_TABLE_ELEMENTS)
+                    .memories(1)
+                    .tables(1)
+                    .instances(1)
+                    .build(),
                 plugin_id: String::new(),
                 staged: Vec::new(),
                 estimator: estimator.clone(),
@@ -129,6 +143,7 @@ impl WasmPlugin {
                 log_level: log.level.clone(),
             },
         );
+        store.limiter(|host| &mut host.limits);
         let mut linker = Linker::new(&engine);
         linker.func_wrap(
             "env",
@@ -474,5 +489,50 @@ mod tests {
         let err = WasmPlugin::load_with_fuel(&path, &cfg.estimator, &cfg.log, 10_000).err();
         let _ = std::fs::remove_dir_all(&dir);
         assert!(err.is_some(), "an endless guest must not load");
+    }
+
+    #[rstest::rstest]
+    #[case("(memory (export \"memory\") 1)", "", true)]
+    #[case("(memory (export \"memory\") 1025)", "", false)]
+    #[case(
+        "(memory (export \"memory\") 1)",
+        "(if (i32.ne (memory.grow (i32.const 1024)) (i32.const -1)) (then unreachable))",
+        true
+    )]
+    #[case("(memory (export \"memory\") 1) (table 65537 funcref)", "", false)]
+    #[case(
+        "(memory (export \"memory\") 1) (table 1 funcref)",
+        "(if (i32.ne (table.grow (ref.null func) (i32.const 65536)) (i32.const -1)) (then unreachable))",
+        true
+    )]
+    fn guest_allocations_are_bounded_before_start(
+        #[case] declarations: &str,
+        #[case] start: &str,
+        #[case] accepted: bool,
+    ) {
+        use std::fmt::Write as _;
+
+        let manifest = r#"{"id":"bounded","surfaces":["mcp"],"default_on":true,"title":"Bounded","summary":"fixture"}"#;
+        let encoded = manifest.bytes().fold(String::new(), |mut out, byte| {
+            write!(out, "\\{byte:02x}").unwrap();
+            out
+        });
+        let dir = crate::testutil::tmp_dir("wasm-allocation-boundary");
+        let path = dir.join("fixture.wasm");
+        std::fs::write(
+            &path,
+            format!(
+                r#"(module {declarations}
+                    (data (i32.const 0) "{encoded}")
+                    (func $start {start}) (start $start)
+                    (func (export "rtok_manifest") (result i64) (i64.const {})))"#,
+                (manifest.len() as u64) << 32,
+            ),
+        )
+        .unwrap();
+        let cfg = crate::config::Config::default();
+        let result = WasmPlugin::load(&path, &cfg.estimator, &cfg.log);
+        let _ = std::fs::remove_dir_all(dir);
+        assert_eq!(result.is_ok(), accepted, "{declarations}; {start}");
     }
 }

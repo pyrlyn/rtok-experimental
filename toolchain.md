@@ -129,7 +129,7 @@ Project programs and direct packages from the manifests.
 | owo-colors | local | https://crates.io/crates/owo-colors | Rust dependency |
 | pathdiff | local | https://crates.io/crates/pathdiff | Relative path between two paths |
 | percent-encoding | local | https://crates.io/crates/percent-encoding | T574: decode percent-escaped SPA asset URL paths |
-| printpdf | local | https://crates.io/crates/printpdf | Rust dependency |
+| printpdf | local | https://crates.io/crates/printpdf | Native PDF only; default HTML/azul features disabled to drop unused bincode chain; version unchanged |
 | proptest | local | https://crates.io/crates/proptest | T331.5: property test that `doctor --fix` leaves every byte outside the removed hook unchanged |
 | portable-pty | local | https://crates.io/crates/portable-pty | T331.7: pseudo-terminal for the `doctor --fix` checklist test (dev-dependency) |
 | ratatui | local | https://crates.io/crates/ratatui | TUI |
@@ -140,8 +140,7 @@ Project programs and direct packages from the manifests.
 | rstest | local | https://crates.io/crates/rstest | Rust dependency |
 | rust-embed | local | https://crates.io/crates/rust-embed | Embeds the built SPA (`web/dist`) in the binary in every profile; memory-serve reads disk in debug builds and has no run-time override, include_dir has no media types or digests |
 | rustix | local | https://crates.io/crates/rustix | System calls in rtok-sys; Unix no-follow rotation locks in rtok-log |
-| rustls | local | https://crates.io/crates/rustls | Preconfigured webpki TLS client config (T53.3) |
-| rustls-pemfile | local | https://crates.io/crates/rustls-pemfile | `SSL_CERT_FILE` bundle parsing (T53.3) |
+| rustls | local | https://crates.io/crates/rustls | Preconfigured webpki TLS client config (T53.3); built-in pki-types PEM reader for `SSL_CERT_FILE` (T962) |
 | semver | local | https://crates.io/crates/semver | T279: plugin version compare + `.rtok-plugin-version` (de)serialization |
 | serde | local | https://crates.io/crates/serde | Serialization |
 | schemars | local | https://github.com/GREsau/schemars | T310.2: JSON Schema of the `/ws` protocol, committed as `web/src/api/ws.schema.json` |

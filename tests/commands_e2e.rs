@@ -553,7 +553,7 @@ fn config_validate_creates_the_default_file_but_not_an_explicit_one() {
 #[cfg(unix)] // POSIX hook paths
 #[test]
 fn doctor_fix_removes_only_the_broken_hook_after_a_backup() {
-    let home = tmp("doctor-fix");
+    let home = tmp("doctor-fix").canonicalize().unwrap();
     let claude = home.join(".claude");
     fs::create_dir_all(&claude).unwrap();
     let settings = claude.join("settings.json");
@@ -590,6 +590,51 @@ fn doctor_fix_removes_only_the_broken_hook_after_a_backup() {
 
     let again = run(&["doctor", "--fix", "--yes"]);
     assert!(String::from_utf8_lossy(&again.stdout).contains("nothing to remove"));
+}
+
+#[cfg(unix)]
+#[test]
+fn doctor_permissions_preview_apply_and_retry_use_only_scratch_data() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = tmp("permission-cli").canonicalize().unwrap();
+    fs::create_dir_all(home.join("archive")).unwrap();
+    let file = home.join("archive/private");
+    fs::write(&file, "unchanged private data").unwrap();
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).unwrap();
+    fs::set_permissions(&home, fs::Permissions::from_mode(0o755)).unwrap();
+    let mode = || fs::metadata(&file).unwrap().permissions().mode() & 0o777;
+    let report: serde_json::Value =
+        serde_json::from_str(&ok(&["doctor", "--json"], &home)).unwrap();
+    assert!(
+        report["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|finding| finding["path"] == file.to_string_lossy().as_ref()
+                && finding["before"] == 0o644
+                && finding["target"] == 0o600)
+    );
+    for extra in [vec![], vec!["--yes", "--dry-run"], vec!["--yes", "--stat"]] {
+        let mut args = vec!["doctor", "--fix", "--only", "permissions"];
+        args.extend(extra);
+        let text = ok(&args, &home);
+        assert!(text.contains("0644 -> 0600"), "{text}");
+        assert_eq!(mode(), 0o644);
+    }
+    let text = ok(
+        &["doctor", "--fix", "--only", "permissions", "--yes"],
+        &home,
+    );
+    assert!(text.contains("repaired"), "{text}");
+    assert_eq!(mode(), 0o600);
+    assert_eq!(fs::read_to_string(file).unwrap(), "unchanged private data");
+    assert!(
+        ok(
+            &["doctor", "--fix", "--only", "permissions", "--yes"],
+            &home
+        )
+        .is_empty()
+    );
 }
 
 /// T331.6: `--only duplicate-mcp` removes the extra copy of a server from the host's JSON and

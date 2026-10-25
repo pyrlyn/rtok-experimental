@@ -363,13 +363,78 @@ mod tests {
     }
 
     #[test]
+    fn content_requires_opt_in_even_with_a_generic_endpoint() {
+        let cfg = Otel::default();
+        assert!(
+            cfg.resolve_with(|key| (key == "OTEL_EXPORTER_OTLP_ENDPOINT")
+                .then(|| "http://localhost:4318".into()))
+                .is_some()
+        );
+        for (surface, kind, name, request, response) in [
+            (
+                "hook",
+                "hook",
+                "UserPromptSubmit",
+                r#"{"prompt":"private prompt"}"#,
+                "",
+            ),
+            (
+                "hook",
+                "hook",
+                "PostToolUse",
+                r#"{"tool_name":"Read","tool_input":{"file_path":"private path"},"tool_response":"private result"}"#,
+                "",
+            ),
+            (
+                "mcp",
+                "tool_call",
+                "read",
+                "private arguments",
+                "private result",
+            ),
+            (
+                "proxy",
+                "api_request",
+                "/v1/messages",
+                r#"{"messages":[{"role":"user","content":"private prompt"}]}"#,
+                r#"{"content":[{"text":"private result"}]}"#,
+            ),
+        ] {
+            let detail = CallDetail {
+                io: Some(io(Some(request), Some(response))),
+                ..CallDetail::default()
+            };
+            let c = call(surface, kind, name);
+            let span = call_span(&c, &detail, &cfg);
+            assert!(span.attrs.iter().all(|(key, _)| !matches!(
+                key.as_str(),
+                "gen_ai.input.messages"
+                    | "gen_ai.output.messages"
+                    | "gen_ai.tool.call.arguments"
+                    | "gen_ai.tool.call.result"
+            )));
+            let opted_in = Otel {
+                content: true,
+                ..cfg.clone()
+            };
+            let span = call_span(&c, &detail, &opted_in);
+            assert!(span.attrs.iter().any(|(_, value)| matches!(value,
+                AttrValue::Str(text) if text.contains("private"))));
+        }
+    }
+
+    #[test]
     fn post_tool_use_is_an_execute_tool_span() {
         let req = r#"{"hook_event_name":"PostToolUse","tool_name":"Read","tool_use_id":"toolu_1","tool_input":{"file_path":"/x"},"tool_response":"body"}"#;
         let d = CallDetail {
             io: Some(io(Some(req), None)),
             ..CallDetail::default()
         };
-        let sp = call_span(&call("hook", "hook", "PostToolUse"), &d, &Otel::default());
+        let cfg = Otel {
+            content: true,
+            ..Otel::default()
+        };
+        let sp = call_span(&call("hook", "hook", "PostToolUse"), &d, &cfg);
         assert_eq!(sp.name, "execute_tool Read");
         assert_eq!(sp.kind, Kind::Internal);
         assert_eq!(
@@ -393,7 +458,7 @@ mod tests {
                 io: Some(io(Some(r#"{"prompt":"hi"}"#), None)),
                 ..CallDetail::default()
             },
-            &Otel::default(),
+            &cfg,
         );
         assert_eq!(sp.name, "hook UserPromptSubmit");
         assert!(
@@ -405,6 +470,10 @@ mod tests {
 
     #[test]
     fn proxy_call_is_a_chat_span_with_usage() {
+        let cfg = Otel {
+            content: true,
+            ..Otel::default()
+        };
         let d = CallDetail {
             io: Some(io(
                 Some(r#"{"model":"claude-x","messages":[{"role":"user","content":"q"}]}"#),
@@ -430,11 +499,7 @@ mod tests {
             model: Some("claude-x".into()),
             ..CallDetail::default()
         };
-        let sp = call_span(
-            &call("proxy", "api_request", "/v1/messages"),
-            &d,
-            &Otel::default(),
-        );
+        let sp = call_span(&call("proxy", "api_request", "/v1/messages"), &d, &cfg);
         assert_eq!(sp.name, "chat claude-x");
         assert_eq!(sp.kind, Kind::Client);
         assert_eq!(text(&sp, "gen_ai.provider.name"), Some("anthropic"));
@@ -477,6 +542,7 @@ mod tests {
         };
         d.io.as_mut().unwrap().response_archive = Some("arc1".into());
         let cfg = Otel {
+            content: true,
             content_bytes: 1024,
             ..Otel::default()
         };

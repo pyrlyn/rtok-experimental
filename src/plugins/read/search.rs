@@ -88,7 +88,17 @@ pub(crate) fn text_files(
     walk: impl Iterator<Item = ignore::DirEntry>,
     max_bytes: u64,
 ) -> impl Iterator<Item = (PathBuf, String)> {
+    text_files_with_policy(walk, max_bytes, super::roots::secrets_denied())
+}
+
+fn text_files_with_policy(
+    walk: impl Iterator<Item = ignore::DirEntry>,
+    max_bytes: u64,
+    deny_secrets: bool,
+) -> impl Iterator<Item = (PathBuf, String)> {
     walk.filter(|e| e.file_type().is_some_and(|t| t.is_file()))
+        // Graph's text backend supplies its own walk, so the policy must also guard reads.
+        .filter(walk_filter(deny_secrets))
         .filter_map(move |e| {
             if fs::metadata(e.path()).ok()?.len() > max_bytes {
                 return None;
@@ -190,6 +200,28 @@ mod tests {
     use rtok_plugin_sdk::Ctx;
     fn cx(name: &str) -> crate::plugin::Runtime {
         crate::testutil::runtime(name).0
+    }
+
+    #[test]
+    fn text_file_consumers_share_the_http_secret_policy() {
+        let dir = crate::testutil::tmp_dir("text-file-secret-policy");
+        for name in ["public.txt", ".env", "server.key", ".env.example"] {
+            fs::write(dir.join(name), "needle\n").unwrap();
+        }
+        let names = |deny| {
+            let walk = WalkBuilder::new(&dir).hidden(false).build().flatten();
+            let mut names: Vec<_> = text_files_with_policy(walk, 1024, deny)
+                .map(|(path, _)| path.file_name().unwrap().to_string_lossy().into_owned())
+                .collect();
+            names.sort();
+            names
+        };
+        assert_eq!(
+            names(false),
+            [".env", ".env.example", "public.txt", "server.key"]
+        );
+        assert_eq!(names(true), [".env.example", "public.txt"]);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -177,6 +177,8 @@ upstream        = "https://api.anthropic.com"      # RTOK_UPSTREAM; chain behind
 openai_upstream = "https://api.openai.com"         # RTOK_OPENAI_UPSTREAM (D11)
 gemini_upstream = "https://generativelanguage.googleapis.com"  # RTOK_GEMINI_UPSTREAM (T51.3)
 timeout_s       = 600                 # upstream request timeout
+max_body_bytes  = 8388608             # предел запроса и сохраняемый префикс ответа (8 МиБ); большие ответы продолжают передаваться
+max_in_flight   = 8                    # общий лимит, включая режим без lanes; лишние запросы получают 429
 include_usage   = true                # OpenAI streaming: add stream_options.include_usage when missing (T11.2)
 context_management = false            # Anthropic /v1/messages only: add clear_tool_uses edit + beta header (T51.2, opt-in)
 dry_run         = false               # --dry-run: print effective [proxy] settings and exit, don't serve
@@ -201,7 +203,7 @@ semantic_cache      = false           # plugins.proxy.semantic_cache, чтени
 flex                = false           # OpenAI service_tier = "flex" on this lane; see [proxy.flex]
 timeout_s           = 0               # таймаут чтения для этой lane; 0 = proxy.timeout_s, но не меньше 900 при flex = true (гайд OpenAI по Flex берёт 15 мин)
 upstream            = ""              # базовый URL для каждого запроса этой lane, любой wire; "" = proxy.upstream / openai_upstream / gemini_upstream
-max_in_flight       = 0               # запросов upstream одновременно; 0 = без лимита (lane agent не ограничивается никогда)
+max_in_flight       = 0               # запросов upstream одновременно; 0 = без лимита этой lane (общий лимит всё равно действует)
 max_queued          = 8               # при max_in_flight: сколько запросов ждут слот; следующий получает 429 + Retry-After
 
 [proxy.lanes.embeddings]              # те же ключи, что у bulk
@@ -213,7 +215,7 @@ semantic_cache      = false
 flex                = false
 timeout_s           = 0
 upstream            = ""
-max_in_flight       = 0
+max_in_flight       = 0               # без лимита этой lane; общий лимит всё равно действует
 max_queued          = 8
 
 [proxy.lanes.meta]                    # те же ключи, что у bulk (models, подсчёт токенов)
@@ -225,7 +227,7 @@ semantic_cache      = false
 flex                = false
 timeout_s           = 0
 upstream            = ""
-max_in_flight       = 0
+max_in_flight       = 0               # без лимита этой lane; общий лимит всё равно действует
 max_queued          = 8
 
 [proxy.lanes.internal]                # те же ключи, что у bulk (собственные вызовы модели rtok)
@@ -237,7 +239,7 @@ semantic_cache      = false
 flex                = false
 timeout_s           = 0
 upstream            = ""
-max_in_flight       = 0
+max_in_flight       = 0               # без лимита этой lane; общий лимит всё равно действует
 max_queued          = 8
 
 [proxy.batch]                         # файлы результатов провайдерского Batch
@@ -528,7 +530,7 @@ team = ""                             # короткий ключ команды
 endpoint      = ""                    # OTLP/HTTP base URL, e.g. "http://localhost:4318"; "" = $OTEL_EXPORTER_OTLP_ENDPOINT
 headers       = ""                    # "k=v,k2=v2", e.g. "signoz-ingestion-key=…"; "" = $OTEL_EXPORTER_OTLP_HEADERS
 service_name  = "rtok"                # resource service.name
-content       = true                  # gen_ai.input/output.messages, tool arguments and results on spans
+content       = false                 # явно включите, чтобы отправлять тела сообщений, аргументы и результаты в спанах
 content_bytes = 65536                 # per attribute; beyond it rtok.archive.id → `rtok expand <id>`
 flush_secs    = 5                     # proxy / mcp flush interval, and the POST timeout
 
@@ -741,15 +743,17 @@ Lane agent сохраняет `calls.kind = api_request`; остальные з�
 | `flex` | нет | `false` | OpenAI `service_tier = "flex"` для вызовов chat и responses, см. [`[proxy.flex]`](#proxyflex) |
 | `timeout_s` | `proxy.timeout_s` | `0` | таймаут чтения этой lane в секундах; `0` = `proxy.timeout_s`, но не меньше 900 при `flex = true` (руководство OpenAI по Flex поднимает таймаут SDK до 15 минут: запросы Flex чаще упираются в таймаут) |
 | `upstream` | `proxy.upstream`, `openai_upstream`, `gemini_upstream` | `""` | базовый URL для каждого запроса этой lane, какой бы ни был wire (шлюз или локальный сервер, который их понимает); `""` = собственный upstream wire |
-| `max_in_flight` | нет | `0` | сколько запросов этой lane одновременно у upstream, считая до конца потока ответа; `0` = без лимита |
+| `max_in_flight` | нет | `0` | сколько запросов этой lane одновременно у upstream, считая до конца потока ответа; `0` = без лимита этой lane, общий лимит всё равно действует |
 | `max_queued` | нет | `8` | при `max_in_flight`: сколько запросов ждут слот; следующий получает `429` с `Retry-After: 1` и до upstream не доходит |
 
-У каждой lane свои слоты и своя очередь, а у lane `agent` нет ни того, ни другого: всплеск
-bulk заполняет только свою lane и никогда не задерживает ход агента. Запрос, которому
-отказала полная очередь, получает `rate_limit_error` в формате Anthropic, на который SDK
-провайдеров отвечают паузой и повтором; строки в `calls` он не пишет (до upstream он не
-дошёл), только строку `warn` в лог. Когда прокси выключен (`proxy.enabled`, `core.enabled`
-или `plugins.proxy.enabled` равны false), запросы не ограничиваются и не ставятся в очередь.
+У каждой lane свои слоты и своя очередь; `max_in_flight = 0` отключает только лимит этой lane.
+Общий лимит применяется ко всем запросам, включая `agent`, plain mode и отключённые lanes;
+слот удерживается до конца потока ответа. Запрос, которому отказал любой переполненный лимит,
+получает `rate_limit_error` в формате Anthropic, на который SDK провайдеров отвечают паузой и
+повтором; строка в `calls` не пишется (запрос не дошёл до upstream). Переполнение очереди lane
+также пишет строку `warn`; общий лимит не пишет отдельный лог на каждый отказ. При выключенном
+прокси (`proxy.enabled`, `core.enabled` или `plugins.proxy.enabled` равны false) лимиты и
+очереди lane обходятся, но общий предел ресурсов сохраняется.
 У `batch` и `files` нет `upstream`: создание, опрос и результаты Batch-задачи всегда идут к
 провайдеру, которому она принадлежит.
 

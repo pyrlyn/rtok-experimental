@@ -5,6 +5,9 @@ hooks 0
 hooks check none found
 duplicate hooks none found
 duplicate mcp servers none found
+permissions [CWD]/target/tmp/t60-2-doctor: 0755 -> 0700 (doctor --fix --only permissions --yes)
+permissions [CWD]/target/tmp/t60-2-doctor/config.toml: 0644 -> 0600 (doctor --fix --only permissions --yes)
+permissions [CWD]/target/tmp/t60-2-doctor/logs: 0755 -> 0700 (doctor --fix --only permissions --yes)
 mcp
   rtok ([..] tools, ~[..] desc tokens) [..]
 proxy 

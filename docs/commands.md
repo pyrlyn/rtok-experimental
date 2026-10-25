@@ -37,6 +37,15 @@ build never blocks the host.
 | `rtok task export github\|linear [--dry-run] [--json]` | mirror the disk tasks one way into GitHub Issues or Linear; a second run with nothing changed sends no write |
 | `rtok bench` | A/B two host configurations on fixed tasks |
 
+## Data permissions
+
+On Unix, `rtok doctor` checks permissions under rtok's dedicated data home (`~/.rtok`, or
+`RTOK_HOME`). `rtok doctor --fix --only permissions` previews repairs; add `--yes` to apply them,
+or add `--dry-run` with `--yes` to print the changes without writing. The repair sets owned
+directories to `0700` and regular files to `0600`. It refuses symlinks, multiply-linked files and
+paths outside the dedicated home. Custom external data directories are reported for manual
+review; Windows ACLs are not checked.
+
 ## The graph page
 
 The Graph page of `rtok dashboard` draws the code graph in two levels, as a 3D scene, a flat 2D

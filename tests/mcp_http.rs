@@ -303,6 +303,47 @@ fn stdio_read(sandbox: &Sandbox) {
     assert_eq!(v["result"]["isError"], false, "{v}");
 }
 
+#[cfg(feature = "graph")]
+#[tokio::test(flavor = "multi_thread")]
+async fn http_text_graph_does_not_reveal_credential_definitions() {
+    let sandbox = Sandbox::new("text-graph-secrets");
+    let project = sandbox.root.join("proj");
+    std::fs::create_dir_all(project.join(".git")).unwrap();
+    std::fs::write(
+        sandbox.root.join("home/config.toml"),
+        "[mcp]\nhttp_tools = [\"symbol\"]\n[plugins.graph]\nbackend = \"text\"\n",
+    )
+    .unwrap();
+    std::fs::write(project.join("public.txt"), "const visible = 1;\n").unwrap();
+    std::fs::write(project.join(".env"), "const hidden = secret_marker;\n").unwrap();
+    let (_served, url) = serve(&sandbox);
+    let client = reqwest::Client::new();
+    for (id, name, expected) in [(1, "visible", "public.txt"), (2, "hidden", "no definition")] {
+        let value: Value = post(
+            &client,
+            &url,
+            &rpc(
+                id,
+                "tools/call",
+                json!({"name": "symbol", "arguments": {"name": name}}),
+            ),
+        )
+        .bearer_auth(TOKEN)
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap()
+        .parse::<Value>()
+        .unwrap();
+        assert_eq!(value["result"]["isError"], false, "{value}");
+        let text = value["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains(expected), "{value}");
+        assert!(!text.contains("secret_marker"), "{value}");
+    }
+}
+
 #[test]
 fn http_refuses_to_start_without_a_token() {
     let sandbox = Sandbox::new("no-token");

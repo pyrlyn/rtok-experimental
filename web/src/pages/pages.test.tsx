@@ -74,6 +74,32 @@ describe("page logic", () => {
         ).toEqual(["fail", "warn", "warn"]);
     });
 
+    test("doctor shows permission findings and manual-review refusals", () => {
+        const report = {
+            ...richSnapshot.doctor!,
+            permissions: [
+                {
+                    path: "/home/rtok/archive/body",
+                    before: 0o644,
+                    target: 0o600,
+                    repaired: false,
+                    error: null,
+                },
+                {
+                    path: "/shared/logs",
+                    before: null,
+                    target: null,
+                    repaired: false,
+                    error: "review permissions manually",
+                },
+            ],
+        };
+        const rows = doctorChecks(report).filter((c) => c.field === "permissions[]");
+        expect(rows).toHaveLength(2);
+        expect(rows[0]).toMatchObject({ st: "warn", detail: expect.stringContaining("644 → 600") });
+        expect(rows[1]?.detail).toContain("review permissions manually");
+    });
+
     test("ages read in the largest whole unit", () => {
         expect([ago(95, 100), ago(0, 600), ago(0, 7_300), ago(0, 200_000), ago(500, 100)]).toEqual([
             "5s ago",

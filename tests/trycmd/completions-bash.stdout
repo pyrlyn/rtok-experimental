@@ -2966,7 +2966,7 @@ _rtok() {
             fi
             case "${prev}" in
                 --only)
-                    COMPREPLY=($(compgen -W "broken-hooks duplicate-hooks duplicate-mcp stale-skills" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "broken-hooks duplicate-hooks duplicate-mcp stale-skills permissions" -- "${cur}"))
                     return 0
                     ;;
                 --agent)

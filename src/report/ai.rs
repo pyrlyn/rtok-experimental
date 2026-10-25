@@ -479,6 +479,7 @@ mod tests {
                 overlaps: vec![],
                 agents: vec![],
                 problems: vec![],
+                permissions: vec![],
                 config_notes: vec![],
                 stale_skills: vec![],
                 #[cfg(feature = "graph")]

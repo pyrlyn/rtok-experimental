@@ -31,7 +31,7 @@
 | `logs` | log record | `severityNumber` from `level`, body = `message`, `rtok.source`, `rtok.name`, `rtok.plugin`, `rtok.fields`; `traceId` / `spanId` when `session` / `call_id` are set |
 | `usage`, `measurements`, `calls` (whole table) | sums | `rtok.tokens{gen_ai.token.type, gen_ai.request.model, gen_ai.provider.name}`, `rtok.tokens.saved{rtok.plugin, rtok.kind}`, `rtok.calls{rtok.surface, rtok.kind, rtok.ok}` — cumulative, monotonic |
 
-4. **Content (D4).** `content = true` by default: bodies, arguments and results go on the span up to `content_bytes` (64 KiB). Past that the attribute is cut and `rtok.archive.id` names the archive row, so `rtok expand <id>` still holds every byte. `content = false` drops those attributes and keeps the ids and counts.
+4. **Content (D4).** `content = false` by default, even when an endpoint resolves: bodies, arguments and results are omitted unless the user opts in. With `content = true`, values go on the span up to `content_bytes` (64 KiB). Past that the attribute is cut and `rtok.archive.id` names the archive row, so `rtok expand <id>` still holds every byte. Disabling content keeps ids and counts.
 5. **Transport.** `POST {endpoint}/v1/traces | /v1/logs | /v1/metrics`, `Content-Type: application/json`, headers from `[otel] headers` or `OTEL_EXPORTER_OTLP_HEADERS` (`k=v,k2=v2` — SigNoz `signoz-ingestion-key`, Grafana Cloud `Authorization=Basic …`, Maple its key). Timeout `flush_secs`. Any failure is one `logs` row (`source = otel`) and the mark stays.
 6. **Triggers.** `proxy`: tokio interval. `mcp`: a thread. Hooks: `Stop` / `SessionEnd` spawn `rtok otel flush` detached (~1 ms) and return. `rtok otel flush` for everything else.
 

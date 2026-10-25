@@ -180,6 +180,8 @@ upstream        = "https://api.anthropic.com"      # RTOK_UPSTREAM; chain behind
 openai_upstream = "https://api.openai.com"         # RTOK_OPENAI_UPSTREAM (D11)
 gemini_upstream = "https://generativelanguage.googleapis.com"  # RTOK_GEMINI_UPSTREAM (T51.3)
 timeout_s       = 600                 # upstream request timeout
+max_body_bytes  = 8388608             # request limit and retained response prefix (8 MiB); larger responses still stream
+max_in_flight   = 8                    # global requests including lanes-off/plain mode; excess gets 429
 include_usage   = true                # OpenAI streaming: add stream_options.include_usage when missing (T11.2)
 context_management = false            # Anthropic /v1/messages only: add clear_tool_uses edit + beta header (T51.2, opt-in)
 dry_run         = false               # --dry-run: print effective [proxy] settings and exit, don't serve
@@ -204,7 +206,7 @@ semantic_cache      = false           # plugins.proxy.semantic_cache, lookup and
 flex                = false           # OpenAI service_tier = "flex" on this lane; see [proxy.flex]
 timeout_s           = 0               # read timeout for this lane; 0 = proxy.timeout_s, but 900 or more with flex = true (OpenAI's Flex guide uses 15 min)
 upstream            = ""              # base URL for every request on this lane, any wire; "" = proxy.upstream / openai_upstream / gemini_upstream
-max_in_flight       = 0               # requests upstream at once; 0 = no cap (the agent lane is never capped)
+max_in_flight       = 0               # requests upstream at once; 0 = no per-lane cap (global cap still applies)
 max_queued          = 8               # with max_in_flight: requests that wait for a slot; one more gets 429 + Retry-After
 
 [proxy.lanes.embeddings]              # same keys as bulk
@@ -216,7 +218,7 @@ semantic_cache      = false
 flex                = false
 timeout_s           = 0
 upstream            = ""
-max_in_flight       = 0
+max_in_flight       = 0               # no per-lane cap; the global cap still applies
 max_queued          = 8
 
 [proxy.lanes.meta]                    # same keys as bulk (models, token counting)
@@ -228,7 +230,7 @@ semantic_cache      = false
 flex                = false
 timeout_s           = 0
 upstream            = ""
-max_in_flight       = 0
+max_in_flight       = 0               # no per-lane cap; the global cap still applies
 max_queued          = 8
 
 [proxy.lanes.internal]                # same keys as bulk (rtok's own model calls)
@@ -240,7 +242,7 @@ semantic_cache      = false
 flex                = false
 timeout_s           = 0
 upstream            = ""
-max_in_flight       = 0
+max_in_flight       = 0               # no per-lane cap; the global cap still applies
 max_queued          = 8
 
 [proxy.batch]                         # provider Batch result files
@@ -531,7 +533,7 @@ team = ""                             # the team's short key, e.g. "ENG"; empty:
 endpoint      = ""                    # OTLP/HTTP base URL, e.g. "http://localhost:4318"; "" = $OTEL_EXPORTER_OTLP_ENDPOINT
 headers       = ""                    # "k=v,k2=v2", e.g. "signoz-ingestion-key=…"; "" = $OTEL_EXPORTER_OTLP_HEADERS
 service_name  = "rtok"                # resource service.name
-content       = true                  # gen_ai.input/output.messages, tool arguments and results on spans
+content       = false                 # opt in to gen_ai.input/output.messages, tool arguments and results on spans
 content_bytes = 65536                 # per attribute; beyond it rtok.archive.id → `rtok expand <id>`
 flush_secs    = 5                     # proxy / mcp flush interval, and the POST timeout
 
@@ -746,15 +748,17 @@ counterpart: a rewrite runs on a lane when the global switch *and* the lane swit
 | `flex` | none | `false` | OpenAI `service_tier = "flex"` on chat and responses calls, see [`[proxy.flex]`](#proxyflex) |
 | `timeout_s` | `proxy.timeout_s` | `0` | read timeout in seconds for this lane; `0` = `proxy.timeout_s`, raised to 900 when the lane has `flex = true` (the OpenAI Flex guide raises its SDK timeout to 15 minutes because Flex requests time out more often) |
 | `upstream` | `proxy.upstream`, `openai_upstream`, `gemini_upstream` | `""` | base URL for every request on this lane, whatever its wire (a gateway or local server that speaks them); `""` = the wire's own upstream |
-| `max_in_flight` | none | `0` | requests on this lane upstream at once, counted until the response stream ends; `0` = no cap |
+| `max_in_flight` | none | `0` | requests on this lane upstream at once, counted until the response stream ends; `0` = no per-lane cap, while the global cap still applies |
 | `max_queued` | none | `8` | with `max_in_flight`: requests that wait for a slot; one more is answered `429` with `Retry-After: 1` and never reaches upstream |
 
-Each lane has its own slots and its own queue, and the `agent` lane has neither, so a bulk
-burst can fill its own lane but never delays an agent turn. A request turned away by a full
-queue gets an Anthropic-shaped `rate_limit_error` that the provider SDKs back off and retry
-on; it writes no `calls` row (it never went upstream), only a `warn` log line. With the proxy
-switched off (`proxy.enabled`, `core.enabled` or `plugins.proxy.enabled` false) no request is
-capped or queued. `batch` and `files` have no `upstream`: a Batch job's create, poll and
+Each lane has its own slots and its own queue; `max_in_flight = 0` disables only that per-lane
+gate. The global cap applies to every request, including `agent`, plain mode and disabled lanes,
+and its slot is held until the response stream ends. A request turned away by either full gate
+gets an Anthropic-shaped `rate_limit_error` that provider SDKs back off and retry on; it writes
+no `calls` row (it never went upstream). A full per-lane queue also writes a `warn` log line;
+global-cap rejections do not log per request. With the proxy switched off (`proxy.enabled`,
+`core.enabled` or `plugins.proxy.enabled` false), lane caps and queues are bypassed but the
+global resource bound remains. `batch` and `files` have no `upstream`: a Batch job's create, poll and
 results always go to the provider that owns it.
 
 Model routing is not a lane switch: it has its own table, [`[proxy.routing]`](#proxyrouting).

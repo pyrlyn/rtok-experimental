@@ -9,6 +9,7 @@
 use std::fs::File;
 use std::io;
 
+pub mod permissions;
 pub mod proc;
 
 /// Block until an exclusive lock is held on `file`.

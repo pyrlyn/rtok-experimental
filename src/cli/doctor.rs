@@ -30,11 +30,16 @@ pub(super) enum FixClass {
     DuplicateHooks,
     DuplicateMcp,
     StaleSkills,
+    Permissions,
 }
 
 impl FixClass {
+    /// The `doctor::fix` kind, or `None` for classes another module repairs.
     fn kind(self) -> Option<&'static str> {
-        crate::doctor::fix::KINDS.get(self as usize).copied()
+        match self {
+            Self::StaleSkills | Self::Permissions => None,
+            _ => crate::doctor::fix::KINDS.get(self as usize).copied(),
+        }
     }
 }
 
@@ -67,10 +72,10 @@ pub(super) struct Args {
     /// JSON instead of the table
     #[arg(long, conflicts_with = "fix")]
     pub(super) json: bool,
-    /// Clean up broken hooks and duplicate hooks and MCP entries, and update outdated rtok skills: a terminal gets a checklist, a pipe the diff; --yes writes without asking
+    /// Clean up broken hooks and duplicate hooks and MCP entries, update outdated rtok skills, and repair private data permissions: a terminal gets a checklist, a pipe the diff; --yes writes without asking
     #[arg(long)]
     pub(super) fix: bool,
-    /// With --fix: write the changes (a copy goes to `.backup_configs/` first)
+    /// With --fix: apply changes (config edits are backed up; permissions change in place)
     #[arg(long, requires = "fix")]
     pub(super) yes: bool,
     /// With --fix --yes: print the diffs and write nothing
@@ -106,6 +111,14 @@ pub(super) fn run(config_file: &Option<PathBuf>, args: Args) -> Result<()> {
         } => {
             crate::stat_preview::set(stat);
             let agent = doctor_host(agent.as_deref())?;
+            anyhow::ensure!(
+                agent.is_none() || !only.contains(&FixClass::Permissions),
+                "--only permissions checks rtok data, not a host; omit --agent"
+            );
+            anyhow::ensure!(
+                cfg!(unix) || !only.contains(&FixClass::Permissions),
+                "permission-bit repair is Unix-only; Windows ACLs require manual review"
+            );
             let cfg = Config::load_with(config_file.as_deref(), doctor_flags(instructions))?;
             let kinds: Vec<&str> = if only.is_empty() {
                 crate::doctor::fix::KINDS.to_vec()
@@ -124,6 +137,12 @@ pub(super) fn run(config_file: &Option<PathBuf>, args: Args) -> Result<()> {
                 let (text, c) = crate::doctor::fix::run(&cfg, apply, agent, &kinds, ask);
                 print!("{text}");
                 code = c;
+            }
+            if agent.is_none() && (only.is_empty() || only.contains(&FixClass::Permissions)) {
+                // Permission repair is explicit; a hook checklist cannot consent to chmod.
+                let (text, c) = crate::doctor::permissions::run(&cfg, apply && !stat);
+                print!("{text}");
+                code = code.max(c);
             }
             if skills {
                 let ask =

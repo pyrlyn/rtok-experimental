@@ -18,6 +18,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use rustls::pki_types::{CertificateDer, pem::PemObject};
 
 /// Extra PEM bundle honored like curl's `SSL_CERT_FILE`.
 const SSL_CERT_FILE: &str = "SSL_CERT_FILE";
@@ -43,7 +44,7 @@ fn store_with(extra: Option<&Path>) -> Result<rustls::RootCertStore> {
     if let Some(path) = extra {
         let file = std::fs::File::open(path)
             .with_context(|| format!("{SSL_CERT_FILE}: cannot open {}", path.display()))?;
-        let certs: Vec<_> = rustls_pemfile::certs(&mut std::io::BufReader::new(file))
+        let certs: Vec<_> = CertificateDer::pem_reader_iter(file)
             .collect::<std::result::Result<_, _>>()
             .with_context(|| format!("{SSL_CERT_FILE}: cannot parse {}", path.display()))?;
         if certs.is_empty() {
@@ -117,5 +118,26 @@ mod tests {
                 "{name} error names the path, got: {err}"
             );
         }
+    }
+
+    #[test]
+    fn mixed_bundles_skip_keys_but_reject_malformed_certificates() {
+        let dir = crate::testutil::tmp_dir("tls-mixed-bundle");
+        let path = dir.join("mixed.pem");
+        let cert = include_str!("../tests/fixtures/tls/test-ca.pem");
+        let key = "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n";
+        let base = store_with(None).unwrap().len();
+        std::fs::write(&path, format!("{key}\n{cert}")).unwrap();
+        assert_eq!(store_with(Some(&path)).unwrap().len(), base + 1);
+
+        let malformed = "-----BEGIN CERTIFICATE-----\n!invalid!\n-----END CERTIFICATE-----\n";
+        std::fs::write(&path, format!("{cert}\n{malformed}")).unwrap();
+        let err = format!("{:?}", store_with(Some(&path)).unwrap_err());
+        assert!(err.contains("cannot parse"), "{err}");
+        assert!(err.contains("mixed.pem"), "{err}");
+        std::fs::write(&path, key).unwrap();
+        let err = format!("{:?}", store_with(Some(&path)).unwrap_err());
+        assert!(err.contains("no certificates"), "{err}");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
