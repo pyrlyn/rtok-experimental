@@ -143,7 +143,6 @@ Options:
                           off
   -h, --help              Print help
 
-
 $ rtok info --help
 Version, effective paths, disk usage, error count and proxy status
 
