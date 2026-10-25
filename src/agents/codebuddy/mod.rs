@@ -375,7 +375,7 @@ mod tests {
             r#"{"model":"x","hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo stop"}]}]}}"#,
         )
         .unwrap();
-        assert!(run(&c, Kind::Cli, false).unwrap().contains("9 additions"));
+        assert!(run(&c, Kind::Cli, false).unwrap().contains("10 additions"));
         assert_eq!(run(&c, Kind::Cli, false).unwrap(), NO_CHANGES);
         let doc: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         let rows = hook_events::entries(HOST);
@@ -419,7 +419,7 @@ mod tests {
 
             fake_plugin(&c, kind);
             let lines = Codebuddy.apply(&c, kind, Mode::Install).unwrap();
-            assert!(lines.iter().any(|l| l.contains("9 removed")), "{lines:?}");
+            assert!(lines.iter().any(|l| l.contains("10 removed")), "{lines:?}");
             assert_eq!(Codebuddy.installed(&c, kind), ["mcp", "plugin"]);
             assert!(!super::super::read(&settings_path(&c, kind)).contains("rtok"));
             let _ = fs::remove_dir_all(root);

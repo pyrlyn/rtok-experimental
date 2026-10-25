@@ -1094,10 +1094,10 @@ mod tests {
     }
 
     #[test]
-    fn dry_run_empty_is_ten_additions() {
+    fn dry_run_empty_is_eleven_additions() {
         let path = tmp("setup-dry");
         let report = run(&cfg(path.clone(), true), false).unwrap();
-        assert!(report.contains("10 additions"), "{report}");
+        assert!(report.contains("11 additions"), "{report}");
         assert!(
             report.contains(&format!("+ SessionEnd {}", command("rtok", "SessionEnd"))),
             "{report}"
@@ -1196,7 +1196,7 @@ mod tests {
         let path = tmp("setup-apply");
         fs::write(&path, r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo other"}]}]}}"#).unwrap();
         let first = run(&cfg(path.clone(), false), false).unwrap();
-        assert!(first.contains("10 additions"), "{first}");
+        assert!(first.contains("11 additions"), "{first}");
         assert_eq!(run(&cfg(path.clone(), false), false).unwrap(), NO_CHANGES);
         let rm = run(&cfg(path.clone(), false), true).unwrap();
         assert!(rm.contains("removed"), "{rm}");
@@ -1462,7 +1462,7 @@ mod tests {
             r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo other"}]}]}}"#,
         );
         let first = hooks_roundtrip_vfs(&mut vfs, path, false);
-        assert!(first.contains("10 additions"), "{first}");
+        assert!(first.contains("11 additions"), "{first}");
         assert_eq!(hooks_roundtrip_vfs(&mut vfs, path, false), NO_CHANGES);
         let rm = hooks_roundtrip_vfs(&mut vfs, path, true);
         assert!(rm.contains("removed"), "{rm}");
@@ -1501,19 +1501,19 @@ mod tests {
             let path = "settings.json";
             vfs.write(path, body);
             let report = hooks_roundtrip_vfs(&mut vfs, path, false);
-            assert!(report.contains("10 additions"), "{body} → {report}");
+            assert!(report.contains("11 additions"), "{body} → {report}");
             let root: Value = serde_json::from_str(vfs.read_str(path).unwrap()).unwrap();
             assert!(root["hooks"]["PreToolUse"].is_array(), "{body}");
         }
     }
 
     #[test]
-    fn dry_run_empty_is_ten_additions_from_vfs() {
+    fn dry_run_empty_is_eleven_additions_from_vfs() {
         let mut vfs = crate::testutil::Vfs::new();
         // Absent file → empty object; dry-run style: mutate report only, do not require prior write.
         let path = "Users/Ivan Tuhai/.claude/settings.json";
         let report = hooks_roundtrip_vfs(&mut vfs, path, false);
-        assert!(report.contains("10 additions"), "{report}");
+        assert!(report.contains("11 additions"), "{report}");
         assert!(
             report.contains(&format!("+ SessionEnd {}", command("rtok", "SessionEnd"))),
             "{report}"
@@ -1535,7 +1535,7 @@ mod tests {
             let path = tmp(&format!("setup-shape-{}", body.len()));
             fs::write(&path, body).unwrap();
             let report = run(&cfg(path.clone(), false), false).unwrap();
-            assert!(report.contains("10 additions"), "{body} → {report}");
+            assert!(report.contains("11 additions"), "{body} → {report}");
             let root: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
             assert!(root["hooks"]["PreToolUse"].is_array(), "{body}");
         }
@@ -1619,12 +1619,16 @@ mod tests {
         let parse = |s: &str| serde_json::from_str::<Value>(s).unwrap();
         let hooks = parse(include_str!("../../../plugins/claude/hooks/hooks.json"));
         let timeout = Config::default().setup.hook_timeout_s;
-        // T262.1: the file is the list; T390.1: the table's `claude` rows say the same, and
-        // Kimi's rows are those minus `SubagentStart`.
+        // T262.1: the file is the list; T390.1: the table's `claude` rows say the same.
+        // Kimi's rows are those minus `SubagentStart` (output discarded) and the MCP `read`
+        // matcher (Kimi's `updatedInput` on PreToolUse is unverified).
         assert_eq!(claude_entries(), hook_events::entries("claude"));
         assert!(claude_entries().contains(&("SubagentStart", "")));
+        assert!(claude_entries().contains(&("PreToolUse", crate::names::MCP_READ)));
         let mut kimi_expected = claude_entries().to_vec();
-        kimi_expected.retain(|&(event, _)| event != "SubagentStart");
+        kimi_expected.retain(|&(event, matcher)| {
+            event != "SubagentStart" && matcher != crate::names::MCP_READ
+        });
         assert_eq!(hook_events::entries("kimi"), kimi_expected);
         let mut want = json!({});
         for &(event, matcher) in claude_entries() {

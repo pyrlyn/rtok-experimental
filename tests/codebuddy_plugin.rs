@@ -64,7 +64,7 @@ fn hooks_run_the_three_step_chain_with_the_codebuddy_host() {
         .iter()
         .map(|e| e["matcher"].as_str().unwrap())
         .collect();
-    assert_eq!(matchers, ["Bash", "Read", "Skill"]);
+    assert_eq!(matchers, ["Bash", "Read", "Skill", "mcp__rtok__read"]);
     assert!(
         !hooks.contains_key("Stop"),
         "rtok registers no Stop hook for Claude-shaped hosts"

@@ -76,13 +76,22 @@ fn strip_run_wrap(s: &str) -> &str {
     }
 }
 
-/// Same shape as `cmd::hook::is_valid_agent_id`. Kept here so `guard` and `measure` do not
-/// call back into `cmd` (that module already calls `guard::strip_cd_hop`).
-fn wrap_agent_id(id: &str) -> bool {
+/// Claude Code's MCP `read` tool name, and the PreToolUse matcher that injects the hidden
+/// `agent` argument (T929.1). Gemini's spelling is `mcp_rtok_read`.
+pub(crate) const MCP_READ: &str = "mcp__rtok__read";
+
+/// Same shape as `cmd::hook::is_valid_agent_id`. Kept here so `guard`, `measure` and `read`
+/// do not call back into `cmd` (that module already calls `guard::strip_cd_hop`).
+pub(crate) fn wrap_agent_id(id: &str) -> bool {
     (1..=64).contains(&id.len())
         && id
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
+/// Host names for rtok's MCP `read` (Claude, the retired plugin-scoped form, Gemini).
+pub(crate) fn is_rtok_mcp_read(name: &str) -> bool {
+    name == MCP_READ || name == "mcp_rtok_read" || name == "mcp__plugin_rtok_rtok__read"
 }
 
 /// Shortest archive-id prefix `rtok expand` resolves, and the one every pointer prints (T672).

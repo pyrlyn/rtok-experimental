@@ -30,6 +30,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "mcp__rtok__read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v rtok-hook >/dev/null 2>&1 && exec rtok-hook PreToolUse; command -v rtok >/dev/null 2>&1 && exec rtok hook PreToolUse; exec \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.sh\" PreToolUse",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [

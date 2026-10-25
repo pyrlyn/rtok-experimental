@@ -5,6 +5,7 @@
 //! PreToolUse(Read) advice (plan T4.6): deny native Read of large files not just edited.
 
 use rtok_plugin_sdk::{Class, Ctx, Measurement, PreToolDecision, PreToolUse};
+use serde_json::json;
 
 /// Tail of the first deny, the same for every host: `measure::stats` matches it in a
 /// transcript to find a denied Read (T383), and it also sits inside the pre-T384 text.
@@ -44,6 +45,9 @@ impl ReadTool {
 }
 
 pub fn pre_tool(ev: &PreToolUse<'_>, cx: &Ctx) -> Option<PreToolDecision> {
+    if crate::names::is_rtok_mcp_read(ev.tool_name) {
+        return inject_caller(ev, cx);
+    }
     let cfg = cx.plugin_config::<crate::config::Read>("read");
     if !cfg.advice || ev.tool_name != "Read" {
         return None;
@@ -112,6 +116,26 @@ fn rtok_cannot_serve(path: &str, allow_paths: &[std::path::PathBuf]) -> bool {
 /// Read only on a deny, the rare branch: `config` serializes the whole configuration.
 fn tool(cx: &Ctx) -> ReadTool {
     ReadTool::of(&cx.config::<crate::config::Hook>("hook").host)
+}
+
+/// T929.1: stamp the caller's window onto MCP `read` the way Bash rewrite stamps `--agent`.
+/// An empty value is the parent. A malformed id is dropped rather than forwarded.
+fn inject_caller(ev: &PreToolUse<'_>, cx: &Ctx) -> Option<PreToolDecision> {
+    let mut input = ev.tool_input.clone();
+    let obj = input.as_object_mut()?;
+    match cx.agent_id() {
+        Some(id) if crate::names::wrap_agent_id(id) => {
+            obj.insert("agent".into(), json!(id));
+        }
+        Some(_) => return None,
+        None => {
+            obj.insert("agent".into(), json!(""));
+        }
+    }
+    Some(PreToolDecision::Rewrite {
+        input,
+        reason: "scoped by rtok".into(),
+    })
 }
 
 /// Every deny is a cost row, never a saving (T383): the reason is tokens the model reads
@@ -201,6 +225,76 @@ mod tests {
             tool_name: "Read",
             tool_input: input,
         }
+    }
+
+    fn rewritten(d: &PreToolDecision) -> &serde_json::Value {
+        match d {
+            PreToolDecision::Rewrite { input, reason } => {
+                assert_eq!(reason, "scoped by rtok");
+                input
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn mcp_read_injects_the_parent_window() {
+        let cx = crate::plugin::Runtime::in_memory("mcp-read-parent").unwrap();
+        let input = json!({"path": "a.rs", "mode": "full"});
+        let ev = PreToolUse {
+            tool_name: crate::names::MCP_READ,
+            tool_input: &input,
+        };
+        let d = pre_tool(&ev, &Ctx::new(&cx)).unwrap();
+        let out = rewritten(&d);
+        assert_eq!(out["agent"], "");
+        assert_eq!(out["path"], "a.rs");
+        assert_eq!(out["mode"], "full");
+    }
+
+    #[test]
+    fn mcp_read_injects_the_subagent_id() {
+        let cx = crate::plugin::Runtime::in_memory("mcp-read-child").unwrap();
+        let input = json!({"path": "a.rs"});
+        let ev = PreToolUse {
+            tool_name: crate::names::MCP_READ,
+            tool_input: &input,
+        };
+        let d = pre_tool(&ev, &Ctx::with_agent(&cx, Some("agent-a1"))).unwrap();
+        let out = rewritten(&d);
+        assert_eq!(out["agent"], "agent-a1");
+    }
+
+    #[test]
+    fn gemini_mcp_read_is_injected_too() {
+        let cx = crate::plugin::Runtime::in_memory("mcp-read-gemini").unwrap();
+        let input = json!({"path": "a.rs"});
+        let ev = PreToolUse {
+            tool_name: "mcp_rtok_read",
+            tool_input: &input,
+        };
+        let d = pre_tool(&ev, &Ctx::with_agent(&cx, Some("sub_1"))).unwrap();
+        let out = rewritten(&d);
+        assert_eq!(out["agent"], "sub_1");
+    }
+
+    #[test]
+    fn malformed_agent_id_is_not_injected() {
+        let cx = crate::plugin::Runtime::in_memory("mcp-read-bad").unwrap();
+        let input = json!({"path": "a.rs"});
+        let ev = PreToolUse {
+            tool_name: crate::names::MCP_READ,
+            tool_input: &input,
+        };
+        assert!(pre_tool(&ev, &Ctx::with_agent(&cx, Some("../x"))).is_none());
+        assert!(pre_tool(&ev, &Ctx::with_agent(&cx, Some("rtok run --"))).is_none());
+    }
+
+    #[test]
+    fn native_read_is_not_rewritten_with_agent() {
+        let cx = crate::plugin::Runtime::in_memory("mcp-read-native").unwrap();
+        let input = json!({"file_path": "a.rs"});
+        assert!(pre_tool(&ev(&input), &Ctx::with_agent(&cx, Some("agent-a1"))).is_none());
     }
 
     #[test]
