@@ -98,6 +98,10 @@ fn only_tui_depends_on_ratatui() {
 #[test]
 fn only_report_depends_on_printpdf() {
     assert_eq!(owners_of("printpdf"), ["rtok"]);
+    assert!(
+        optional_dep("rtok", "printpdf"),
+        "printpdf must stay behind the `pdf` feature"
+    );
     let files = files_mentioning(&["printpdf::"]);
     assert!(
         files.iter().all(|p| p.starts_with("src/report/")),
@@ -251,6 +255,39 @@ fn rtok_hook_client_is_std_only() {
     assert!(
         deps.is_empty(),
         "rtok-hook is std-only; it depends on {deps:?}"
+    );
+}
+
+/// Whether workspace package `pkg` declares `dep` as `optional = true`.
+fn optional_dep(pkg: &str, dep: &str) -> bool {
+    let meta = metadata();
+    meta["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p["name"].as_str() == Some(pkg))
+        .flat_map(|p| p["dependencies"].as_array().unwrap().iter())
+        .filter(|d| d["name"].as_str() == Some(dep))
+        .all(|d| d["optional"].as_bool() == Some(true))
+}
+
+/// The PNG rasteriser and the PDF renderer stay out of the default build (docs/dependencies.md):
+/// the default feature list must not switch them on.
+#[test]
+fn font_and_pdf_stacks_are_not_default() {
+    let toml =
+        std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
+            .unwrap();
+    let default = toml
+        .lines()
+        .find(|l| l.starts_with("default = ["))
+        .expect("a default feature list");
+    for f in ["\"pdf\"", "\"graph-png\""] {
+        assert!(!default.contains(f), "{f} is in the default features");
+    }
+    assert!(
+        optional_dep("rtok", "resvg"),
+        "resvg must stay behind `graph-png`"
     );
 }
 

@@ -112,7 +112,12 @@ inject = []
 guard = []
 memory = []
 docs = []
-graph = ["read", "dep:resvg", "dep:base64"]
+graph = ["read", "dep:base64"]
+# Off by default: the PNG rasteriser (resvg, usvg, tiny-skia and the font stack: fontdb,
+# skrifa, harfrust, read-fonts). Without it `graph export --format png` is an error.
+graph-png = ["graph", "dep:resvg"]
+# Off by default: `rtok report --format pdf` (printpdf, lopdf, allsorts-azul).
+pdf = ["dep:printpdf"]
 toon = []
 wasm-host = ["dep:wasmi"]
 compress = []
@@ -169,7 +174,7 @@ globset = { workspace = true } # workspace member globs of project references (T
 serde-saphyr = "1.3.0" # `pnpm-workspace.yaml` of project references (T329.7); maintained, serde_yaml is deprecated
 notify = "9.0.0-rc.5" # recursive file watching for the graph background indexer (T8.16); 9 drops windows-sys 0.60 (T223)
 owo-colors = { version = "4", features = ["supports-colors"] } # ANSI + the tty/NO_COLOR/CLICOLOR/TERM=dumb question in one call (T20.2)
-printpdf = { version = "0.12.8", default-features = false } # native paged PDF; unused HTML pulls unmaintained bincode
+printpdf = { version = "0.12.8", default-features = false, optional = true } # native paged PDF; unused HTML pulls unmaintained bincode
 regex = { workspace = true } # search pattern (T4.5)
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "net", "time", "fs"] }
 axum = { version = "0.8.9", features = ["ws"] } # dashboard WebSocket (P19); proxy HTTP unchanged

@@ -296,15 +296,18 @@ mod tests {
         let ai = crate::report::ai::render(&doc, &crate::config::Config::default());
         assert!(ai.contains(&format!("expanded_ids={short}")), "{ai}");
         assert!(!ai.contains(&id), "{ai}");
-        let pdf = crate::report::pdf::render(&doc);
-        assert!(
-            pdf.windows(short.len()).any(|w| w == short.as_bytes()),
-            "pdf dropped the prefix"
-        );
-        assert!(
-            !pdf.windows(id.len()).any(|w| w == id.as_bytes()),
-            "pdf kept the full sha"
-        );
+        #[cfg(feature = "pdf")]
+        {
+            let pdf = crate::report::pdf::render(&doc);
+            assert!(
+                pdf.windows(short.len()).any(|w| w == short.as_bytes()),
+                "pdf dropped the prefix"
+            );
+            assert!(
+                !pdf.windows(id.len()).any(|w| w == id.as_bytes()),
+                "pdf kept the full sha"
+            );
+        }
     }
 
     #[test]
