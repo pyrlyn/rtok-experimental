@@ -21,7 +21,6 @@ bstr = { version = "1" }
 bytes = { version = "1", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "usage", "wrap_help"] }
-crc32fast = { version = "1" }
 crossbeam-utils = { version = "0.8" }
 either = { version = "1", features = ["use_std"] }
 form_urlencoded = { version = "1" }
@@ -50,7 +49,6 @@ serde = { version = "1", features = ["alloc", "derive", "rc"] }
 serde_core = { version = "1", features = ["alloc", "rc"] }
 serde_json = { version = "1", features = ["alloc", "float_roundtrip", "raw_value"] }
 serde_spanned = { version = "1" }
-simd-adler32 = { version = "0.3" }
 similar = { version = "3", features = ["inline"] }
 slab = { version = "0.4" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
