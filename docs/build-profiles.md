@@ -13,6 +13,13 @@ single `[[test]] name = "it"` at `tests/it/main.rs`. Every former `tests/<name>.
 dependency code instead of one per file. nextest still runs every test in its own process,
 so process-wide state (env vars, current dir, globals) stays isolated as before.
 
+**Debug info: line tables for workspace code, none for dependencies.** `Cargo.toml` sets
+`[profile.dev] debug = "line-tables-only"` (backtraces keep `file:line`, full DWARF is gone)
+and `[profile.dev.package."*"] debug = false` (the ~450 dependencies carry no debug info;
+`"*"` does not match workspace members). Build scripts and proc macros also get
+`debug = false` via `[profile.dev.build-override]`. This shrinks rlibs, `incremental/` and the
+`it` binary, and cuts link time. `profile.dist` inherits `dev`, so releases get the same.
+
 **Other variants in their own target dir.** Changing `RUSTFLAGS`, `CARGO_PROFILE_DEV_*` or the
 feature set changes the hash of every unit, so cargo builds a second full set next to the
 first one in `target/debug/`. Build such variants with a separate `CARGO_TARGET_DIR`:
@@ -45,6 +52,11 @@ small edits.
 
 ## Disable
 
+- Full debug info for a debugger session, without editing `Cargo.toml` (use a variant dir,
+  see above, or it rebuilds everything in `target/debug/`):
+  `CARGO_TARGET_DIR=target/variant-fulldebug cargo build \`
+  `--config 'profile.dev.debug=true' --config 'profile.dev.package."*".debug=true'`.
+
 - Variant dirs: delete `target/variant-*/` to get the space back.
 - sccache: remove `rustc-wrapper` / unset `RUSTC_WRAPPER`; `sccache --stop-server`.
 - The single test binary is the layout of the repo, not a switch. New test files go to
@@ -63,6 +75,10 @@ just test-changed                                   # picks modules by name from
 (`binary(it) & test(/^(a|b)::/)`) and only adds `--test it` when a module is selected.
 
 ## Limitations
+
+- No local variables or types of dependencies in a debugger; stepping into a dependency
+  shows assembly. Workspace code has line info only (breakpoints by line work, variable
+  inspection is limited).
 
 - A test file is no longer its own crate: `#![...]` crate-level attributes do not work in
   `tests/it/<name>.rs`, `crate::` means `tests/it/main.rs`, and `include_str!` paths are one
