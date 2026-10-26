@@ -566,17 +566,21 @@ mod tests {
                 .unwrap()
                 .starts_with("<svg")
         );
-        same_as_cli(
-            &mut app,
-            &cfg,
-            (1, 0, 0),
-            (export::Format::Png, export::Level::Symbols, true),
-            &base.join("a.png"),
-        );
-        assert_eq!(
-            &std::fs::read(base.join("a.png")).unwrap()[..8],
-            b"\x89PNG\r\n\x1a\n"
-        );
+        // PNG needs the rasteriser, which only the `graph-png` feature links.
+        #[cfg(feature = "graph-png")]
+        {
+            same_as_cli(
+                &mut app,
+                &cfg,
+                (1, 0, 0),
+                (export::Format::Png, export::Level::Symbols, true),
+                &base.join("a.png"),
+            );
+            assert_eq!(
+                &std::fs::read(base.join("a.png")).unwrap()[..8],
+                b"\x89PNG\r\n\x1a\n"
+            );
+        }
     }
 
     #[test]
