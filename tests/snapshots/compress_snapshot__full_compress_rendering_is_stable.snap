@@ -1,9 +1,0 @@
----
-source: tests/compress_snapshot.rs
-assertion_line: 9
-expression: "compress_prose(input, CaveIntensity::Full)"
----
-bug is in auth middleware.
-```rs
-fn check(t: u64) { assert!(t <= MAX); }
-```Fix comparison.

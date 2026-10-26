@@ -193,14 +193,14 @@ pypi-publish *flags:
 # `just test` runs the same tests otherwise.
 # the tests that validate Markdown (plan/ task folders and Check: lines, ideas.md, docs/, ...)
 docs-check:
-    {{cargo}} test -p rtok --test plan_dir --test ideas_md --test docs_structure \
-        --test host_docs --test public_numbers --test toolchain_rows \
-        --test plugin_plans --test report --test agents_doc --test agents_worktrees \
-        --test stats_model --test diagrams
+    {{cargo}} test -p rtok --test it -- plan_dir:: ideas_md:: docs_structure:: \
+        host_docs:: public_numbers:: toolchain_rows:: \
+        plugin_plans:: report:: agents_doc:: agents_worktrees:: \
+        stats_model:: diagrams::
 
 # T959: re-render the stale docs/architecture/*.d2 to SVG (d2-render native backend, no d2 binary)
 diagrams:
-    RTOK_DIAGRAMS=overwrite {{cargo}} test -p rtok --test diagrams
+    RTOK_DIAGRAMS=overwrite {{cargo}} test -p rtok --test it -- diagrams::
 
 # T9.5: execute every README bash fence marked `# check`.
 readme-check:

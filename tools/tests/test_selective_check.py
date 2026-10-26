@@ -55,7 +55,7 @@ def test_source_change_runs_lint_and_selected_tests():
 
 
 def test_test_file_change_skips_build_min():
-    assert "build-min" not in _plan(["tests/worktree.rs"]).split()
+    assert "build-min" not in _plan(["tests/it/worktree.rs"]).split()
 
 
 def test_js_and_python_changes_run_only_their_lint():
@@ -78,7 +78,7 @@ def _nextest(changed: list[str]) -> str:
 def test_source_change_selects_unit_tests_by_module_and_tests_that_name_it():
     out = _nextest(["src/plugins/checkpoint.rs"])
     assert "--lib" in out and "kind(lib) & (test(~checkpoint)" in out
-    assert "--test memory_status" in out and "--test stats_model" in out
+    assert "--test it" in out and "memory_status" in out and "stats_model" in out
     assert "--workspace" not in out
 
 

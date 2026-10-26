@@ -399,7 +399,7 @@ fn with_head(text: &str, task: &Task) -> Result<String> {
 /// The rules `tests/plan_dir.rs` holds this repository's plan to; the tests below hold what the
 /// adapter writes to the same ones.
 #[cfg(test)]
-#[path = "../../tests/common/plan_rules.rs"]
+#[path = "../../tests/it/common/plan_rules.rs"]
 mod plan_rules;
 
 #[cfg(test)]

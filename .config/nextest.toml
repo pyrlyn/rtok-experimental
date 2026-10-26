@@ -113,7 +113,7 @@ threads-required = "num-test-threads"
 # refusal/lock path. Full-suite I/O pressure made those hooks fail open (10-14 s cases),
 # while the same checks passed alone. Keep their write assertions and timing bounds.
 [[profile.default.overrides]]
-filter = 'binary(guard_check) | (binary(hook_fail_open) & test(a_locked_store_fails_the_hook_open_in_ms))'
+filter = 'test(/^guard_check::/) | test(/^hook_fail_open::.*a_locked_store_fails_the_hook_open_in_ms/)'
 threads-required = "num-test-threads"
 
 # trycmd spawns the real rtok binary for every case; under a full-suite parallel run its
@@ -121,7 +121,7 @@ threads-required = "num-test-threads"
 # CI). Isolate the runner on the machine like the heavy benches above -- each case still
 # runs, just not sharing CPUs with the rest of the suite.
 [[profile.default.overrides]]
-filter = 'binary(cli_trycmd)'
+filter = 'test(/^cli_trycmd::/)'
 threads-required = "num-test-threads"
 
 # Installs, lists and removes every host in turn: ~100 sequential `rtok` spawns, each `agents
@@ -141,7 +141,7 @@ threads-required = "num-test-threads"
 mcp-spawn = { max-threads = 2 }
 
 [[profile.default.overrides]]
-filter = 'binary(/^mcp(_agent_messages|_agents|_call_lsp_orphan|_http|_ping|_wrap)?$/)'
+filter = 'test(/^mcp(_agent_messages|_agents|_call_lsp_orphan|_http|_ping|_wrap)?::/)'
 test-group = "mcp-spawn"
 
 # CI (`NEXTEST_PROFILE=ci`, set in ci.yml): one flake must not cancel the other shard and the

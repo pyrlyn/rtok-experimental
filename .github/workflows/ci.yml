@@ -294,7 +294,7 @@ jobs:
     timeout-minutes: 30
     env:
       PLATFORM_TESTS: >-
-        binary(windows_ci) | test(write_replaces_a_readonly_file) | test(release_matches_a_verbatim_prefix) | test(desktop_path_lives_under_appdata_on_windows) | test(find_bin_limit_is_ascii_case_insensitive) | test(under_keeps_a_different_case_child_of_home) | test(receipt_path_on_windows) | test(windows_path_identity_folds_verbatim_prefix_and_ascii_case) | test(cmd_exe_gets_the_body_verbatim) | test(path_from_file_uri_strips_slash_before_drive) | test(normalize_keeps_windows_drive_prefix) | test(under_ascii_case_insensitive_matches_windows_prefix) | test(resolved_drops_the_verbatim_prefix) | test(powershell_hooks_resolve_rtok_then_ketch_then_fail_open_silently) | test(token_file_acl_names_only_the_current_user)
+        test(/^windows_ci::/) | test(write_replaces_a_readonly_file) | test(release_matches_a_verbatim_prefix) | test(desktop_path_lives_under_appdata_on_windows) | test(find_bin_limit_is_ascii_case_insensitive) | test(under_keeps_a_different_case_child_of_home) | test(receipt_path_on_windows) | test(windows_path_identity_folds_verbatim_prefix_and_ascii_case) | test(cmd_exe_gets_the_body_verbatim) | test(path_from_file_uri_strips_slash_before_drive) | test(normalize_keeps_windows_drive_prefix) | test(under_ascii_case_insensitive_matches_windows_prefix) | test(resolved_drops_the_verbatim_prefix) | test(powershell_hooks_resolve_rtok_then_ketch_then_fail_open_silently) | test(token_file_acl_names_only_the_current_user)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: rustup
