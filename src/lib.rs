@@ -20,6 +20,10 @@
 
 #![forbid(unsafe_code)]
 
+// T985: `rtok::...` paths in the integration tests (compiled into this crate, below) resolve here.
+#[cfg(test)]
+extern crate self as rtok;
+
 pub mod agent_view;
 pub mod agents;
 pub mod batch;
@@ -84,3 +88,9 @@ pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("RTOK_GI
 /// The plugin contract at the crate root, so an external plugin crate writes
 /// `use rtok::{Runtime, Manifest, Plugin, Surface};`.
 pub use plugin::*;
+
+// T985: the whole test suite is one executable. The integration tests (tests/it) are a module of
+// this lib's unit-test binary instead of a `[[test]]` target; see docs/build-profiles.md.
+#[cfg(test)]
+#[path = "../tests/it/main.rs"]
+mod it;

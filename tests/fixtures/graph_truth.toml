@@ -224,13 +224,13 @@ kind = "fn"
 # T23.3: the host's capability impl in `src/plugin.rs` defines it a second time; T23.5's
 # `MemoryHost` a third (T8.19 repair).
 defs = ["crates/rtok-store/src/archive_rows.rs", "src/plugin.rs", "crates/rtok-plugin-sdk/src/testing.rs"]
-refs = ["src/plugins/archive/mod.rs", "tests/proxy.rs"]
+refs = ["src/plugins/archive/mod.rs", "tests/it/proxy.rs"]
 
 [[symbol]]
 name = "count_call_io"
 kind = "fn"
 defs = ["crates/rtok-store/src/call_log.rs"]
-refs = ["src/mcp.rs", "tests/proxy.rs"]
+refs = ["src/mcp.rs", "tests/it/proxy.rs"]
 
 [[symbol]]
 name = "insert_call_io"
@@ -262,7 +262,7 @@ refs = ["src/measure/cache.rs", "src/measure/stats.rs", "src/plugin.rs"]
 name = "measurement_count"
 kind = "fn"
 defs = ["crates/rtok-store/src/measure_rows.rs"]
-refs = ["examples/hello_plugin.rs", "src/plugins/graph/mod.rs", "src/plugins/guard/mod.rs", "src/plugins/inject/mod.rs", "src/plugins/read/cache.rs", "tests/proxy.rs"]
+refs = ["examples/hello_plugin.rs", "src/plugins/graph/mod.rs", "src/plugins/guard/mod.rs", "src/plugins/inject/mod.rs", "src/plugins/read/cache.rs", "tests/it/proxy.rs"]
 
 [[symbol]]
 name = "calibrate_or_skip"
@@ -280,14 +280,14 @@ name = "read_frame"
 kind = "fn"
 rank = true
 defs = ["crates/rtok-hook/src/lib.rs", "src/mcp/wrap.rs"]
-refs = ["crates/rtok-hook/src/lib.rs", "tests/hook_resident.rs"]
+refs = ["crates/rtok-hook/src/lib.rs", "tests/it/hook_resident.rs"]
 
 [[symbol]]
 name = "connect"
 kind = "fn"
 rank = true
-defs = ["crates/rtok-hook/src/lib.rs", "crates/rtok-store/src/handle.rs", "tests/web_token.rs"]
-refs = ["crates/rtok-hook/src/lib.rs", "src/bin/rtok-hook.rs", "tests/hook_resident.rs"]
+defs = ["crates/rtok-hook/src/lib.rs", "crates/rtok-store/src/handle.rs", "tests/it/web_token.rs"]
+refs = ["crates/rtok-hook/src/lib.rs", "src/bin/rtok-hook.rs", "tests/it/hook_resident.rs"]
 
 [[symbol]]
 name = "toml_item_to_json"
@@ -314,7 +314,7 @@ refs = ["src/plugins/archive/mod.rs"]
 name = "tool_results"
 kind = "fn"
 rank = true
-defs = ["crates/rtok-plugin-sdk/src/wire.rs", "src/plugins/archive/pi.rs", "src/proxy/anthropic.rs", "src/proxy/gemini.rs", "src/proxy/openai_chat.rs", "src/proxy/openai_responses.rs", "tests/proxy_bench.rs"]
+defs = ["crates/rtok-plugin-sdk/src/wire.rs", "src/plugins/archive/pi.rs", "src/proxy/anthropic.rs", "src/proxy/gemini.rs", "src/proxy/openai_chat.rs", "src/proxy/openai_responses.rs", "tests/it/proxy_bench.rs"]
 refs = ["src/plugins/compress/mod.rs", "src/plugins/toon/mod.rs"]
 
 [[symbol]]
@@ -330,14 +330,14 @@ kind = "fn"
 # #625: no longer rank. The class-0 edge was `store`'s `use crate::plugin`, removed
 # because it cycles. Nothing else imports or uniquely shares a directory with one
 # definition, so callers stay unresolved.
-defs = ["crates/rtok-plugin-sdk/src/testing.rs", "src/measure/usage/copilot.rs", "src/measure/usage/gemini.rs", "src/measure/usage/pi.rs", "src/plugin.rs", "src/tui/app.rs", "src/model/agents.rs", "tests/common/mcp.rs"]
+defs = ["crates/rtok-plugin-sdk/src/testing.rs", "src/measure/usage/copilot.rs", "src/measure/usage/gemini.rs", "src/measure/usage/pi.rs", "src/plugin.rs", "src/tui/app.rs", "src/model/agents.rs", "tests/it/common/mcp.rs"]
 refs = ["crates/rtok-store/src/lib.rs"]
 
 [[symbol]]
 name = "session_start"
 kind = "fn"
 rank = true
-defs = ["crates/rtok-plugin-sdk/src/lib.rs", "examples/hello_plugin.rs", "src/hooks/types.rs", "src/plugins/graph/mod.rs", "src/plugins/guard/mod.rs", "src/plugins/inject/mod.rs", "src/plugins/memory/mod.rs", "tests/agents_whoami.rs"]
+defs = ["crates/rtok-plugin-sdk/src/lib.rs", "examples/hello_plugin.rs", "src/hooks/types.rs", "src/plugins/graph/mod.rs", "src/plugins/guard/mod.rs", "src/plugins/inject/mod.rs", "src/plugins/memory/mod.rs", "tests/it/agents_whoami.rs"]
 refs = ["src/plugins/graph/mod.rs"]
 
 [[symbol]]

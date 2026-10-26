@@ -73,6 +73,9 @@ description = "Token-reduction CLI for AI coding agents: hooks, MCP server and A
 # T23.6: only `rtok-plugin-sdk` is published. A release of the binary is a tag plus dist
 # archives, and `cargo publish` at the workspace level must not reach this package.
 publish = false
+# T985: the whole suite is one test executable: tests/it/main.rs is a `#[cfg(test)]` module of the
+# lib (src/lib.rs), and bins, examples and the bench have `test = false` (docs/build-profiles.md).
+autotests = false
 
 # Opt the binary back into cargo-dist: publish = false would otherwise hide it from
 # `dist generate` / Release (same as cargo-dist's own guidance).
@@ -89,15 +92,28 @@ include = ["plugins/", "skills/", "share/"]
 [[bin]]
 name = "rtok"
 path = "src/main.rs"
+test = false # T985: the lib test binary is the only test executable
 
 # T178/D32: the std-only hook client; a bin of this package so it shares rtok's version.
 [[bin]]
 name = "rtok-hook"
 path = "src/bin/rtok-hook.rs"
+test = false
 
+# T985: one integration test binary instead of one per file. A src/ change relinks one
+# executable, not ~130, and target/ holds one copy of the dependency debug info.
 [[bench]]
 name = "graph"
 harness = false
+test = false
+
+[[example]]
+name = "hello_plugin"
+test = false
+
+[[example]]
+name = "mcp_tool"
+test = false
 
 [features]
 # One feature per catalogue plugin (plan T0.4). Default = all.
@@ -233,7 +249,7 @@ d2-render = { version = "0.1", default-features = false, features = ["native"] }
 debug = "line-tables-only"
 
 # Nobody steps through the 450-odd dependencies, but their debug info is copied into every
-# one of the integration test binaries (one per file under tests/*.rs), which is most of
+# integration test binary (tests/it/main.rs, T985), which is most of
 # what the linker moves on a dev rebuild. Workspace code is not matched by `"*"`, so it
 # keeps its line tables.
 [profile.dev.package."*"]

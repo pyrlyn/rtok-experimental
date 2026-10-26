@@ -3,18 +3,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-# `just test-changed [rev]` — build and run only the test targets the current change can reach.
+# `just test-changed [rev]` — run only the tests the current change can reach.
 #
-# The suite has 41 integration targets, and `cargo nextest run` links every one of them before
-# it runs a single test. Filtering with `-E` does not help: the filter is applied after the
-# build. Only cargo's own target selection (`--lib`, `--test <name>`) skips the link, so this
-# script's whole job is to turn a diff into that argument list.
+# T985: the integration tests are the module `it` (tests/it/main.rs) of the rtok lib test binary,
+# one submodule per former tests/<name>.rs, so the whole suite is one link and the selection is
+# a nextest filter on module names: `test(/^it::(<name>|...)::/)`. Unit tests are
+# `kind(lib) & !test(/^it::/)`.
 #
 # Selection, cheapest signal first:
-#   tests/<name>.rs changed     -> --test <name>
+#   tests/it/<name>.rs changed  -> module <name>
 #   a shared input changed      -> the whole suite (Cargo.toml, crates/, config/, justfile,
-#                                  tests/common, fixtures, snapshots: too wide to map by name)
-#   anything else changed       -> --lib, plus every tests/<name>.rs whose file name or body
+#                                  tests/it/main.rs, tests/it/common, fixtures, snapshots: too
+#                                  wide to map by name)
+#   anything else changed       -> --lib, plus every tests/it/<name>.rs whose file name or body
 #                                  mentions one of the changed path's segments
 #
 # The unit-test binary is then trimmed by name too (`-E 'kind(lib) & test(~seg)'`). Linking it is
@@ -63,6 +64,9 @@ if [[ -z "$changed" ]]; then
   run_nextest -p rtok --lib
 fi
 
+# The integration modules: tests/it/<name>.rs, without the crate root.
+modules() { ls tests/it/*.rs | grep -v '^tests/it/main\.rs$'; }
+
 run_all=0
 lib_all=0
 targets=()
@@ -71,8 +75,10 @@ tokens=()
 while IFS= read -r f; do
   [[ -n "$f" ]] || continue
   case "$f" in
-    tests/*/*) run_all=1 ;;                       # common/, fixtures/, snapshots/, trycmd/
-    tests/*.rs) targets+=("$(basename "$f" .rs)") ;;
+    tests/it/main.rs) run_all=1 ;;
+    tests/it/*/*) run_all=1 ;;                    # it/common/, it/snapshots/
+    tests/it/*.rs) targets+=("$(basename "$f" .rs)") ;;
+    tests/*/*) run_all=1 ;;                       # fixtures/, trycmd/, cmd_golden/, node/
     Cargo.toml | Cargo.lock | build.rs | migrations/* | justfile | mise.toml | crates/* | config/* | .config/* | .cargo/*)
       run_all=1
       ;;
@@ -100,27 +106,29 @@ if ((${#tokens[@]})); then
   pattern="$(printf '%s\n' "${tokens[@]}" | sort -u | paste -sd'|' -)"
   while IFS= read -r f; do
     targets+=("$(basename "$f" .rs)")
-  done < <(grep -lwiE -- "$pattern" tests/*.rs || true)
+  done < <(grep -lwiE -- "$pattern" $(modules) || true)
   while IFS= read -r f; do
     targets+=("$(basename "$f" .rs)")
-  done < <(ls tests/*.rs | grep -iE -- "$pattern" || true)
+  done < <(modules | grep -iE -- "$pattern" || true)
 fi
 
 # `--no-tests=pass`: a unit-test filter that matches nothing is a pass here, not nextest's exit 4.
 args=(-p rtok --no-tests=pass)
-((${#tokens[@]} || lib_all)) && args+=(--lib)
+args+=(--lib)
 picked=0
+mods=()
 while IFS= read -r t; do
   [[ -n "$t" ]] || continue
-  args+=(--test "$t")
+  mods+=("$t")
   picked=$((picked + 1))
 done < <(printf '%s\n' "${targets[@]:-}" | sort -u)
+it_filter="test(/^it::($(printf '%s\n' "${mods[@]:-}" | paste -sd'|' -))::/)"
 
 # Past roughly three quarters of the suite the selection has stopped paying for itself:
 # the remaining targets link in parallel anyway, and running all of them is the honest answer.
-total=$(ls tests/*.rs | wc -l | tr -d ' ')
+total=$(modules | wc -l | tr -d ' ')
 if ((picked * 4 >= total * 3)); then
-  echo "test-changed: $picked of $total targets selected — running the whole suite instead"
+  echo "test-changed: $picked of $total modules selected — running the whole suite instead"
   run_nextest --workspace
 fi
 
@@ -133,13 +141,19 @@ if ((picked == 0 && ${#tokens[@]} == 0 && !lib_all)); then
 fi
 
 if ((lib_all)); then
-  echo "test-changed: $picked of $total integration targets + every unit test"
+  if ((picked)); then args+=(-E "(kind(lib) & !test(/^it::/)) | $it_filter"); else args+=(-E "kind(lib) & !test(/^it::/)"); fi
+  echo "test-changed: $picked of $total integration modules + every unit test"
 elif ((${#tokens[@]})); then
   unit="$(printf 'test(~%s)|' $(printf '%s\n' "${tokens[@]}" | sort -u) | sed 's/|$//')"
-  args+=(-E "kind(lib) & ($unit) | !kind(lib)")
-  echo "test-changed: $picked of $total integration targets + the matching unit tests"
+  if ((picked)); then
+    args+=(-E "kind(lib) & !test(/^it::/) & ($unit) | $it_filter")
+  else
+    args+=(-E "kind(lib) & !test(/^it::/) & ($unit)")
+  fi
+  echo "test-changed: $picked of $total integration modules + the matching unit tests"
 else
-  echo "test-changed: $picked of $total integration targets, no unit tests"
+  args+=(-E "$it_filter")
+  echo "test-changed: $picked of $total integration modules, no unit tests"
 fi
 
 run_nextest "${args[@]}"

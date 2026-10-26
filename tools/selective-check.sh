@@ -60,7 +60,7 @@ rust=0 src=0 js=0 py=0 other=0
 while IFS= read -r f; do
   [[ -n "$f" ]] || continue
   case "$f" in
-    Cargo.toml | Cargo.lock | build.rs | justfile | mise.toml | rust-toolchain* | crates/* | config/* | .config/* | .cargo/* | migrations/* | tests/common/* | tests/fixtures/* | tests/snapshots/* | tests/trycmd/* | tools/selective-check.sh | tools/test-changed.sh)
+    Cargo.toml | Cargo.lock | build.rs | justfile | mise.toml | rust-toolchain* | crates/* | config/* | .config/* | .cargo/* | migrations/* | tests/it/main.rs | tests/it/common/* | tests/it/snapshots/* | tests/fixtures/* | tests/trycmd/* | tools/selective-check.sh | tools/test-changed.sh)
       full "$f is a shared input"
       ;;
     *.md | docs/* | site/* | .github/* | brand/* | LICENSE* | *.txt) ;;
