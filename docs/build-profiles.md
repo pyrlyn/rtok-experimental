@@ -1,8 +1,7 @@
-# Local builds: one test binary, profiles and target/ size
+# Local builds: one test binary and target/ size
 
-How rtok keeps a local `target/` small and rebuilds short: one integration-test binary, named
-cargo profiles instead of environment flags, split debug info, separate target dirs for
-other variants, and an optional compiler cache.
+How rtok keeps a local `target/` small and rebuilds short: one integration-test binary,
+separate target dirs for build variants, and an optional compiler cache.
 
 ## How it works
 
@@ -14,24 +13,9 @@ single `[[test]] name = "it"` at `tests/it/main.rs`. Every former `tests/<name>.
 dependency code instead of one per file. nextest still runs every test in its own process,
 so process-wide state (env vars, current dir, globals) stays isolated as before.
 
-**Profiles instead of flag churn.** Changing `CARGO_PROFILE_DEV_DEBUG`, `RUSTFLAGS` or the
+**Other variants in their own target dir.** Changing `RUSTFLAGS`, `CARGO_PROFILE_DEV_*` or the
 feature set changes the hash of every unit, so cargo builds a second full set next to the
-first one in `target/debug/`. The common switches are named profiles that build into their
-own dir and leave `target/debug/` alone:
-
-| profile | dir | what changes |
-|---|---|---|
-| `dev` (default) | `target/debug/` | line tables only, no debug info for dependencies |
-| `dev-nodebug` | `target/dev-nodebug/` | no debug info at all |
-| `dev-fulldebug` | `target/dev-fulldebug/` | full DWARF, dependencies included |
-
-**Split debug info.** `[profile.dev] split-debuginfo = "unpacked"`: on macOS the DWARF stays
-in the object files and no `dsymutil` runs per link; on Linux it goes to `.dwo` files beside
-the objects, so the linker does not copy it into every executable. Windows (MSVC) writes
-`.pdb` files anyway and ignores the setting.
-
-**Other variants in their own target dir.** `RUSTFLAGS` and feature sets cannot be a profile.
-Build them with a separate `CARGO_TARGET_DIR` so they do not double `target/debug/`:
+first one in `target/debug/`. Build such variants with a separate `CARGO_TARGET_DIR`:
 
 ```bash
 CARGO_TARGET_DIR=target/variant-nofeat cargo build --no-default-features --features measure
@@ -44,13 +28,7 @@ Locally, set it in your user config or shell (see Enable).
 
 ## Enable
 
-Nothing to enable for the test binary, the profiles and split debug info: they are in
-`Cargo.toml`. Use a profile with `--profile`:
-
-```bash
-cargo build --profile dev-nodebug
-cargo nextest run --cargo-profile dev-nodebug
-```
+Nothing to enable for the test binary: it is in `Cargo.toml`.
 
 sccache, per machine (`mise use -g sccache` or `cargo install sccache`), either in
 `~/.cargo/config.toml`:
@@ -67,10 +45,7 @@ small edits.
 
 ## Disable
 
-- Profiles: do not pass `--profile`; `dev` is unchanged. Delete `target/dev-nodebug/` or
-  `target/dev-fulldebug/` to get the space back.
-- Split debug info: `CARGO_PROFILE_DEV_SPLIT_DEBUGINFO=packed` (macOS: a `.dSYM` per
-  binary) or `off`, for one build.
+- Variant dirs: delete `target/variant-*/` to get the space back.
 - sccache: remove `rustc-wrapper` / unset `RUSTC_WRAPPER`; `sccache --stop-server`.
 - The single test binary is the layout of the repo, not a switch. New test files go to
   `tests/it/<name>.rs` plus one `mod <name>;` line in `tests/it/main.rs`.
@@ -97,5 +72,4 @@ just test-changed                                   # picks modules by name from
   use nextest, where each test is its own process.
 - Any change to any test module recompiles the whole `it` crate (seconds, not minutes; no
   dependency is rebuilt).
-- A new profile is a full build the first time (its own dir, nothing shared with `dev`).
-- Split debug info: tools that expect a `.dSYM` (some macOS crash reporters) need `packed`.
+- A variant target dir is a full build the first time (nothing shared with `target/debug/`).

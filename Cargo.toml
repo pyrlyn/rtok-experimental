@@ -240,10 +240,6 @@ d2-render = { version = "0.1", default-features = false, features = ["native"] }
 [profile.dev]
 # Backtraces keep `file:line`; the full DWARF that dominated every artifact goes.
 debug = "line-tables-only"
-# macOS: keep DWARF in the object files (no dsymutil pass per link); Linux: .dwo files
-# beside the objects, so the linker does not copy debug info into each executable. Windows
-# MSVC already writes separate .pdb files and ignores this. See docs/build-profiles.md.
-split-debuginfo = "unpacked"
 
 # Nobody steps through the 450-odd dependencies, but their debug info is copied into every
 # integration test binary (tests/it/main.rs, T985), which is most of
@@ -258,22 +254,6 @@ debug = false
 
 [profile.release]
 strip = "symbols"
-
-# Named profiles for the switches that used to be environment flags
-# (CARGO_PROFILE_DEV_DEBUG=false, ...). Each profile builds into its own target/<name>/, so
-# going back and forth no longer rebuilds or doubles target/debug. docs/build-profiles.md.
-#   cargo build --profile dev-nodebug      no debug info at all (fastest link, no file:line)
-#   cargo build --profile dev-fulldebug    full DWARF everywhere, for a debugger session
-[profile.dev-nodebug]
-inherits = "dev"
-debug = false
-
-[profile.dev-fulldebug]
-inherits = "dev"
-debug = true
-
-[profile.dev-fulldebug.package."*"]
-debug = true
 
 # The profile that 'dist' will build with: `dev`, so every release is a dev build
 # (unoptimized, line tables, no LTO).
