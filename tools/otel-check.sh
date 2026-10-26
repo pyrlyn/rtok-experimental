@@ -48,7 +48,7 @@ if [[ ! -x "$bin" ]]; then
 fi
 
 # Seed the same ledger shape as tests/otel.rs (hook + mcp + proxy + log + usage).
-mise exec -- cargo test -q --test it otel::seed_fixture_ledger -- --exact --ignored >/dev/null
+mise exec -- cargo test -q -p rtok --lib it::otel::seed_fixture_ledger -- --exact --ignored >/dev/null
 
 flush() {
   local endpoint="$1"

@@ -77,8 +77,8 @@ def _nextest(changed: list[str]) -> str:
 
 def test_source_change_selects_unit_tests_by_module_and_tests_that_name_it():
     out = _nextest(["src/plugins/checkpoint.rs"])
-    assert "--lib" in out and "kind(lib) & (test(~checkpoint)" in out
-    assert "--test it" in out and "memory_status" in out and "stats_model" in out
+    assert "--lib" in out and "kind(lib) & !test(/^it::/) & (test(~checkpoint)" in out
+    assert "test(/^it::(" in out and "memory_status" in out and "stats_model" in out
     assert "--workspace" not in out
 
 
@@ -88,7 +88,7 @@ def test_build_script_runs_the_whole_suite():
 
 def test_source_file_without_a_module_name_runs_every_unit_test():
     out = _nextest(["src/lib.rs"])
-    assert "--lib" in out and "-E" not in out
+    assert "--lib" in out and "kind(lib) & !test(/^it::/)" in out
 
 
 def test_a_filter_that_matches_nothing_is_not_a_failure():

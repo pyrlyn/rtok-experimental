@@ -205,22 +205,42 @@ pub fn bin_path(name: &'static str) -> &'static str {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
     static PATHS: OnceLock<Mutex<HashMap<&'static str, &'static str>>> = OnceLock::new();
-    let mut paths = PATHS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    let mut paths = PATHS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     if let Some(p) = paths.get(name) {
         return p;
     }
     let exe = std::env::current_exe().expect("current_exe");
-    let dir = exe.parent().and_then(Path::parent).expect("target/<profile>");
+    let dir = exe
+        .parent()
+        .and_then(Path::parent)
+        .expect("target/<profile>");
     let path = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
-    let prebuilt = std::env::var_os("NEXTEST").is_some() || std::env::var_os("RTOK_TEST_BINS_READY").is_some();
+    let prebuilt =
+        std::env::var_os("NEXTEST").is_some() || std::env::var_os("RTOK_TEST_BINS_READY").is_some();
     if !prebuilt {
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
         let status = Command::new(cargo)
-            .args(["build", "--quiet", "-p", "rtok", "--features", "rtok-store/test-util", "--bin", name])
+            .args([
+                "build",
+                "--quiet",
+                "-p",
+                "rtok",
+                "--features",
+                "rtok-store/test-util",
+                "--bin",
+                name,
+            ])
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .status()
             .expect("run cargo build");
-        assert!(status.success(), "cannot build {name} at {}", path.display());
+        assert!(
+            status.success(),
+            "cannot build {name} at {}",
+            path.display()
+        );
     }
     assert!(path.exists(), "{name} is not built at {}", path.display());
     let s: &'static str = Box::leak(path.to_string_lossy().into_owned().into_boxed_str());

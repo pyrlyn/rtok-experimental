@@ -8,6 +8,9 @@
 //! `-E 'test(/^it::<name>::/)'`.
 //! See docs/build-profiles.md.
 
+// Tests spawn their fixtures directly (clippy.toml); the lint is for the library and binaries.
+#![allow(clippy::disallowed_methods)]
+
 mod agent_remove;
 mod agents;
 mod agents_doc;

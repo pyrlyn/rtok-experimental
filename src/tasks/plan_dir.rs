@@ -399,6 +399,7 @@ fn with_head(text: &str, task: &Task) -> Result<String> {
 /// The rules `tests/plan_dir.rs` holds this repository's plan to; the tests below hold what the
 /// adapter writes to the same ones.
 #[cfg(test)]
+#[allow(clippy::duplicate_mod)] // T985: tests/it (also in this crate under cfg(test)) loads it too
 #[path = "../../tests/it/common/plan_rules.rs"]
 mod plan_rules;
 

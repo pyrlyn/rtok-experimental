@@ -62,7 +62,11 @@ fn the_client_answers_when_its_rtok_hook_fallback_hangs() {
     let home = home("b");
     let bin = home.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
-    std::fs::copy(crate::it::common::bin_path("rtok-hook"), bin.join("rtok-hook")).unwrap();
+    std::fs::copy(
+        crate::it::common::bin_path("rtok-hook"),
+        bin.join("rtok-hook"),
+    )
+    .unwrap();
     // A fallback that never answers: `exec` so the kill reaches the sleeper, not a shell.
     let fake = bin.join("rtok");
     std::fs::write(&fake, "#!/bin/sh\nexec sleep 30\n").unwrap();
