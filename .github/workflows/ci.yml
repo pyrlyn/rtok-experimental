@@ -41,7 +41,7 @@ env:
   # does not cancel the other shard and the macOS job. Reaches `just test` and the Windows run.
   NEXTEST_PROFILE: ci
   # sccache: cap the cache (local disk, also the R2 fallback on self-hosted runners) at 15 GB;
-  # SCCACHE_DIR is set per OS by .github/actions/sccache.
+  # SCCACHE_DIR is set per OS by pyrlyn/ci/.github/actions/sccache.
   SCCACHE_CACHE_SIZE: 15G
 
 jobs:
@@ -77,7 +77,7 @@ jobs:
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-      - uses: ./.github/actions/sccache
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -101,6 +101,8 @@ jobs:
       - run: tools/plugin-versions.sh --check "$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
       - if: failure() && github.event_name == 'pull_request'
         uses: pyrlyn/ci/.github/actions/cancel-run@main
+      - if: always() && env.RUSTC_WRAPPER == 'sccache'
+        run: sccache --show-stats
 
   check:
     # Draft PRs still emit synchronize; skip until ready_for_review.
@@ -122,7 +124,7 @@ jobs:
         uses: ./.github/actions/rustup-toolchain-cache
       # Installs the Rust version pinned in mise.toml — same toolchain as local.
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-      - uses: ./.github/actions/sccache
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -191,7 +193,7 @@ jobs:
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-      - uses: ./.github/actions/sccache
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -296,7 +298,7 @@ jobs:
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-      - uses: ./.github/actions/sccache
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -307,6 +309,8 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: mise exec -- cargo nextest run --workspace --no-tests=pass -E "$env:PLATFORM_TESTS"
+      - if: always() && env.RUSTC_WRAPPER == 'sccache'
+        run: sccache --show-stats
 
   # Steps stay bash-3.2 safe (the dedicated Mac's /bin/bash).
   macos:
@@ -328,7 +332,7 @@ jobs:
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-      - uses: ./.github/actions/sccache
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -341,6 +345,8 @@ jobs:
       - if: runner.environment == 'self-hosted'
         run: python3 tools/ci/prep_target_dir.py target
       - run: mise exec -- cargo nextest run --workspace --no-tests=pass -E "$PLATFORM_TESTS"
+      - if: always() && env.RUSTC_WRAPPER == 'sccache'
+        run: sccache --show-stats
 
   # T310.11: the admin SPA in web/ (the `just spa-*` recipes). oxlint and oxfmt already cover
   # web/ in `lint` (`just js` lints every tracked .ts/.tsx), so they are not run twice. The
@@ -410,7 +416,7 @@ jobs:
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
           install_args: just rust
-      - uses: ./.github/actions/sccache
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -428,6 +434,8 @@ jobs:
       - run: just docs-check
       - if: failure() && github.event_name == 'pull_request'
         uses: pyrlyn/ci/.github/actions/cancel-run@main
+      - if: always() && env.RUSTC_WRAPPER == 'sccache'
+        run: sccache --show-stats
 
   # Fails when workspace-hack drifts from the dependency graph (cargo-hakari
   # comes from mise.toml). Own job, so the required check names stay as they are.
