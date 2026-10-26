@@ -264,7 +264,11 @@ jobs:
           name: nextest-archive-${{ matrix.os }}
       # Extracted into the checkout, not a temp dir: the tests call env!("CARGO_BIN_EXE_rtok"),
       # a path fixed at build time under ./target, and the cached target/vitest is already there.
-      - run: >-
+      - name: tests skipped (SKIP_CI_TESTS)
+        if: vars.SKIP_CI_TESTS == 'true' || env.SKIP_CI_TESTS == 'true'
+        run: echo "::notice title=SKIP_CI_TESTS::tests skipped by SKIP_CI_TESTS"
+      - if: vars.SKIP_CI_TESTS != 'true' && env.SKIP_CI_TESTS != 'true'
+        run: >-
           mise exec -- cargo nextest run --archive-file nextest-archive.tar.zst
           --workspace-remap .
           --extract-to . --extract-overwrite
@@ -306,7 +310,11 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: mise exec -- cargo nextest run --workspace --no-tests=pass -E "$env:PLATFORM_TESTS"
+      - name: tests skipped (SKIP_CI_TESTS)
+        if: vars.SKIP_CI_TESTS == 'true' || env.SKIP_CI_TESTS == 'true'
+        run: echo "::notice title=SKIP_CI_TESTS::tests skipped by SKIP_CI_TESTS"
+      - if: vars.SKIP_CI_TESTS != 'true' && env.SKIP_CI_TESTS != 'true'
+        run: mise exec -- cargo nextest run --workspace --no-tests=pass -E "$env:PLATFORM_TESTS"
 
   # Steps stay bash-3.2 safe (the dedicated Mac's /bin/bash).
   macos:
@@ -340,7 +348,11 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - if: runner.environment == 'self-hosted'
         run: python3 tools/ci/prep_target_dir.py target
-      - run: mise exec -- cargo nextest run --workspace --no-tests=pass -E "$PLATFORM_TESTS"
+      - name: tests skipped (SKIP_CI_TESTS)
+        if: vars.SKIP_CI_TESTS == 'true' || env.SKIP_CI_TESTS == 'true'
+        run: echo "::notice title=SKIP_CI_TESTS::tests skipped by SKIP_CI_TESTS"
+      - if: vars.SKIP_CI_TESTS != 'true' && env.SKIP_CI_TESTS != 'true'
+        run: mise exec -- cargo nextest run --workspace --no-tests=pass -E "$PLATFORM_TESTS"
 
   # T310.11: the admin SPA in web/ (the `just spa-*` recipes). oxlint and oxfmt already cover
   # web/ in `lint` (`just js` lints every tracked .ts/.tsx), so they are not run twice. The
@@ -378,7 +390,11 @@ jobs:
       - run: just spa-install
       - run: just spa-browsers
       - run: just spa-typecheck
-      - run: just spa-test
+      - name: tests skipped (SKIP_CI_TESTS)
+        if: vars.SKIP_CI_TESTS == 'true' || env.SKIP_CI_TESTS == 'true'
+        run: echo "::notice title=SKIP_CI_TESTS::tests skipped by SKIP_CI_TESTS"
+      - if: vars.SKIP_CI_TESTS != 'true' && env.SKIP_CI_TESTS != 'true'
+        run: just spa-test
       - run: just spa-storybook
       - run: just spa-stories
       - run: just spa-build
