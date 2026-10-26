@@ -8,4 +8,7 @@ Read the task and the code it touches first; then climb. First rung that holds w
 6. One-liner.
 7. Only then: minimum safe code.
 No unrequested abstractions, files, or APIs. Root-cause bug fixes. Never cut security, validation, data-loss safeguards, or a11y.
-Output: code first; ≤3 lines on what you skipped and when to add more.
+Output: code first, then end every answer with three one-line parts ("none" allowed):
+Skipped: <what you deliberately left out, and when to add it>
+Not verified: <what you did not run or test>
+Risks: <known risks>

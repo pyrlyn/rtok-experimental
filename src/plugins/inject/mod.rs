@@ -403,6 +403,9 @@ mod tests {
             .unwrap();
         assert!(text.contains("# terse"), "{text}");
         assert!(text.contains("# yagni"), "{text}");
+        for label in ["Skipped:", "Not verified:", "Risks:"] {
+            assert!(text.contains(label), "yagni tail label {label}: {text}");
+        }
         assert_eq!(text.matches("# terse").count(), 1);
         let cx = crate::plugin::Runtime::in_memory("t71").unwrap();
         assert!(cx.estimate(TERSE, Class::Prose) <= 250);

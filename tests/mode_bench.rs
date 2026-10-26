@@ -390,6 +390,9 @@ fn mode_markdown_budget_and_headings() {
     assert!(yagni.starts_with("# yagni"), "{yagni}");
     assert!(est(terse) <= 250, "terse est={} > 250", est(terse));
     assert!(est(yagni) <= 250, "yagni est={} > 250", est(yagni));
+    for label in ["Skipped:", "Not verified:", "Risks:"] {
+        assert!(yagni.contains(label), "yagni missing tail label {label}");
+    }
     eprintln!(
         "mode_budget: terse_tokens={} yagni_tokens={} terse_chars={} yagni_chars={}",
         est(terse),

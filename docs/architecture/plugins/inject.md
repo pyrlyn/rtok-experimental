@@ -60,6 +60,20 @@ the configured prompt modes) and writes the checkpoint at `PreCompact`.
 - `core.inject_budget_tokens` is a removed alias, accepted from old configs and migrated to
   `plugins.inject.budget_tokens`.
 
+## The `yagni` mode (alias `pony`)
+
+- **How it works.** `modes/yagni.md` is injected once at `SessionStart`. It tells the model to climb a
+  ladder (skip, reuse, stdlib, native, installed dependency, one-liner, minimum code) and to end every
+  answer with three one-line parts, `none` allowed: `Skipped:` (left out on purpose, and when to add
+  it), `Not verified:` (not run or tested), `Risks:` (known risks).
+- **Enable.** `plugins.inject.modes = ["yagni"]` (or `["pony"]`), or `[setup] modes` /
+  `rtok agents install <host> --mode yagni`.
+- **Disable.** Remove it from `modes`; the next session no longer carries the text.
+- **Test.** `cargo test --test mode_bench` (heading, tail labels, ≤ 250 estimated tokens) and
+  `cargo test inject` (SessionStart carries it once, UserPromptSubmit never).
+- **Limitations.** A prompt, not enforcement: the model may drop or pad the tail. The file stays well
+  inside the 800-token `budget_tokens`, shared with the other injections.
+
 ## Related
 
 [Overview](../overview.md) · [Plugin contract](../plugin-contract.md) · [Hook flow](../hook-flow.md) · [memory plugin](memory.md) · [guard plugin](guard.md)
