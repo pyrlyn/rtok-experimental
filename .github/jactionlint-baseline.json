@@ -10,14 +10,6 @@
       "message": "action \"actions/cache/restore@v6\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
     },
     {
-      "file": ".github/actions/sccache/action.yml",
-      "rule": "github-env",
-      "fingerprint": "6ebb8edf133d7bdf",
-      "context": "4d666b1998904fe9",
-      "occurrence": 0,
-      "message": "untrusted input from the variable BUCKET (inputs.bucket) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first or pass it to the next step with $GITHUB_OUTPUT"
-    },
-    {
       "file": ".github/workflows/bump.yml",
       "rule": "unpinned-uses",
       "fingerprint": "36990d02b7d1d103",
