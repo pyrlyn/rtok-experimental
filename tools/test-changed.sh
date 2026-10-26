@@ -5,10 +5,10 @@
 
 # `just test-changed [rev]` — run only the tests the current change can reach.
 #
-# T985: the integration tests are one binary (`it`, tests/it/main.rs) with one module per former
-# tests/<name>.rs, so there is a single link and the selection is a nextest filter on module
-# names: `binary(it) & test(/^(<name>|...)::/)`. `--test it` is only passed when at least one
-# module is picked, so a change that reaches no integration test does not link `it` at all.
+# T985: the integration tests are the module `it` (tests/it/main.rs) of the rtok lib test binary,
+# one submodule per former tests/<name>.rs, so the whole suite is one link and the selection is
+# a nextest filter on module names: `test(/^it::(<name>|...)::/)`. Unit tests are
+# `kind(lib) & !test(/^it::/)`.
 #
 # Selection, cheapest signal first:
 #   tests/it/<name>.rs changed  -> module <name>
@@ -114,7 +114,7 @@ fi
 
 # `--no-tests=pass`: a unit-test filter that matches nothing is a pass here, not nextest's exit 4.
 args=(-p rtok --no-tests=pass)
-((${#tokens[@]} || lib_all)) && args+=(--lib)
+args+=(--lib)
 picked=0
 mods=()
 while IFS= read -r t; do
@@ -122,8 +122,7 @@ while IFS= read -r t; do
   mods+=("$t")
   picked=$((picked + 1))
 done < <(printf '%s\n' "${targets[@]:-}" | sort -u)
-((picked)) && args+=(--test it)
-it_filter="binary(it) & test(/^($(printf '%s\n' "${mods[@]:-}" | paste -sd'|' -))::/)"
+it_filter="test(/^it::($(printf '%s\n' "${mods[@]:-}" | paste -sd'|' -))::/)"
 
 # Past roughly three quarters of the suite the selection has stopped paying for itself:
 # the remaining targets link in parallel anyway, and running all of them is the honest answer.
@@ -142,14 +141,14 @@ if ((picked == 0 && ${#tokens[@]} == 0 && !lib_all)); then
 fi
 
 if ((lib_all)); then
-  ((picked)) && args+=(-E "kind(lib) | $it_filter")
+  if ((picked)); then args+=(-E "(kind(lib) & !test(/^it::/)) | $it_filter"); else args+=(-E "kind(lib) & !test(/^it::/)"); fi
   echo "test-changed: $picked of $total integration modules + every unit test"
 elif ((${#tokens[@]})); then
   unit="$(printf 'test(~%s)|' $(printf '%s\n' "${tokens[@]}" | sort -u) | sed 's/|$//')"
   if ((picked)); then
-    args+=(-E "kind(lib) & ($unit) | $it_filter")
+    args+=(-E "kind(lib) & !test(/^it::/) & ($unit) | $it_filter")
   else
-    args+=(-E "kind(lib) & ($unit)")
+    args+=(-E "kind(lib) & !test(/^it::/) & ($unit)")
   fi
   echo "test-changed: $picked of $total integration modules + the matching unit tests"
 else

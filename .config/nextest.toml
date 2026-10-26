@@ -45,13 +45,25 @@ $r = if ($env:RUSTUP_HOME) { $env:RUSTUP_HOME } else { Join-Path $env:USERPROFIL
 [IO.File]::AppendAllText($env:NEXTEST_ENV, "HOME=$h`nUSERPROFILE=$h`nTMP=$t`nTEMP=$t`nRTOK_HOST_SANDBOX=1`nRTOK_WORKTREE_MIN_FREE_MIB=0`nCARGO_HOME=$c`nRUSTUP_HOME=$r`n")
 ''']
 
+# T985: the tests are a module of the rtok lib's test binary, so cargo does not build the `rtok` /
+# `rtok-hook` binaries they run (that only happens for `[[test]]` targets). Build them once here,
+# before any test starts; `bin_path` in tests/it/common does not build under nextest. CI runs from
+# an archive that already holds them and sets RTOK_TEST_BINS_READY=1.
+[scripts.setup.test-bins-unix]
+command = ['sh', '-c', '[ -n "$RTOK_TEST_BINS_READY" ] || "${CARGO:-cargo}" build --quiet -p rtok --bins']
+
+[scripts.setup.test-bins-windows]
+command = ['powershell', '-NoProfile', '-NonInteractive', '-Command', '''
+if (-not $env:RTOK_TEST_BINS_READY) { $c = if ($env:CARGO) { $env:CARGO } else { "cargo" }; & $c build --quiet -p rtok --bins; exit $LASTEXITCODE }
+''']
+
 [[profile.default.scripts]]
 platform = { host = "cfg(unix)" }
-setup = "test-home-unix"
+setup = ["test-bins-unix", "test-home-unix"]
 
 [[profile.default.scripts]]
 platform = { host = "cfg(windows)" }
-setup = "test-home-windows"
+setup = ["test-bins-windows", "test-home-windows"]
 
 # Windows CI previously hung forever in `cargo nextest` after the wasm LNK stubs
 # landed (run 35225713659 job windows: nextest still in_progress after >2h;
@@ -60,6 +72,15 @@ setup = "test-home-windows"
 # in the log instead of holding the runner until the GHA 6h ceiling.
 [profile.default]
 slow-timeout = { period = "60s", terminate-after = 3 }
+
+# T985: `cargo nextest archive` carries the rtok binaries the tests run (built by CI first).
+[profile.default.archive]
+include = [
+    { path = "debug/rtok", relative-to = "target", on-missing = "warn" },
+    { path = "debug/rtok-hook", relative-to = "target", on-missing = "warn" },
+    { path = "debug/rtok.exe", relative-to = "target", on-missing = "ignore" },
+    { path = "debug/rtok-hook.exe", relative-to = "target", on-missing = "ignore" },
+]
 
 # CPU/memory-heavy tests run alone. `threads-required = "num-test-threads"` makes each
 # matching test reserve the whole `--test-threads` pool (see `just test`, which sets `-j`
@@ -113,7 +134,7 @@ threads-required = "num-test-threads"
 # refusal/lock path. Full-suite I/O pressure made those hooks fail open (10-14 s cases),
 # while the same checks passed alone. Keep their write assertions and timing bounds.
 [[profile.default.overrides]]
-filter = 'test(/^guard_check::/) | test(/^hook_fail_open::.*a_locked_store_fails_the_hook_open_in_ms/)'
+filter = 'test(/^it::guard_check::/) | test(/^it::hook_fail_open::.*a_locked_store_fails_the_hook_open_in_ms/)'
 threads-required = "num-test-threads"
 
 # trycmd spawns the real rtok binary for every case; under a full-suite parallel run its
@@ -121,7 +142,7 @@ threads-required = "num-test-threads"
 # CI). Isolate the runner on the machine like the heavy benches above -- each case still
 # runs, just not sharing CPUs with the rest of the suite.
 [[profile.default.overrides]]
-filter = 'test(/^cli_trycmd::/)'
+filter = 'test(/^it::cli_trycmd::/)'
 threads-required = "num-test-threads"
 
 # Installs, lists and removes every host in turn: ~100 sequential `rtok` spawns, each `agents
@@ -141,7 +162,7 @@ threads-required = "num-test-threads"
 mcp-spawn = { max-threads = 2 }
 
 [[profile.default.overrides]]
-filter = 'test(/^mcp(_agent_messages|_agents|_call_lsp_orphan|_http|_ping|_wrap)?::/)'
+filter = 'test(/^it::mcp(_agent_messages|_agents|_call_lsp_orphan|_http|_ping|_wrap)?::/)'
 test-group = "mcp-spawn"
 
 # CI (`NEXTEST_PROFILE=ci`, set in ci.yml): one flake must not cancel the other shard and the
