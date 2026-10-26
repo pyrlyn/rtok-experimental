@@ -15,6 +15,7 @@ pub mod advice;
 pub mod ai;
 pub mod html;
 pub mod markdown;
+#[cfg(feature = "pdf")]
 pub mod pdf;
 
 use std::path::Path;

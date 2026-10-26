@@ -110,7 +110,10 @@ pub(super) fn run(config_file: &Option<PathBuf>, args: Args) -> Result<()> {
             &cfg.report.out,
             crate::report::html::render(&doc).as_bytes(),
         )?,
+        #[cfg(feature = "pdf")]
         "pdf" => emit(&cfg.report.out, &crate::report::pdf::render(&doc))?,
+        #[cfg(not(feature = "pdf"))]
+        "pdf" => bail!("--format pdf needs rtok built with the `pdf` feature"),
         other => bail!("--format {other} is unknown (md, html, pdf)"),
     }
 

@@ -43,6 +43,7 @@ fn ok(home: &Path, args: &[&str]) -> String {
     String::from_utf8(out.stdout).unwrap()
 }
 
+#[cfg(feature = "graph-png")]
 fn png_size(file: &Path) -> (u32, u32) {
     let png = fs::read(file).unwrap();
     assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
@@ -72,6 +73,7 @@ fn svg_draws_the_scope_and_a_saved_json_draws_the_same_picture() {
     assert!(again.contains("caller") && again.contains("callee"));
 }
 
+#[cfg(feature = "graph-png")]
 #[test]
 fn png_is_written_at_1x_2x_and_4x() {
     let home = fixture("png");

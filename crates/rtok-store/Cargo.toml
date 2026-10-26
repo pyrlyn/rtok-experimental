@@ -36,3 +36,8 @@ rstest = { workspace = true }
 
 [lints]
 workspace = true
+
+# libsqlite3-sys is never imported: it is listed only to turn on `bundled` (FTS5) for the
+# SQLite that diesel links, so cargo-machete reports it as unused.
+[package.metadata.cargo-machete]
+ignored = ["libsqlite3-sys"]

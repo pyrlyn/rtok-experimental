@@ -748,7 +748,12 @@ fn report_lists_cache_counters_per_lane_and_tier() {
 fn explicit_format_md_overrides_configured_format() {
     let h = home("format-md-explicit");
     let cfg = h.join("rtok.toml");
-    for configured in ["html", "pdf"] {
+    let configured_formats: &[&str] = if cfg!(feature = "pdf") {
+        &["html", "pdf"]
+    } else {
+        &["html"]
+    };
+    for &configured in configured_formats {
         fs::write(&cfg, format!("[report]\nformat = \"{configured}\"\n")).unwrap();
         let cfg_arg = cfg.to_str().unwrap();
         let explicit = Command::new(bin())

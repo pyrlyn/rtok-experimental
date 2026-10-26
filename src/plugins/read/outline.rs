@@ -554,7 +554,8 @@ pub(crate) const DART_IMPORT: &str = "
 (import_specification uri: [(configurable_uri) (uri)] @name) @reference.import
 ";
 
-/// tree-sitter-kotlin-ng 1.1.0 ships no tags query (T52.2).
+/// Kotlin tags, hand-written: tree-sitter-kotlin-ng 1.1.0 ships no tags query (T52.2), and the
+/// grammar crate itself is not linked.
 #[cfg(feature = "lang-kotlin")]
 pub(crate) const KOTLIN_TAGS: &str = "
 (class_declaration name: (identifier) @name) @definition.class
@@ -562,7 +563,8 @@ pub(crate) const KOTLIN_TAGS: &str = "
 (function_declaration name: (identifier) @name) @definition.function
 ";
 
-/// tree-sitter-c-sharp 0.23.5 gates `TAGS_QUERY` behind `cfg(with_tags_query)`.
+/// C# tags, hand-written: tree-sitter-c-sharp 0.23.5 gates `TAGS_QUERY` behind
+/// `cfg(with_tags_query)`, and the grammar crate itself is not linked.
 #[cfg(feature = "lang-csharp")]
 pub(crate) const CSHARP_TAGS: &str = "
 (class_declaration name: (identifier) @name) @definition.class

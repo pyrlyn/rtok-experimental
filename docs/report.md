@@ -1,5 +1,8 @@
 # The report's PDF renderer (T22.0)
 
+> Since the dependency slim-down, the PDF renderer is behind the non-default `pdf` feature:
+> `cargo build --features pdf`. See [dependencies](dependencies.md).
+
 `rtok report --format pdf` needs a PDF renderer linked into the one binary (D1). This page is
 the D15 survey the task asks for: three candidates priced on what they do to the release
 binary that P17 gates, whether they keep "one static binary, no runtime dependency" true, and

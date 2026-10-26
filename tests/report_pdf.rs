@@ -6,6 +6,8 @@
 //! order as `--format html` — asserted by walking both over one store — paged
 //! (a contents page plus content) with the chart labels embedded.
 
+#![cfg(feature = "pdf")]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;

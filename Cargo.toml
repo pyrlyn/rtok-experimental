@@ -112,7 +112,12 @@ inject = []
 guard = []
 memory = []
 docs = []
-graph = ["read", "dep:resvg", "dep:base64"]
+graph = ["read", "dep:base64"]
+# Off by default: the PNG rasteriser (resvg, usvg, tiny-skia and the font stack: fontdb,
+# skrifa, harfrust, read-fonts). Without it `graph export --format png` is an error.
+graph-png = ["graph", "dep:resvg"]
+# Off by default: `rtok report --format pdf` (printpdf, lopdf, allsorts-azul).
+pdf = ["dep:printpdf"]
 toon = []
 wasm-host = ["dep:wasmi"]
 compress = []
@@ -124,9 +129,11 @@ lang-dart = ["dep:tree-sitter-dart"]
 lang-c = ["dep:tree-sitter-c"]
 lang-go = ["dep:tree-sitter-go"]
 lang-java = ["dep:tree-sitter-java"]
-lang-kotlin = ["dep:tree-sitter-kotlin-ng"]
+# Kotlin and C# carry only the hand-written tags queries in src/plugins/read/outline.rs; no
+# code ever loaded their grammars, so the grammar crates were dropped (docs/dependencies.md).
+lang-kotlin = []
 lang-swift = ["dep:tree-sitter-swift"]
-lang-csharp = ["dep:tree-sitter-c-sharp"]
+lang-csharp = []
 lang-ruby = ["dep:tree-sitter-ruby"]
 lang-php = ["dep:tree-sitter-php"]
 
@@ -169,7 +176,7 @@ globset = { workspace = true } # workspace member globs of project references (T
 serde-saphyr = "1.3.0" # `pnpm-workspace.yaml` of project references (T329.7); maintained, serde_yaml is deprecated
 notify = "9.0.0-rc.5" # recursive file watching for the graph background indexer (T8.16); 9 drops windows-sys 0.60 (T223)
 owo-colors = { version = "4", features = ["supports-colors"] } # ANSI + the tty/NO_COLOR/CLICOLOR/TERM=dumb question in one call (T20.2)
-printpdf = { version = "0.12.8", default-features = false } # native paged PDF; unused HTML pulls unmaintained bincode
+printpdf = { version = "0.12.8", default-features = false, optional = true } # native paged PDF; unused HTML pulls unmaintained bincode
 regex = { workspace = true } # search pattern (T4.5)
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "net", "time", "fs"] }
 axum = { version = "0.8.9", features = ["ws"] } # dashboard WebSocket (P19); proxy HTTP unchanged
@@ -193,9 +200,7 @@ tree-sitter-c = { version = "0.24", optional = true } # lang-c tags (T4.3)
 tree-sitter-go = { version = "0.25", optional = true } # lang-go tags (T4.3)
 tree-sitter-dart = { version = "0.2", optional = true } # lang-dart tags (T4.3)
 tree-sitter-java = { version = "0.23.5", optional = true } # lang-java tags (T52.2)
-tree-sitter-kotlin-ng = { version = "1.1.0", optional = true } # lang-kotlin tags (T52.2); fwcd 0.3.8 needs tree-sitter <0.23
 tree-sitter-swift = { version = "0.7.3", optional = true } # lang-swift tags (T52.2)
-tree-sitter-c-sharp = { version = "0.23.5", optional = true } # lang-csharp tags (T52.2)
 tree-sitter-ruby = { version = "0.23.1", optional = true } # lang-ruby tags (T52.2)
 tree-sitter-php = { version = "0.25.1", optional = true } # lang-php tags (T52.2)
 jsonc-parser = { workspace = true, features = ["serde"] } # JSONC (comments + trailing commas) parse of Zed settings (T222)
@@ -223,7 +228,7 @@ portable-pty = "0.9" # T331.7: drives the `doctor --fix` checklist on a real pse
 rstest = { workspace = true } # parameterized unit tests; #[rstest] instead of #[test] (T36.5)
 trycmd = "1.2.1" # full CLI command-output fixtures in tests/trycmd/
 pulldown-cmark = { version = "0.13", default-features = false } # CommonMark parse of README/docs in tests/docs_structure.rs (T359): unclosed fences, skipped heading levels
-tokio-tungstenite = "0.30" # real WebSocket client for the `rtok web` e2e (tests/web_e2e.rs); already in the tree via axum "ws"
+tokio-tungstenite = "0.29" # real WebSocket client for the `rtok web` e2e (tests/web_e2e.rs); the same version axum 0.8 "ws" links, so one copy of tungstenite builds
 tiktoken-rs = "0.12.1" # o200k_base token counts in tests/bench_fixtures.rs (rtok#1071 harness tokenizer)
 d2-render = { version = "0.1", default-features = false, features = ["native"] } # T959: renders docs/architecture/*.d2 to SVG in-process (no d2 binary) and stamps source hashes for the freshness gate
 # T17.1. No profile may set `panic = "abort"`: `hooks::dispatch` fails open through five

@@ -10,7 +10,10 @@
 use std::cmp::Reverse;
 use std::collections::HashMap;
 
-use anyhow::{Context as _, Result, bail};
+#[cfg(feature = "graph-png")]
+use anyhow::Context as _;
+use anyhow::{Result, bail};
+#[cfg(feature = "graph-png")]
 use resvg::{tiny_skia, usvg};
 
 use super::drill::{DrillNodeKind, node_kind};
@@ -20,6 +23,7 @@ use super::export::{Export, Node};
 /// The JSON keeps every node.
 pub const MAX_DRAWN: usize = 200;
 /// A PNG past this many pixels would take a quarter of a gigabyte or more.
+#[cfg(feature = "graph-png")]
 const MAX_PIXELS: u64 = 64_000_000;
 const MAX_LABELS: usize = 40;
 const SPACING: f64 = 30.0;
@@ -441,6 +445,7 @@ fn footer(e: &Export, hidden: usize) -> Vec<(String, bool)> {
 
 /// The SVG rasterised at `scale` times its own size. Text needs a font, so a machine without
 /// any gets an error instead of a picture with the names missing.
+#[cfg(feature = "graph-png")]
 pub fn png(svg: &str, scale: u32) -> Result<Vec<u8>> {
     let mut opt = usvg::Options::default();
     opt.fontdb_mut().load_system_fonts();
@@ -469,6 +474,13 @@ pub fn png(svg: &str, scale: u32) -> Result<Vec<u8>> {
         &mut map.as_mut(),
     );
     map.encode_png().context("PNG encoding failed")
+}
+
+/// Without the `graph-png` feature the rasteriser (resvg, its font stack and tiny-skia) is not
+/// linked, so PNG export is an error that names the feature; JSON and SVG are unaffected.
+#[cfg(not(feature = "graph-png"))]
+pub fn png(_svg: &str, _scale: u32) -> Result<Vec<u8>> {
+    bail!("PNG export needs rtok built with the `graph-png` feature; use --format svg")
 }
 
 #[cfg(test)]
@@ -523,8 +535,20 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "graph-png")]
     fn parse(s: &str) -> usvg::Tree {
         usvg::Tree::from_str(s, &usvg::Options::default()).expect("well-formed SVG")
+    }
+
+    /// Without `graph-png` there is no SVG parser linked; check the document frame only.
+    #[cfg(not(feature = "graph-png"))]
+    fn parse(s: &str) {
+        let t = s.trim();
+        assert!(
+            t.starts_with("<svg") || t.starts_with("<?xml"),
+            "not an SVG: {t:.80}"
+        );
+        assert!(t.ends_with("</svg>"), "unterminated SVG");
     }
 
     fn edge(a: &Node, b: &Node) -> Edge {
@@ -612,12 +636,14 @@ mod tests {
         assert!(s.contains(r#"marker-end="url(#arrow)""#));
     }
 
+    #[cfg(feature = "graph-png")]
     fn dims(png: &[u8]) -> (u32, u32, u8) {
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
         let be = |at: usize| u32::from_be_bytes(png[at..at + 4].try_into().unwrap());
         (be(16), be(20), png[25])
     }
 
+    #[cfg(feature = "graph-png")]
     #[test]
     fn png_is_the_svg_at_1x_2x_and_4x() {
         let s = svg(&small(), false);
@@ -631,6 +657,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "graph-png")]
     #[test]
     fn transparent_png_has_an_alpha_corner() {
         let transparent = svg(&small(), true);
@@ -640,5 +667,12 @@ mod tests {
         };
         assert_eq!(decode(&transparent), 0);
         assert_eq!(decode(&svg(&small(), false)), 255);
+    }
+
+    #[cfg(not(feature = "graph-png"))]
+    #[test]
+    fn png_without_the_feature_names_it() {
+        let err = png(&svg(&small(), false), 1).unwrap_err().to_string();
+        assert!(err.contains("graph-png"), "{err}");
     }
 }
