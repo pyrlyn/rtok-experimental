@@ -156,12 +156,10 @@ Project programs and direct packages from the manifests.
 | trash | local | https://crates.io/crates/trash | T330.4: `agents junk clear --trash` to the macOS Trash, freedesktop trash and Recycle Bin |
 | tree-sitter | local | https://crates.io/crates/tree-sitter | Rust dependency |
 | tree-sitter-c | local | https://crates.io/crates/tree-sitter-c | Rust dependency |
-| tree-sitter-c-sharp | local | https://crates.io/crates/tree-sitter-c-sharp | C# grammar tags (T52.2) |
 | tree-sitter-dart | local | https://crates.io/crates/tree-sitter-dart | Rust dependency |
 | tree-sitter-go | local | https://crates.io/crates/tree-sitter-go | Rust dependency |
 | tree-sitter-java | local | https://crates.io/crates/tree-sitter-java | Java grammar tags (T52.2) |
 | tree-sitter-javascript | local | https://crates.io/crates/tree-sitter-javascript | Rust dependency |
-| tree-sitter-kotlin-ng | local | https://crates.io/crates/tree-sitter-kotlin-ng | Kotlin grammar tags (T52.2) |
 | tree-sitter-php | local | https://crates.io/crates/tree-sitter-php | PHP grammar tags (T52.2) |
 | tree-sitter-python | local | https://crates.io/crates/tree-sitter-python | Rust dependency |
 | tree-sitter-ruby | local | https://crates.io/crates/tree-sitter-ruby | Ruby grammar tags (T52.2) |

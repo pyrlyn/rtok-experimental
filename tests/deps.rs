@@ -173,9 +173,7 @@ fn only_plugins_depend_on_tree_sitter() {
         "tree-sitter-go",
         "tree-sitter-dart",
         "tree-sitter-java",
-        "tree-sitter-kotlin-ng",
         "tree-sitter-swift",
-        "tree-sitter-c-sharp",
         "tree-sitter-ruby",
         "tree-sitter-php",
     ] {
