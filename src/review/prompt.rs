@@ -7,13 +7,41 @@
 
 use std::collections::BTreeSet;
 
-/// The instructions every prompt starts with.
-pub const INSTRUCTIONS: &str = "You are reviewing a code change. The unified diff is below, followed by \
-digests of the changed files and of files that use or are used by them. A digest lists imports, doc \
-comments, signatures and data types only; function bodies are elided as `{ … }` on purpose, so do not \
-report missing bodies. Report only real problems: bugs, broken contracts with the code shown, missing \
-error handling, security issues, missing tests. For each finding give `file:line`, severity \
-(high/medium/low) and one or two sentences. If you find nothing, say `No issues found.`";
+/// Finding categories the reviewer may use, in this order. `load`, `speed` and `cut` cover
+/// resource use, latency and removable code next to the correctness categories.
+pub const CATEGORIES: &[(&str, &str)] = &[
+    ("bug", "wrong result, crash, data loss"),
+    ("contract", "breaks a signature, type or documented promise of the code shown"),
+    ("error-handling", "an error is ignored, swallowed or reported wrongly"),
+    ("security", "injection, secret exposure, missing permission check"),
+    ("test", "changed behaviour no test covers"),
+    ("load", "extra memory, CPU, I/O, allocations, queries or processes per call"),
+    ("speed", "slower hot path, blocking call, avoidable latency"),
+    ("cut", "dead, duplicated or redundant code that can be removed or simplified"),
+];
+
+/// The four lines every finding carries, in this order.
+pub const FINDING_FIELDS: &[&str] = &["What the code does", "What goes wrong", "How to fix", "Impact if not fixed"];
+
+/// The instructions every prompt starts with: role, digest caveat, categories, finding format.
+pub fn instructions() -> String {
+    let mut s = String::from(
+        "You are reviewing a code change. The unified diff is below, followed by digests of the \
+changed files and of files that use or are used by them. A digest lists imports, doc comments, \
+signatures and data types only; function bodies are elided as `{ … }` on purpose, so do not report \
+missing bodies. Report only real problems, each in one of these categories:\n",
+    );
+    for (name, what) in CATEGORIES {
+        s.push_str(&format!("- `{name}`: {what}\n"));
+    }
+    s.push_str("\nFormat every finding exactly like this:\n\n");
+    s.push_str("### `file:line` · category · severity (high/medium/low)\n");
+    for f in FINDING_FIELDS {
+        s.push_str(&format!("- **{f}:** …\n"));
+    }
+    s.push_str("\nIf you find nothing, say `No issues found.`");
+    s
+}
 
 /// One context block the budget may keep or drop.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -63,7 +91,7 @@ pub fn assemble(
     estimate: impl Fn(&str) -> u32,
 ) -> Prompt {
     let mut text = String::new();
-    text.push_str(INSTRUCTIONS);
+    text.push_str(&instructions());
     text.push_str("\n\n## Diff\n");
     text.push_str(&block("diff", diff));
     let diff_tokens = estimate(&text);
@@ -148,6 +176,21 @@ mod tests {
             p.text,
             "deterministic"
         );
+    }
+
+    #[test]
+    fn instructions_list_every_category_and_the_finding_format() {
+        let t = instructions();
+        for c in ["`bug`", "`contract`", "`error-handling`", "`security`", "`test`", "`load`", "`speed`", "`cut`"] {
+            assert!(t.contains(c), "{c}: {t}");
+        }
+        let at = |s: &str| t.find(s).unwrap_or_else(|| panic!("{s}: {t}"));
+        assert!(at("What the code does") < at("What goes wrong"));
+        assert!(at("What goes wrong") < at("How to fix"));
+        assert!(at("How to fix") < at("Impact if not fixed"));
+        assert!(t.ends_with("`No issues found.`"));
+        let p = assemble("+x\n", &[], None, |s| s.len() as u32);
+        assert!(p.text.starts_with(&t), "{}", p.text);
     }
 
     #[test]

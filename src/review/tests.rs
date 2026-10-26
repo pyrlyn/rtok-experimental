@@ -91,6 +91,8 @@ fn prompt_carries_diff_and_digests_without_bodies() {
     let t = &b.prompt.text;
     assert!(t.contains("+    lib_body_marker + 2"), "{t}");
     assert!(t.contains("### user.rs (dependent)"), "{t}");
+    assert!(t.contains("`load`") && t.contains("`speed`") && t.contains("`cut`"), "{t}");
+    assert!(t.contains("- **Impact if not fixed:** …"), "{t}");
     assert!(t.contains("pub fn load() -> usize { … }"), "{t}");
     assert!(t.contains("pub fn helper(s: &str) -> usize { … }"), "{t}");
     assert!(t.contains("/// Counts bytes."), "{t}");
