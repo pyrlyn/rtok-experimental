@@ -17,7 +17,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::common;
+use crate::it::common;
 
 /// The one script T96 links once per event (`PreToolUse`, `PostToolUse`, …).
 fn hook() -> PathBuf {

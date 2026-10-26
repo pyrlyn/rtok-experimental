@@ -12,7 +12,7 @@ use httpmock::HttpMockRequest;
 use httpmock::prelude::*;
 use rtok::store::Store;
 
-use crate::common;
+use crate::it::common;
 use common::proxy::proxy_server;
 
 const BODY: &str = r#"{"model":"m","messages":[]}"#;

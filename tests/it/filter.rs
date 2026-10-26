@@ -4,7 +4,7 @@
 
 //! T10.2: `rtok filter --cmd` reads stdin; OpenCode plugin mock.
 
-use crate::common;
+use crate::it::common;
 
 use rstest::rstest;
 use std::io::Write;
@@ -16,7 +16,7 @@ fn printf_git_status_returns_filtered_text() {
     let _ = std::fs::remove_dir_all(&home);
     std::fs::create_dir_all(&home).unwrap();
 
-    let bin = env!("CARGO_BIN_EXE_rtok");
+    let bin = crate::it::common::bin_path("rtok");
     let mut child = Command::new(bin)
         .args(["filter", "--cmd", "git status"])
         .env("RTOK_HOME", &home)
@@ -72,7 +72,7 @@ fn invalid_utf8_byte_keeps_the_rest_of_stdin(#[case] args: &[&str]) {
     let _ = std::fs::remove_dir_all(&home);
     std::fs::create_dir_all(&home).unwrap();
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .args(args)
         .env("RTOK_HOME", &home)
         .env("HOME", &home)

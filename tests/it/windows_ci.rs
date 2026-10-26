@@ -17,7 +17,7 @@ fn repo() -> PathBuf {
 #[cfg(windows)]
 #[test]
 fn rtok_exe_reserves_an_8_mib_main_thread_stack() {
-    let exe = std::fs::read(env!("CARGO_BIN_EXE_rtok")).unwrap();
+    let exe = std::fs::read(crate::it::common::bin_path("rtok")).unwrap();
     let u32_at = |o: usize| u32::from_le_bytes(exe[o..o + 4].try_into().unwrap());
     let pe = u32_at(0x3c) as usize;
     assert_eq!(&exe[pe..pe + 4], b"PE\0\0", "not a PE image");

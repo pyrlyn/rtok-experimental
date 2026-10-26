@@ -23,7 +23,7 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn run(home: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_rtok"))
+    Command::new(crate::it::common::bin_path("rtok"))
         .args(["graph", "export"])
         .args(args)
         .current_dir(home.join("proj"))

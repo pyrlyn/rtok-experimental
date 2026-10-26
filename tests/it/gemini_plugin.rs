@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 
-use crate::common;
+use crate::it::common;
 use common::agents::{fake_gemini, rtok, tmp, write_cfg};
 
 fn read(name: &str) -> Value {

@@ -20,7 +20,7 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn rtok(home: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_rtok"))
+    Command::new(crate::it::common::bin_path("rtok"))
         .args(args)
         .current_dir(home)
         .env("RTOK_HOME", home)
@@ -241,7 +241,7 @@ fn the_capability_record_a_request_made_shows_in_the_json_list() {
     ok(&home, &["graph", "projects", "add", proj.to_str().unwrap()]);
     assert!(by_name(&list(&home), "goproj").get("backend").is_none());
 
-    let asked = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let asked = Command::new(crate::it::common::bin_path("rtok"))
         .args(["graph", "impact", "alpha"])
         .current_dir(&proj)
         .env("RTOK_HOME", &home)

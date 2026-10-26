@@ -761,13 +761,25 @@ type StatsSkills = (
     Option<String>,
 );
 
+// T985: the integration tests (tests/it) are compiled into the lib's test binary, so `cfg(test)`
+// is on for them too. A test that checks the real Stats page (it::stats_model) turns the
+// background scan back on for its thread.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static BACKGROUND_STATS_IN_TESTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// T63.1 / T227: one transcript scan feeds both the Skills page (T61.3 listing joined
 /// to T61.1 resident/invocations) and the Stats page ([`stats_page_text`]). T947: the scan
 /// runs in [`Background`], never on the tick — the snapshot ships the last known scan, or
 /// "reading transcripts…" before the first one lands. `rtok stats` itself still goes
 /// through [`stats_report`] uncached.
 fn stats_skills(cfg: &Config) -> StatsSkills {
-    if cfg!(test) {
+    #[cfg(test)]
+    let skip = !BACKGROUND_STATS_IN_TESTS.with(std::cell::Cell::get);
+    #[cfg(not(test))]
+    let skip = false;
+    if skip {
         return (None, 0, false, None);
     }
     static STATS: Background<(String, StatsSkills)> = Background::new();

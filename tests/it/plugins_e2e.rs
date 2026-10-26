@@ -26,7 +26,7 @@ fn tmp(n: &str) -> Home {
     Home(d)
 }
 fn run(home: &Home, args: &[&str], input: &str, cwd: &Path) -> String {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut c = Command::new(crate::it::common::bin_path("rtok"));
     c.args(args).env("RTOK_HOME", &home.0);
     c.env("HOME", &home.0).current_dir(cwd);
     c.stdin(Stdio::piped()).stdout(Stdio::piped());

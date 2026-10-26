@@ -12,7 +12,7 @@ use rtok::plugins::compress::llm::{Auth, Compressor, Outcome};
 use rtok::store::Store;
 use serde_json::json;
 
-use crate::common;
+use crate::it::common;
 use common::compress_fixture::{log, reply, summary_with};
 use common::proxy::proxy_server;
 

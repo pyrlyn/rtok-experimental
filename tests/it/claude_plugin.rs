@@ -10,7 +10,7 @@
 //! `~/.claude.json` and `claude_desktop_config.json`, plugin or no plugin.
 #![cfg(unix)]
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{claude_desktop_config, claude_log, json, rtok, tmp, write_cfg};
 use std::fs;

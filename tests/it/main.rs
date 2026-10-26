@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-//! T985: every integration test in one binary (`autotests = false` + one `[[test]]` in
-//! Cargo.toml). Each former `tests/<name>.rs` is the module `<name>`, so nextest names a test
-//! `it <name>::<test>` and a filter on one file is `-E 'test(/^<name>::/)'`.
+//! T985: every integration test is in the one test executable of the workspace root: this file is
+//! the `#[cfg(test)] mod it` of src/lib.rs. Each former `tests/<name>.rs` is the module `it::<name>`,
+//! so nextest names a test `rtok it::<name>::<test>` and a filter on one file is
+//! `-E 'test(/^it::<name>::/)'`.
 //! See docs/build-profiles.md.
 
 mod agent_remove;

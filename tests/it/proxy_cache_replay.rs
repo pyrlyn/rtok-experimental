@@ -12,7 +12,7 @@
 use rtok::config::Config;
 use serde_json::{Value, json};
 
-use crate::common;
+use crate::it::common;
 use common::proxy::{Sink, proxy_server};
 
 const SESSION: &str = "sess-cache-replay";

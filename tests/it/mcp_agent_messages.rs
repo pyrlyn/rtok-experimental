@@ -6,7 +6,7 @@
 //! session is linked to its agent by cwd (T283.1), so the sender and the inbox owner are never
 //! arguments.
 
-use crate::common;
+use crate::it::common;
 
 use std::path::PathBuf;
 

@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use crate::common;
+use crate::it::common;
 use common::agents::{fake_copilot, rtok, tmp, write_cfg};
 
 fn read(name: &str) -> Value {
@@ -183,7 +183,7 @@ fn powershell_hooks_resolve_rtok_then_ketch_then_fail_open_silently() {
     // Copy the real rtok.exe into %USERPROFILE%\.ketch\bin and confirm it actually runs.
     let ketch_bin = home.join(".ketch").join("bin");
     fs::create_dir_all(&ketch_bin).unwrap();
-    fs::copy(env!("CARGO_BIN_EXE_rtok"), ketch_bin.join("rtok.exe")).unwrap();
+    fs::copy(crate::it::common::bin_path("rtok"), ketch_bin.join("rtok.exe")).unwrap();
     let field = &doc["hooks"]["sessionStart"][0]["powershell"];
     let (ok, stdout) = run(field.as_str().unwrap());
     assert!(ok);

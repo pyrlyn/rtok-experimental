@@ -35,7 +35,7 @@ const SNAPSHOT_ENV: [&str; 5] = [
 // Both subprocess paths must run the same fixture entry point.
 fn cli_process() -> std::process::Command {
     let mut child = std::process::Command::new(std::env::current_exe().unwrap());
-    child.args(["cli_trycmd::cli", "--exact", "--nocapture"]);
+    child.args(["it::cli_trycmd::cli", "--exact", "--nocapture"]);
     child
 }
 

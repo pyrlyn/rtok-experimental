@@ -24,7 +24,7 @@ fn on_a_terminal(home: &Path, input: &str) -> String {
             pixel_height: 0,
         })
         .expect("a pseudo-terminal");
-    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut cmd = CommandBuilder::new(crate::it::common::bin_path("rtok"));
     cmd.args(["doctor", "--fix"]);
     cmd.env("HOME", home);
     cmd.env("RTOK_HOME", home);

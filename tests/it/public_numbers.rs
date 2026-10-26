@@ -11,7 +11,7 @@
 //! the `docs/ru/` and `docs/uk/` translations; `EXEMPT_FIGURES` covers the "10 ms" fail-open
 //! budget.
 
-use crate::common;
+use crate::it::common;
 
 use common::markdown_targets;
 use regex::Regex;

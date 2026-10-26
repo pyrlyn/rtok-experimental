@@ -173,7 +173,7 @@ fn share_files_writes_man_pages_and_every_completion_script() {
     let out = std::env::temp_dir().join(format!("rtok-share-{}", std::process::id()));
     let status = std::process::Command::new("bash")
         .arg(repo("tools/share-files.sh"))
-        .arg(env!("CARGO_BIN_EXE_rtok"))
+        .arg(crate::it::common::bin_path("rtok"))
         .arg(&out)
         .status()
         .unwrap();

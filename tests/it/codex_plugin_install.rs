@@ -15,7 +15,7 @@
 //! in.
 #![cfg(unix)]
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{codex_log, rtok, rtok_without_claude, tmp, write_cfg};
 use std::fs;

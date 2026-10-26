@@ -115,7 +115,7 @@ fn fixture_is_well_formed_and_not_trivially_passed_by_the_pointer() {
 }
 
 fn rtok(home: &Path, args: &[&str], stdin: &[u8]) -> Vec<u8> {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .args(args)
         .env("RTOK_HOME", home)
         .stdin(Stdio::piped())

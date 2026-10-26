@@ -10,7 +10,7 @@
 //! there, unchanged, after both — and that a second install changes nothing a first
 //! one did not.
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{raw, tmp, write_cfg};
 use serde_json::Value;

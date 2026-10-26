@@ -65,7 +65,7 @@ printf 'Content-Length: %d\r\n\r\n%s' {vlen} '{valid}'
 }
 
 fn wrap(home: &Path, server: &Path, framing: &str, input: &[u8]) -> std::process::Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .args(["mcp", "--", "sh"])
         .arg(server)
         .env("RTOK_HOME", home)
@@ -80,7 +80,7 @@ fn wrap(home: &Path, server: &Path, framing: &str, input: &[u8]) -> std::process
 }
 
 fn expand(home: &Path, id: &str) -> String {
-    let out = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let out = Command::new(crate::it::common::bin_path("rtok"))
         .args(["expand", id])
         .env("RTOK_HOME", home)
         .output()

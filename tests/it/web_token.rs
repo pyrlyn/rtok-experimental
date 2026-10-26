@@ -37,7 +37,7 @@ fn temp_home(label: &str) -> PathBuf {
 }
 
 fn command(home: &Path) -> Command {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut cmd = Command::new(crate::it::common::bin_path("rtok"));
     cmd.env("RTOK_HOME", home)
         .env("HOME", home)
         .env_remove("RTOK_WEB_ALLOW_REMOTE")

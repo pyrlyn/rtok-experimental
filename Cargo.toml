@@ -73,8 +73,8 @@ description = "Token-reduction CLI for AI coding agents: hooks, MCP server and A
 # T23.6: only `rtok-plugin-sdk` is published. A release of the binary is a tag plus dist
 # archives, and `cargo publish` at the workspace level must not reach this package.
 publish = false
-# T985: all integration tests are one binary, tests/it/main.rs (see [[test]] below and
-# docs/build-profiles.md). Without this, cargo would also pick up every tests/*.rs on its own.
+# T985: the whole suite is one test executable: tests/it/main.rs is a `#[cfg(test)]` module of the
+# lib (src/lib.rs), and bins, examples and the bench have `test = false` (docs/build-profiles.md).
 autotests = false
 
 # Opt the binary back into cargo-dist: publish = false would otherwise hide it from
@@ -92,21 +92,28 @@ include = ["plugins/", "skills/", "share/"]
 [[bin]]
 name = "rtok"
 path = "src/main.rs"
+test = false # T985: the lib test binary is the only test executable
 
 # T178/D32: the std-only hook client; a bin of this package so it shares rtok's version.
 [[bin]]
 name = "rtok-hook"
 path = "src/bin/rtok-hook.rs"
+test = false
 
 # T985: one integration test binary instead of one per file. A src/ change relinks one
 # executable, not ~130, and target/ holds one copy of the dependency debug info.
-[[test]]
-name = "it"
-path = "tests/it/main.rs"
-
 [[bench]]
 name = "graph"
 harness = false
+test = false
+
+[[example]]
+name = "hello_plugin"
+test = false
+
+[[example]]
+name = "mcp_tool"
+test = false
 
 [features]
 # One feature per catalogue plugin (plan T0.4). Default = all.

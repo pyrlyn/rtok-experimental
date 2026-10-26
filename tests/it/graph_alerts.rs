@@ -22,7 +22,7 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn rtok(home: &Path, args: &[&str]) -> String {
-    let out = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let out = Command::new(crate::it::common::bin_path("rtok"))
         .args(args)
         .current_dir(home)
         .env("RTOK_HOME", home)
@@ -61,7 +61,7 @@ struct Mcp {
 
 impl Mcp {
     fn start(home: &Path, cwd: &Path) -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+        let mut child = Command::new(crate::it::common::bin_path("rtok"))
             .arg("mcp")
             .env("RTOK_HOME", home)
             .env("HOME", home)

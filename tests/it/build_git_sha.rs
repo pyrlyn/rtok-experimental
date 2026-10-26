@@ -9,7 +9,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::common;
+use crate::it::common;
 
 use common::git::run;
 

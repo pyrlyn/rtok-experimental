@@ -16,7 +16,9 @@ use std::time::{Duration, Instant};
 use rtok_hook::Request;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const CLIENT: &str = env!("CARGO_BIN_EXE_rtok-hook");
+fn client() -> &'static str {
+    crate::it::common::bin_path("rtok-hook")
+}
 
 struct Home(PathBuf);
 
@@ -43,7 +45,7 @@ impl Home {
     }
 
     fn rtok(&self, args: &[&str]) -> Command {
-        self.cmd(env!("CARGO_BIN_EXE_rtok"), args)
+        self.cmd(crate::it::common::bin_path("rtok"), args)
     }
 
     fn env(&self) -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
@@ -230,7 +232,7 @@ fn the_client_sends_its_own_pid() {
     let mut resident = home.serve();
     let me = i32::try_from(std::process::id()).unwrap();
     let landed = (0..40).any(|_| {
-        home.output(home.cmd(CLIENT, &["PreToolUse"]));
+        home.output(home.cmd(client(), &["PreToolUse"]));
         recorded_ancestors(&home)
             .iter()
             .any(|a| a.first() == Some(&me))
@@ -247,7 +249,7 @@ fn the_client_sends_its_own_pid() {
 fn with_no_resident_the_client_runs_rtok_hook() {
     let home = Home::new("n");
     let expected = home.expected();
-    assert_eq!(home.output(home.cmd(CLIENT, &["PreToolUse"])), expected);
+    assert_eq!(home.output(home.cmd(client(), &["PreToolUse"])), expected);
     let _ = std::fs::remove_dir_all(&home.0);
 }
 
@@ -282,7 +284,7 @@ fn the_client_prints_the_answer_runs_rtok_hook_on_refusal_and_fails_open_when_sl
     let expected = home.expected();
     let requests = fake(&home, vec![Some(Some(b"served")), Some(None), None]);
 
-    let served = home.output(home.cmd(CLIENT, &["PreToolUse", "--host", "cursor"]));
+    let served = home.output(home.cmd(client(), &["PreToolUse", "--host", "cursor"]));
     assert_eq!(served, b"served");
     let req = requests.recv().unwrap();
     assert_eq!(
@@ -292,11 +294,11 @@ fn the_client_prints_the_answer_runs_rtok_hook_on_refusal_and_fails_open_when_sl
     assert_eq!(req.fingerprint, rtok_hook::fingerprint(home.env()));
     assert_eq!(req.stdin, home.payload());
 
-    let refused = home.output(home.cmd(CLIENT, &["PreToolUse"]));
+    let refused = home.output(home.cmd(client(), &["PreToolUse"]));
     assert_eq!(refused, expected, "a refusal runs rtok hook");
 
     let start = Instant::now();
-    let slow = home.output(home.cmd(CLIENT, &["PreToolUse"]));
+    let slow = home.output(home.cmd(client(), &["PreToolUse"]));
     assert_eq!(slow, b"{}", "a slow resident fails open");
     assert!(
         start.elapsed() < Duration::from_secs(2),
@@ -325,7 +327,7 @@ fn the_client_does_not_send_a_body_over_the_cap_to_the_resident() {
         tx.send(sent).unwrap();
     });
     let mut child = home
-        .cmd(CLIENT, &["PreToolUse"])
+        .cmd(client(), &["PreToolUse"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()

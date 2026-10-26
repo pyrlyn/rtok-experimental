@@ -10,7 +10,7 @@
 //! Post-create scripts (T289.3) are covered in `agents_post_create.rs`; here adoption goes through
 //! MCP `worktree_adopt` only.
 
-use crate::common;
+use crate::it::common;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -27,7 +27,7 @@ fn rtok(
     stdin: &str,
 ) -> (bool, String) {
     use std::io::Write as _;
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut cmd = Command::new(crate::it::common::bin_path("rtok"));
     match agent {
         Some(id) => cmd.env("RTOK_AGENT_ID", id),
         None => cmd.env_remove("RTOK_AGENT_ID"),

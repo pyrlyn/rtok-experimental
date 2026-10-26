@@ -9,7 +9,7 @@
 //! answer over `/ws`, and pins the page's text against `agents list --json` run on
 //! the identical PATH/HOME — the same accessor T231's cache wraps (D27).
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{bin, fake_claude_path, write_cfg};
 use futures_util::StreamExt;

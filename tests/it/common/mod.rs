@@ -192,3 +192,38 @@ pub fn markdown_targets(root: &Path) -> Vec<std::path::PathBuf> {
     }
     files
 }
+
+/// Path of a binary of this package (`rtok`, `rtok-hook`), found at run time.
+///
+/// T985: the integration tests are a module of the `rtok` lib's unit-test binary, so cargo
+/// does not set `CARGO_BIN_EXE_<name>`. The test executable is `target/<profile>/deps/rtok-*`,
+/// so the binaries are one directory up. Under nextest a setup script (.config/nextest.toml)
+/// builds them before the run. Elsewhere (`cargo test`) the first call per process runs
+/// `cargo build -p rtok --bin <name>`, a no-op when it is up to date, so the tests never run a
+/// stale binary.
+pub fn bin_path(name: &'static str) -> &'static str {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static PATHS: OnceLock<Mutex<HashMap<&'static str, &'static str>>> = OnceLock::new();
+    let mut paths = PATHS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(p) = paths.get(name) {
+        return p;
+    }
+    let exe = std::env::current_exe().expect("current_exe");
+    let dir = exe.parent().and_then(Path::parent).expect("target/<profile>");
+    let path = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+    let prebuilt = std::env::var_os("NEXTEST").is_some() || std::env::var_os("RTOK_TEST_BINS_READY").is_some();
+    if !prebuilt {
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+        let status = Command::new(cargo)
+            .args(["build", "--quiet", "-p", "rtok", "--bin", name])
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .status()
+            .expect("run cargo build");
+        assert!(status.success(), "cannot build {name} at {}", path.display());
+    }
+    assert!(path.exists(), "{name} is not built at {}", path.display());
+    let s: &'static str = Box::leak(path.to_string_lossy().into_owned().into_boxed_str());
+    paths.insert(name, s);
+    s
+}

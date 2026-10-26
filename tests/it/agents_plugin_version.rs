@@ -8,7 +8,7 @@
 //! the version comes from Claude's own `installed_plugins.json`, the lookup `agents outdated`
 //! uses.
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{rtok, tmp, write_cfg};
 use std::fs;

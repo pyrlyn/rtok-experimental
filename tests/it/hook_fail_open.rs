@@ -7,7 +7,7 @@
 //! every kind of bad stdin must exit 0, print the host's no-op reply, and never rewrite
 //! the input (D1). One case per combination in the nextest list.
 
-use crate::common;
+use crate::it::common;
 
 use assert_cmd::Command as AssertCmd;
 use rstest::rstest;

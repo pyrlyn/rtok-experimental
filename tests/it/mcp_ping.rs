@@ -48,7 +48,7 @@ fn mcp_ping_is_a_subcommand_and_wrap_stays_behind_double_dash() {
 #[test]
 fn probe_spawns_the_command_from_the_host_config() {
     let home = rtok::testutil::tmp_dir("mcp-ping-probe");
-    let bin = env!("CARGO_BIN_EXE_rtok");
+    let bin = crate::it::common::bin_path("rtok");
     let body = serde_json::json!({
         "mcpServers": {
             "rtok": {
@@ -75,7 +75,7 @@ fn fake_claude_on_path_echoes_the_ping_reply() {
     let home = rtok::testutil::tmp_dir("mcp-ping-claude");
     let bin_dir = home.join("bin");
     std::fs::create_dir_all(&bin_dir).unwrap();
-    let rtok_bin = env!("CARGO_BIN_EXE_rtok");
+    let rtok_bin = crate::it::common::bin_path("rtok");
     let script = bin_dir.join("claude");
     std::fs::write(
         &script,

@@ -5,7 +5,7 @@
 //! T284 PR 2: MCP `agents_list`, `agent_show` and `agent_status_set` in a real `rtok mcp`
 //! session linked to its agent by cwd (T283.1).
 
-use crate::common;
+use crate::it::common;
 
 use common::mcp::session;
 use rtok::store::Store;

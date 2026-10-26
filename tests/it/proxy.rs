@@ -175,7 +175,7 @@ use rtok::proxy::{ProxyState, app};
 use rtok::store::Store;
 use rtok::store::UsageRow;
 
-use crate::common;
+use crate::it::common;
 use common::proxy::{Server, proxy_server};
 
 const T51_MODEL: &str = "claude-sonnet-4-20250514";

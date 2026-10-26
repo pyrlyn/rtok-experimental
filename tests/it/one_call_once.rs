@@ -27,7 +27,7 @@ fn tmp(n: &str) -> Home {
 }
 
 fn hook(home: &Home, args: &[&str], stdin: &Value) {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut c = Command::new(crate::it::common::bin_path("rtok"));
     c.arg("hook").args(args).current_dir(&home.0);
     c.env("RTOK_HOME", home.0.join(".rtok"))
         .env("HOME", &home.0);

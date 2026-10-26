@@ -19,7 +19,7 @@ const OTHER: &str = "fn d() {\n    c();\n    c();\n}\n";
 
 /// One `tools/call` against a fresh `rtok mcp` process rooted at `cwd`, sharing `home`.
 fn call(home: &Path, cwd: &Path, tool: &str, args: serde_json::Value) -> String {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .arg("mcp")
         .env("RTOK_HOME", home)
         .current_dir(cwd)
@@ -359,7 +359,7 @@ fn long_body_expands_and_symbol_id_selects_one_row() {
         .find_map(|l| l.split("expand ").nth(1))
         .expect(&out)
         .trim();
-    let expanded = std::process::Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let expanded = std::process::Command::new(crate::it::common::bin_path("rtok"))
         .args(["expand", id])
         .env("RTOK_HOME", &home)
         .output()

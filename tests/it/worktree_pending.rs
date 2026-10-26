@@ -6,7 +6,7 @@
 //! the pool's host works in the repository parks the claim; the next `adopt` or `SessionStart`
 //! inside the worktree completes it, and `gc` leaves it alone meanwhile. Fakes only.
 
-use crate::common;
+use crate::it::common;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -51,7 +51,7 @@ fn scene(name: &str) -> Scene {
 
 fn rtok(s: &Scene, cwd: &Path, args: &[&str], stdin: &str) -> (bool, String, String) {
     use std::io::Write as _;
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .env_remove("RTOK_AGENT_ID")
         .env("HOME", &s.home)
         .current_dir(cwd)

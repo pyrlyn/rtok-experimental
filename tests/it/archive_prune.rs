@@ -16,7 +16,7 @@ fn home(name: &str) -> PathBuf {
 }
 
 fn rtok(args: &[&str], home: &Path) -> String {
-    let out = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let out = Command::new(crate::it::common::bin_path("rtok"))
         .args(args)
         .env("RTOK_HOME", home)
         .env("HOME", home)

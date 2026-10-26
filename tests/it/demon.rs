@@ -15,7 +15,7 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_rtok")
+    crate::it::common::bin_path("rtok")
 }
 
 fn home(name: &str) -> PathBuf {

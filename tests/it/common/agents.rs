@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 pub fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_rtok")
+    crate::it::common::bin_path("rtok")
 }
 
 /// `s` with every `\` as `/`. [`write_cfg`] hands rtok `/`-joined paths and rtok joins what it

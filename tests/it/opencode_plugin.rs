@@ -12,7 +12,7 @@
 //! `already installed`, and remove unlinks it and drops `mcp.rtok`. The plugin's own unit
 //! test (`plugins/opencode/rtok.test.ts`) runs from `tests/filter.rs`.
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{json, rtok, slash, tmp, write_cfg};
 use std::fs;

@@ -11,7 +11,7 @@ use std::time::Duration;
 use httpmock::prelude::*;
 use rtok::batch::{Api, Provider};
 
-use crate::common;
+use crate::it::common;
 use common::proxy::proxy_server;
 
 const ANTHROPIC_LINES: &str = concat!(

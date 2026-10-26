@@ -10,7 +10,7 @@
 //! `mcpServers.rtok` is written independently, plugin linked or not; second apply is `no
 //! changes`.
 
-use crate::common;
+use crate::it::common;
 
 use serde_json::{Value, json};
 use std::fs;
@@ -23,7 +23,7 @@ fn root() -> PathBuf {
 }
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_rtok")
+    crate::it::common::bin_path("rtok")
 }
 
 fn tmp(name: &str) -> PathBuf {

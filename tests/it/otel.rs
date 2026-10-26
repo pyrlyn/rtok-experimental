@@ -13,7 +13,7 @@ use httpmock::prelude::*;
 use rtok::otel::export::flush_blocking;
 use rtok::plugin::{Measurement, Runtime};
 
-use crate::common;
+use crate::it::common;
 
 fn home(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("rtok-otel-{tag}-{}", std::process::id()));
@@ -440,7 +440,7 @@ fn a_404_stream_is_skipped_not_logged() {
 fn cli_without_an_endpoint_does_nothing() {
     let dir = home("cli");
     let run = |args: &[&str]| {
-        let out = Command::new(env!("CARGO_BIN_EXE_rtok"))
+        let out = Command::new(crate::it::common::bin_path("rtok"))
             .args(args)
             .env("RTOK_HOME", &dir)
             .env_remove("OTEL_EXPORTER_OTLP_ENDPOINT")
@@ -484,7 +484,7 @@ fn stop_hook_spawns_the_flush_and_stays_under_10ms() {
     std::fs::write(dir.join("config.toml"), cfg).unwrap();
 
     let run = |event: &str, payload: &str| {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+        let mut child = Command::new(crate::it::common::bin_path("rtok"))
             .args(["hook", event])
             .env("RTOK_HOME", &dir)
             .stdin(std::process::Stdio::piped())
@@ -568,7 +568,7 @@ fn hooks_stay_fast_with_an_unreachable_endpoint() {
     let payload = r#"{"session_id":"s1","hook_event_name":"Stop","reason":"end_turn"}"#;
     let once = |dir: &Path| {
         let start = std::time::Instant::now();
-        let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+        let mut child = Command::new(crate::it::common::bin_path("rtok"))
             .args(["hook", "Stop"])
             .env("RTOK_HOME", dir)
             .stdin(std::process::Stdio::piped())
@@ -805,7 +805,7 @@ fn hook_spawned_flushes_coalesce_to_at_most_two_processes() {
 
     let trace = trace_dir(&dir);
     let fire_stop = || {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+        let mut child = Command::new(crate::it::common::bin_path("rtok"))
             .args(["hook", "Stop"])
             .env("RTOK_HOME", &dir)
             .env("RTOK_OTEL_FLUSH_TRACE", &trace)
@@ -910,7 +910,7 @@ fn hook_skips_spawning_when_a_flush_is_already_queued() {
     std::fs::write(dir.join("config.toml"), cfg).unwrap();
 
     let run_stop = || {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+        let mut child = Command::new(crate::it::common::bin_path("rtok"))
             .args(["hook", "Stop"])
             .env("RTOK_HOME", &dir)
             .env("RTOK_OTEL_FLUSH_TRACE", &trace)

@@ -18,7 +18,7 @@ use httpmock::prelude::*;
 use rtok::proxy::lane::Lane;
 use tokio::sync::Semaphore;
 
-use crate::common;
+use crate::it::common;
 use common::proxy::proxy_server;
 
 const BODY: &str = r#"{"model":"m","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}"#;

@@ -39,12 +39,12 @@ fn find(name: &str, probe: &[&str]) -> Option<PathBuf> {
 
 /// The test's `rtok` first, so the wrappers run this build and not an installed one.
 fn path() -> String {
-    let bin = Path::new(env!("CARGO_BIN_EXE_rtok")).parent().unwrap();
+    let bin = Path::new(crate::it::common::bin_path("rtok")).parent().unwrap();
     format!("{}:/usr/bin:/bin", bin.display())
 }
 
 fn install(home: &Path, shell: &str) -> String {
-    let out = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let out = Command::new(crate::it::common::bin_path("rtok"))
         .args(["completions", shell, "--install"])
         .env_clear()
         .env("HOME", home)

@@ -5,7 +5,7 @@
 //! T4.1 Check: `tools/list` over stdio lists `expand`.
 #![allow(unexpected_cfgs)]
 
-use crate::common;
+use crate::it::common;
 
 use std::io::Write;
 use std::path::Path;
@@ -47,7 +47,7 @@ fn tools_list_includes_expand() {
     let tmp = std::env::temp_dir().join(format!("rtok-mcp-list-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .arg("mcp")
         .env("RTOK_HOME", &tmp)
         .stdin(Stdio::piped())
@@ -79,7 +79,7 @@ fn garbage_line_answers_parse_error_then_tools_list() {
     let tmp = std::env::temp_dir().join(format!("rtok-mcp-garbage-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .arg("mcp")
         .env("RTOK_HOME", &tmp)
         .stdin(Stdio::piped())
@@ -130,7 +130,7 @@ fn mcp_serves_while_another_process_holds_the_store_writer() {
     // Hold the WAL writer lock for 2.5 s — past the steady 1 s busy timeout even
     // after the binary's own startup latency reaches the purge.
     let holder = common::hold_store_writer(&db, std::time::Duration::from_millis(2500));
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .arg("mcp")
         .env("RTOK_HOME", &tmp)
         .env("RTOK_CORE_DB_PATH", db.to_str().unwrap())
@@ -169,7 +169,7 @@ fn initialize_names_the_server_rtok() {
     let tmp = std::env::temp_dir().join(format!("rtok-mcp-init-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .arg("mcp")
         .env("RTOK_HOME", &tmp)
         .stdin(Stdio::piped())
@@ -218,7 +218,7 @@ fn mcp_with_watcher_exits_on_stdin_eof() {
     std::fs::create_dir_all(&repo).unwrap();
     std::fs::write(repo.join("a.rs"), "fn a() {}\n").unwrap();
     let spawn = || {
-        Command::new(env!("CARGO_BIN_EXE_rtok"))
+        Command::new(crate::it::common::bin_path("rtok"))
             .arg("mcp")
             .env("RTOK_HOME", &home)
             .current_dir(&repo)
@@ -266,7 +266,7 @@ fn mcp_moves_into_the_first_file_root_after_roots_list() {
     }
     std::fs::write(repo.join("a.rs"), "fn alpha() {}\n").unwrap();
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .arg("mcp")
         .env("RTOK_HOME", &home)
         .current_dir(&outside)
@@ -335,7 +335,7 @@ fn mcp_refuses_symbol_at_filesystem_root_without_walking() {
     let home = std::env::temp_dir().join(format!("rtok-mcp-noroot-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
     std::fs::create_dir_all(&home).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .arg("mcp")
         .env("RTOK_HOME", &home)
         .current_dir("/")
@@ -419,7 +419,7 @@ fn mcp_accepts_sibling_worktrees_and_every_client_root() {
         std::fs::write(dir.join(f), "x\n").unwrap();
     }
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .arg("mcp")
         .env("RTOK_HOME", &home)
         .current_dir(&main)
@@ -558,7 +558,7 @@ fn mcp_home_cwd_worktree_list_and_search_use_the_client_root() {
 
     let home = base.join("rtok-home");
     std::fs::create_dir_all(&home).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .arg("mcp")
         .env("RTOK_HOME", &home)
         .current_dir(&root)
@@ -616,7 +616,7 @@ fn mcp_home_cwd_without_a_root_says_pass_a_path_or_open_a_project() {
     let home = std::env::temp_dir().join(format!("rtok-mcp-t526-noroot-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
     std::fs::create_dir_all(&home).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .arg("mcp")
         .env("RTOK_HOME", &home)
         .current_dir("/")

@@ -7,7 +7,7 @@
 //! the real CLI records an install. Unix only: the fake is a shell script.
 #![cfg(unix)]
 
-use crate::common;
+use crate::it::common;
 use common::agents::{raw_without_claude, rtok, tmp, write_cfg};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

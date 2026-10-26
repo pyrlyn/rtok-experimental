@@ -45,7 +45,7 @@ fn parallel_processes_get_unique_dense_ids() {
         .map(|_| {
             Command::new(std::env::current_exe().unwrap())
                 .args([
-                    "task_allocator::allocate_child",
+                    "it::task_allocator::allocate_child",
                     "--exact",
                     "--nocapture",
                     "--test-threads=1",

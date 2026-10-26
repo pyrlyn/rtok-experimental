@@ -11,7 +11,7 @@
 //! before any backup; a missing `rtok` on PATH is a warning at the top of the output; `agents
 //! list` shows each host's modules installed after install and none after remove.
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{backups, claude_desktop_config, json, raw, rtok, slash, tmp, write_cfg};
 use std::fs;

@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
 fn builder(home: &Path, args: &[&str]) -> CommandBuilder {
-    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut cmd = CommandBuilder::new(crate::it::common::bin_path("rtok"));
     cmd.args(args);
     cmd.env_clear();
     cmd.env("HOME", home);
@@ -109,7 +109,7 @@ fn checking_a_shell_installs_it() {
 #[test]
 fn unchecking_an_installed_shell_removes_it() {
     let home = home("remove");
-    let status = std::process::Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let status = std::process::Command::new(crate::it::common::bin_path("rtok"))
         .args(["completions", "zsh", "--install"])
         .env_clear()
         .env("HOME", &home)

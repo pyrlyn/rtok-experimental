@@ -76,7 +76,7 @@ async fn start_with(label: &str, dist: Option<&OsStr>) -> Web {
     std::fs::create_dir_all(&home).expect("home");
     // Port 0: the kernel picks the port when `rtok web` binds and the startup line names it. A
     // port probed here and handed over can be taken by a parallel test in between.
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut cmd = Command::new(crate::it::common::bin_path("rtok"));
     cmd.args(["web", "--host", "127.0.0.1", "--port", "0"])
         .env("RTOK_HOME", &home)
         .env("HOME", &home)

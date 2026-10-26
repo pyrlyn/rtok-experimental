@@ -11,7 +11,7 @@ use std::time::Duration;
 use httpmock::prelude::*;
 use rtok::store::Store;
 
-use crate::common;
+use crate::it::common;
 use common::proxy::proxy_server;
 
 const CHAT: &str = "/v1/chat/completions";

@@ -47,7 +47,7 @@ impl Sandbox {
     }
 
     fn rtok(&self, agent: Option<&str>, args: &[&str]) -> (bool, String, String) {
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_rtok"));
+        let mut cmd = Command::new(crate::it::common::bin_path("rtok"));
         cmd.args(args)
             .current_dir(&self.repo)
             .env("HOME", &self.home)

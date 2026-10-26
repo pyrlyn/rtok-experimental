@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_rtok")
+    crate::it::common::bin_path("rtok")
 }
 
 fn tmp(name: &str) -> PathBuf {

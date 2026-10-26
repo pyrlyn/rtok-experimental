@@ -9,7 +9,7 @@
 //! a real parser: every fenced block must end on its own closing fence, no fence may be opened
 //! inside another, and a heading may be at most one level deeper than the previous one.
 
-use crate::common;
+use crate::it::common;
 
 use common::markdown_targets;
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag};

@@ -18,7 +18,7 @@ fn home(name: &str) -> PathBuf {
 }
 
 fn rtok(home: &Path, args: &[&str]) {
-    let out = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let out = Command::new(crate::it::common::bin_path("rtok"))
         .args(args)
         .current_dir(home)
         .env("RTOK_HOME", home)
@@ -34,7 +34,7 @@ fn rtok(home: &Path, args: &[&str]) {
 
 /// One `rtok graph …` run in `cwd`: stdout on success, stderr otherwise.
 fn cli(home: &Path, cwd: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let out = Command::new(crate::it::common::bin_path("rtok"))
         .arg("graph")
         .args(args)
         .current_dir(cwd)
@@ -52,7 +52,7 @@ fn cli(home: &Path, cwd: &Path, args: &[&str]) -> Result<String, String> {
 
 /// One `tools/call` against a fresh `rtok mcp` rooted at `cwd`; the text of the result.
 fn call(home: &Path, cwd: &Path, tool: &str, args: serde_json::Value) -> String {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .arg("mcp")
         .env("RTOK_HOME", home)
         .env("HOME", home)

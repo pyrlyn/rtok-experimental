@@ -9,7 +9,7 @@
 //! now holds what the current binary writes (foreign keys and hooks kept) with one backup of
 //! the seed; run it again and assert the bytes and the backups do not move.
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{
     backups, claude_log, codex_log, json, raw_without_claude, rtok, rtok_without_claude, tmp,

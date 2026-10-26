@@ -23,7 +23,7 @@ struct Case {
 }
 
 fn filtered(home: &Path, case: &Case, raw: &[u8], no_ref: bool) -> Vec<u8> {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut cmd = Command::new(crate::it::common::bin_path("rtok"));
     cmd.args(["filter", "--archive", "--cmd", &case.argv.join(" ")])
         .args(["--exit", &case.exit.to_string()])
         .env("RTOK_HOME", home)

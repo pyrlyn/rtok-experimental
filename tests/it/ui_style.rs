@@ -24,7 +24,7 @@ fn home(name: &str) -> PathBuf {
 
 /// `rtok <args>` with the colour environment cleared, then `env` on top.
 fn rtok(home: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut cmd = Command::new(crate::it::common::bin_path("rtok"));
     cmd.args(args).env("RTOK_HOME", home).env("HOME", home);
     for var in [
         "NO_COLOR",

@@ -11,7 +11,7 @@
 //! path (no `claude`), which Grok then imports.
 #![cfg(unix)]
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{rtok, rtok_without_claude, tmp, write_cfg};
 use serde_json::Value;

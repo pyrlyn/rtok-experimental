@@ -13,7 +13,7 @@
 //! through `ps`/`kill -0`/`kill` on a pid, which the creator has banned for these tests.
 #![cfg(unix)]
 
-use crate::common;
+use crate::it::common;
 
 use common::fake_lsp;
 use std::io::Write;
@@ -63,7 +63,7 @@ fn rtok_cmd(
     file_uri: &str,
     lock_path: &Path,
 ) -> Command {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut cmd = Command::new(crate::it::common::bin_path("rtok"));
     cmd.env("RTOK_HOME", home)
         .env("PATH", path_with(bin_dir))
         .env("FAKE_LSP_LOCK_FILE", lock_path)

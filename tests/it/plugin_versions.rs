@@ -17,7 +17,7 @@
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-use crate::common;
+use crate::it::common;
 
 use std::fs;
 use std::path::{Path, PathBuf};

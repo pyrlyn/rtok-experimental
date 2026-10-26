@@ -15,7 +15,7 @@ use rtok::plugins::compress::llm;
 use rtok::proxy::ProxyState;
 use serde_json::{Value, json};
 
-use crate::common;
+use crate::it::common;
 use common::compress_fixture::{log, reply, summary_with};
 use common::proxy::{Sink, proxy_server};
 

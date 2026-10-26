@@ -6,7 +6,7 @@
 //! plugin (T275/D33): `rtok agents install grok` writes `[mcp_servers.rtok]` into
 //! `~/.grok/config.toml` itself, so the plugin carries no `.mcp.json` of its own.
 
-use crate::common;
+use crate::it::common;
 
 use serde_json::{Value, json};
 use std::fs;

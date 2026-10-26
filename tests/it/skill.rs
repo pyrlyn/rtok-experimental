@@ -6,7 +6,7 @@
 //! `rtok-worktrees` skill names only commands `rtok worktree` really has, and
 //! (T234) no host plugin bundles a copy of a skill.
 
-use crate::common;
+use crate::it::common;
 
 use clap::CommandFactory;
 use common::agents::{rtok, tmp, write_cfg};

@@ -11,7 +11,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use crate::common;
+use crate::it::common;
 
 const N: usize = 200;
 const P95_MAX: Duration = Duration::from_millis(10);
@@ -59,7 +59,7 @@ fn sample(
 
 /// One `rtok hook <event>` over `home`, `fixture` on stdin.
 fn spawn_hook(event: &str, home: &std::path::Path, fixture: &[u8]) -> std::process::Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .args(["hook", event])
         .env("RTOK_HOME", home)
         .stdin(Stdio::piped())
@@ -148,7 +148,7 @@ fn latency_hook_post_tool_observation_adds_under_4ms() {
         return;
     }
     const EXTRA_MAX: Duration = Duration::from_millis(4);
-    let bin = env!("CARGO_BIN_EXE_rtok");
+    let bin = crate::it::common::bin_path("rtok");
     let tmp = std::env::temp_dir().join(format!("rtok-latency-observe-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).expect("temp home");
@@ -393,7 +393,7 @@ fn latency_hook_grep_symbol_answer_p95_under_10ms() {
             "[plugins.guard]\ngrep_symbol = true\n",
         )
         .unwrap();
-        let out = std::process::Command::new(env!("CARGO_BIN_EXE_rtok"))
+        let out = std::process::Command::new(crate::it::common::bin_path("rtok"))
             .args(["graph", "index"])
             .arg(&project)
             .env("RTOK_HOME", home)
@@ -465,7 +465,7 @@ fn session_start_prints_the_pagerank_map_from_the_stored_graph() {
     let home = std::env::temp_dir().join(format!("rtok-rank-map-{}", std::process::id()));
     std::fs::create_dir_all(&home).expect("temp home");
     seed_pagerank_home(&home);
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .args(["hook", "SessionStart"])
         .env("RTOK_HOME", &home)
         .stdin(Stdio::piped())
@@ -657,7 +657,7 @@ fn latency_hook_subagent_start_with_a_populated_ledger_median_under_10ms() {
             let body = "fn a() {\n    let x = 1;\n}\n\nfn b() {\n    let y = 2;\n}\n".repeat(20);
             std::fs::write(project.join(format!("f{k}.rs")), body).unwrap();
         }
-        let out = Command::new(env!("CARGO_BIN_EXE_rtok"))
+        let out = Command::new(crate::it::common::bin_path("rtok"))
             .args(["graph", "index"])
             .arg(&project)
             .env("RTOK_HOME", home)

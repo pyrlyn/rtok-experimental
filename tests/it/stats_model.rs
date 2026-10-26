@@ -13,10 +13,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_rtok")
+    crate::it::common::bin_path("rtok")
 }
 
-use crate::common;
+use crate::it::common;
 
 fn home(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("rtok-t1511-{name}-{}", std::process::id()));
@@ -304,6 +304,8 @@ fn stats_page_matches_price_and_cache_on_the_fixture_store() {
     // `load_from` pins the config *file* to `h`, but a default like `~/.claude/projects`
     // still expands against the real `$HOME` (T74's leak) — `config_file_in` moves every
     // snapshot probe under `h`, then the transcripts point at the fixture (T252).
+    // T985: this module runs inside the lib's test build; use the production stats scan.
+    crate::model::BACKGROUND_STATS_IN_TESTS.with(|on| on.set(true));
     let mut cfg = rtok::testutil::config_file_in(&h);
     cfg.stats.transcripts_dir = h.join(".claude/projects");
     cfg.stats.codex_dir = h.join(".codex/sessions");

@@ -6,7 +6,7 @@
 //! `[plugins.graph] auto_add_projects` is on, and only then. One scratch `$HOME` per case, real
 //! `rtok` processes, no real agent.
 
-use crate::common;
+use crate::it::common;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -39,7 +39,7 @@ fn projects(home: &Path) -> Vec<Project> {
 
 fn rtok(home: &Path, cwd: &Path, args: &[&str], stdin: &str) -> std::process::Output {
     use std::io::Write as _;
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .current_dir(cwd)
         .env("HOME", home)
         .env_remove("RTOK_AGENT_ID")

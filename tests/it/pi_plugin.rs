@@ -10,7 +10,7 @@
 //! extension owns the single bash call path with no `read`/`search`
 //! duplication; pi's own loader loads the linked directory once (T48.1).
 
-use crate::common;
+use crate::it::common;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -21,7 +21,7 @@ fn root() -> PathBuf {
 }
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_rtok")
+    crate::it::common::bin_path("rtok")
 }
 
 fn tmp(name: &str) -> PathBuf {

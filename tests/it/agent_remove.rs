@@ -9,7 +9,7 @@
 //! foreign entry stays; assert the `.bak-<ts>` copy holds the file as it was before the command;
 //! assert a second remove is `no changes` and that `--dry-run` writes nothing at all.
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{backups, contains_hook, json, rtok, rtok_without_claude, tmp, write_cfg};
 use std::fs;

@@ -9,7 +9,7 @@
 //! its own block header (text) or its own row (`--json`) — a Rust loop over concrete content
 //! instead of one more giant snapshot.
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{rtok, tmp, write_cfg};
 use rtok::agents::Kind;

@@ -33,7 +33,7 @@ use rtok::proxy::ProxyState;
 use rtok::store::{MeasRow, Store};
 use rtok::tokens::Class;
 
-use crate::common;
+use crate::it::common;
 use common::proxy::{proxy_home_dir, proxy_server};
 
 /// The proxy's store, forwarded bytes, and a runtime on the same store (`estimate`/`expand`).

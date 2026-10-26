@@ -16,7 +16,7 @@ use axum::response::IntoResponse;
 use rtok::config::Config;
 use serde_json::Value;
 
-use crate::common;
+use crate::it::common;
 use common::proxy::proxy_server;
 
 const CHAT: &str = "/v1/chat/completions";

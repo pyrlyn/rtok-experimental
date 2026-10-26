@@ -11,7 +11,7 @@ use std::time::Duration;
 use httpmock::prelude::*;
 use rtok::store::{Store, UsageRow};
 
-use crate::common;
+use crate::it::common;
 use common::proxy::proxy_server;
 
 const SESSION: &str = "batch-results";

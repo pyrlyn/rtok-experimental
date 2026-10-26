@@ -28,7 +28,7 @@ pub fn session_as(
     calls: &[(&str, &str)],
 ) -> Vec<(bool, String)> {
     use std::io::{BufRead as _, Write as _};
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .args(["mcp", "--host", host])
         .current_dir(cwd)
         .env("HOME", home)

@@ -8,7 +8,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::common;
+use crate::it::common;
 
 use common::git::{commit, run};
 
@@ -122,7 +122,7 @@ fn rtok_env(
     stdin: &[u8],
 ) -> std::process::Output {
     use std::io::Write as _;
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut cmd = Command::new(crate::it::common::bin_path("rtok"));
     match agent {
         Some(id) => cmd.env("RTOK_AGENT_ID", id),
         None => cmd.env_remove("RTOK_AGENT_ID"),
@@ -2001,7 +2001,7 @@ fn worktree_launcher_creates_a_plain_worktree_when_rtok_cannot() {
     // The real rtok on PATH: the T158 location, no `.claude/worktrees` entry.
     let real = tmp.join("bin-real");
     std::fs::create_dir_all(&real).unwrap();
-    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_rtok"), real.join("rtok")).unwrap();
+    std::os::unix::fs::symlink(crate::it::common::bin_path("rtok"), real.join("rtok")).unwrap();
     let out = launch(
         &real,
         "WorktreeCreate",
@@ -2638,7 +2638,7 @@ fn finish_as(tmp: &Path, cwd: &Path, agent: &str, extra: &[&str]) -> std::proces
         tmp.join("bin").display(),
         std::env::var("PATH").unwrap_or_default()
     );
-    Command::new(env!("CARGO_BIN_EXE_rtok"))
+    Command::new(crate::it::common::bin_path("rtok"))
         .current_dir(cwd)
         .env("HOME", tmp)
         .env("PATH", path)

@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use crate::common;
+use crate::it::common;
 
 use common::git::{self, repo};
 
@@ -30,7 +30,7 @@ fn hook(
     if let Some(id) = agent_id {
         payload["agent_id"] = serde_json::Value::String(id.into());
     }
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .args(["hook", event])
         .current_dir(cwd)
         .env("HOME", home)
@@ -145,7 +145,7 @@ fn session_end_unlocks_that_agents_worktree_and_gc_drops_it(#[values(false, true
     );
     assert!(locked(&wt_b), "B's lock stays");
 
-    let out = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let out = Command::new(crate::it::common::bin_path("rtok"))
         .args(["worktree", "gc", "--json", "--idle", "0h"])
         .current_dir(&work)
         .env("HOME", &home)

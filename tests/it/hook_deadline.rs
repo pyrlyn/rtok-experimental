@@ -46,7 +46,7 @@ fn hung(mut cmd: Command, home: &std::path::Path) -> (std::process::Output, Dura
 #[test]
 fn rtok_hook_answers_when_the_host_never_closes_stdin() {
     let home = home("a");
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_rtok"));
+    let mut cmd = Command::new(crate::it::common::bin_path("rtok"));
     cmd.args(["hook", "PreToolUse"]);
     let (out, took) = hung(cmd, &home);
     assert!(out.status.success(), "{:?}", out.status);
@@ -62,7 +62,7 @@ fn the_client_answers_when_its_rtok_hook_fallback_hangs() {
     let home = home("b");
     let bin = home.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
-    std::fs::copy(env!("CARGO_BIN_EXE_rtok-hook"), bin.join("rtok-hook")).unwrap();
+    std::fs::copy(crate::it::common::bin_path("rtok-hook"), bin.join("rtok-hook")).unwrap();
     // A fallback that never answers: `exec` so the kill reaches the sleeper, not a shell.
     let fake = bin.join("rtok");
     std::fs::write(&fake, "#!/bin/sh\nexec sleep 30\n").unwrap();
@@ -80,7 +80,7 @@ fn the_client_answers_when_its_rtok_hook_fallback_hangs() {
 #[test]
 fn a_hook_inside_its_deadline_is_not_cut_short() {
     let home = home("c");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let mut child = Command::new(crate::it::common::bin_path("rtok"))
         .args(["hook", "PreToolUse"])
         .env("RTOK_HOME", &home)
         .env("RTOK_HOOK_DEADLINE_MS", "30000")

@@ -143,7 +143,7 @@ async fn snapshot_error_when_store_path_is_a_directory() {
 fn config_page_source_reflects_an_env_override() {
     let dir = std::env::temp_dir().join(format!("rtok-web-config-env-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_rtok"))
+    let out = std::process::Command::new(crate::it::common::bin_path("rtok"))
         .args(["config", "get", "proxy.port", "--json"])
         .env("RTOK_HOME", &dir)
         .env("RTOK_PROXY_PORT", "9911")

@@ -18,7 +18,7 @@ use rtok::plugin::{Ctx, Runtime};
 use rtok::plugins::graph::{callers, impact, index, symbol};
 use rtok::store::Store;
 
-use crate::common;
+use crate::it::common;
 
 #[ignore]
 #[test]
@@ -200,7 +200,7 @@ fn home(name: &str) -> (Runtime, std::path::PathBuf) {
 
 fn hook_p95() {
     const N: usize = 100;
-    let bin = env!("CARGO_BIN_EXE_rtok");
+    let bin = crate::it::common::bin_path("rtok");
     let tmp = std::env::temp_dir().join(format!("rtok-bench-hook-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
     let fixture: &[u8] = include_bytes!("../fixtures/hooks/post_tool.json");

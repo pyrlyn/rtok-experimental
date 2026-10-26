@@ -5,7 +5,7 @@
 //! T121 + D21: the Codex plugin tree is a manifest and rtok's hooks (T275/D33 dropped its MCP
 //! server).
 
-use crate::common;
+use crate::it::common;
 
 use rtok::agents::hook_events;
 use serde_json::{Value, json};

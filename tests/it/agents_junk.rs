@@ -11,14 +11,14 @@
 // T902: the `git`/`age_all`/`names` helpers are used by unix-only tests, so Windows clippy sees them as dead.
 #![cfg_attr(windows, allow(dead_code))]
 
-use crate::common;
+use crate::it::common;
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_rtok")
+    crate::it::common::bin_path("rtok")
 }
 
 fn home(name: &str) -> PathBuf {

@@ -5,7 +5,7 @@
 //! T289.3: `rtok agents install|uninstall <host> --project` adds rtok's post-create entry to the
 //! project's Cursor, Kilo and Devin/Windsurf files and takes it out again, changing nothing else.
 
-use crate::common;
+use crate::it::common;
 
 use common::agents::{bin, tmp, write_cfg};
 use std::fs;
