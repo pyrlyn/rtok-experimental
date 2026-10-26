@@ -209,7 +209,7 @@ jobs:
       - run: just spa-install spa-build
       # T985: the tests run the rtok binaries; they are not test targets, so build them and add
       # them to the archive (.config/nextest.toml `[profile.default.archive]`).
-      - run: mise exec -- cargo build -p rtok --bins
+      - run: mise exec -- cargo build -p rtok --bins --features rtok-store/test-util
       - run: mise exec -- cargo nextest archive --workspace --archive-file nextest-archive.tar.zst
       - if: always() && env.RUSTC_WRAPPER == 'sccache'
         run: sccache --show-stats

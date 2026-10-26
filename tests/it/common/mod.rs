@@ -216,7 +216,7 @@ pub fn bin_path(name: &'static str) -> &'static str {
     if !prebuilt {
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
         let status = Command::new(cargo)
-            .args(["build", "--quiet", "-p", "rtok", "--bin", name])
+            .args(["build", "--quiet", "-p", "rtok", "--features", "rtok-store/test-util", "--bin", name])
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .status()
             .expect("run cargo build");

@@ -50,11 +50,11 @@ $r = if ($env:RUSTUP_HOME) { $env:RUSTUP_HOME } else { Join-Path $env:USERPROFIL
 # before any test starts; `bin_path` in tests/it/common does not build under nextest. CI runs from
 # an archive that already holds them and sets RTOK_TEST_BINS_READY=1.
 [scripts.setup.test-bins-unix]
-command = ['sh', '-c', '[ -n "$RTOK_TEST_BINS_READY" ] || "${CARGO:-cargo}" build --quiet -p rtok --bins']
+command = ['sh', '-c', '[ -n "$RTOK_TEST_BINS_READY" ] || "${CARGO:-cargo}" build --quiet -p rtok --bins --features rtok-store/test-util']
 
 [scripts.setup.test-bins-windows]
 command = ['powershell', '-NoProfile', '-NonInteractive', '-Command', '''
-if (-not $env:RTOK_TEST_BINS_READY) { $c = if ($env:CARGO) { $env:CARGO } else { "cargo" }; & $c build --quiet -p rtok --bins; exit $LASTEXITCODE }
+if (-not $env:RTOK_TEST_BINS_READY) { $c = if ($env:CARGO) { $env:CARGO } else { "cargo" }; & $c build --quiet -p rtok --bins --features rtok-store/test-util; exit $LASTEXITCODE }
 ''']
 
 [[profile.default.scripts]]
