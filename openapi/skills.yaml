@@ -1,0 +1,89 @@
+openapi: 3.0.3
+info:
+  title: rtok skill management
+  version: 0.1.0
+  description: |
+    Contract for listing, enabling and disabling agent skills. One spec for every
+    agent; Rust models are generated with openapi-generator (`tools/gen_openapi.py`).
+    The CLI (`rtok skills`) speaks the same JSON shapes with `--json`.
+paths:
+  /skills:
+    get:
+      operationId: listSkills
+      parameters:
+        - name: agent
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Agent' }
+        - name: scope
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Scope' }
+      responses:
+        '200':
+          description: Skills found for the agent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SkillList' }
+  /skills/toggle:
+    post:
+      operationId: toggleSkill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ToggleRequest' }
+      responses:
+        '200':
+          description: Result of the change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ToggleResult' }
+components:
+  schemas:
+    Agent:
+      type: string
+      enum: [claude, cursor, copilot]
+    Scope:
+      type: string
+      enum: [user, project]
+    Skill:
+      type: object
+      required: [name, agent, scope, enabled, path, size_bytes]
+      properties:
+        name: { type: string }
+        agent: { $ref: '#/components/schemas/Agent' }
+        scope: { $ref: '#/components/schemas/Scope' }
+        enabled: { type: boolean }
+        path: { type: string, description: Directory that holds SKILL.md }
+        description: { type: string, description: The `description` front-matter field }
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Total bytes of every file under the skill directory. UIs show it as bytes under 1000 and KB (1000 bytes) from 1000, with the exact count on hover.
+    SkillList:
+      type: object
+      required: [agent, skills]
+      properties:
+        agent: { $ref: '#/components/schemas/Agent' }
+        skills:
+          type: array
+          items: { $ref: '#/components/schemas/Skill' }
+    ToggleRequest:
+      type: object
+      required: [agent, name, enabled]
+      properties:
+        agent: { $ref: '#/components/schemas/Agent' }
+        name: { type: string }
+        enabled: { type: boolean }
+        scope: { $ref: '#/components/schemas/Scope' }
+        dry_run: { type: boolean }
+    ToggleResult:
+      type: object
+      required: [skill, changed]
+      properties:
+        skill: { $ref: '#/components/schemas/Skill' }
+        changed: { type: boolean, description: False when the skill was already in the requested state }
+        from: { type: string }
+        to: { type: string }
