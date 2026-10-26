@@ -77,7 +77,7 @@ jobs:
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-      - uses: pyrlyn/ci/.github/actions/sccache@228d35117ab56821b54c82fdd5751aac71892cd0 # ci#123, re-pin to main after merge
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -124,7 +124,7 @@ jobs:
         uses: ./.github/actions/rustup-toolchain-cache
       # Installs the Rust version pinned in mise.toml — same toolchain as local.
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-      - uses: pyrlyn/ci/.github/actions/sccache@228d35117ab56821b54c82fdd5751aac71892cd0 # ci#123, re-pin to main after merge
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -193,7 +193,7 @@ jobs:
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-      - uses: pyrlyn/ci/.github/actions/sccache@228d35117ab56821b54c82fdd5751aac71892cd0 # ci#123, re-pin to main after merge
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -298,7 +298,7 @@ jobs:
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-      - uses: pyrlyn/ci/.github/actions/sccache@228d35117ab56821b54c82fdd5751aac71892cd0 # ci#123, re-pin to main after merge
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -332,7 +332,7 @@ jobs:
       - id: rustup
         uses: ./.github/actions/rustup-toolchain-cache
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-      - uses: pyrlyn/ci/.github/actions/sccache@228d35117ab56821b54c82fdd5751aac71892cd0 # ci#123, re-pin to main after merge
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -416,7 +416,7 @@ jobs:
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
           install_args: just rust
-      - uses: pyrlyn/ci/.github/actions/sccache@228d35117ab56821b54c82fdd5751aac71892cd0 # ci#123, re-pin to main after merge
+      - uses: pyrlyn/ci/.github/actions/sccache@2321c16a814e33f76e64f9f043b5b9453d25ec65 # ci#123, re-pin to main after merge
         with:
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
